@@ -23,7 +23,8 @@ pub struct RenderState<'a> {
     pipelines: Pipelines,
 
     depth_texture: Texture,
-    chunk_texture: Texture,
+    im1: Texture,
+    im2: Texture,
 }
 
 impl<'a> RenderState<'a> {
@@ -37,8 +38,12 @@ impl<'a> RenderState<'a> {
             mapped_at_creation: false,
         });
 
+        let size = window.get_size();
+
         let depth_texture = Texture::depth_texture(&renderer, "depth_texture");
-        let chunk_texture = Texture::blank_texture(&renderer, 300, 300, "chunk_texture");
+
+        let im1 = Texture::blank_texture(&renderer, size.0 as u32, size.1 as u32, "im1");
+        let im2 = Texture::blank_texture(&renderer, size.0 as u32, size.1 as u32, "im2");
 
         let time_etc_data_bind_group =
             renderer
@@ -102,18 +107,25 @@ impl<'a> RenderState<'a> {
             pipelines,
             world,
             depth_texture,
-            chunk_texture,
+            im1,
+            im2,
         }
     }
 
     pub fn resize(&mut self, new_size: (i32, i32)) {
         if new_size.0 > 0 && new_size.1 > 0 {
-            self.renderer.config.width = new_size.0 as u32;
-            self.renderer.config.height = new_size.1 as u32;
+            let w = new_size.0 as u32;
+            let h = new_size.1 as u32;
+
+            self.renderer.config.width = w;
+            self.renderer.config.height = h;
             self.renderer
                 .surface
                 .configure(&self.renderer.device, &self.renderer.config);
             self.depth_texture = Texture::depth_texture(&self.renderer, "depth_texture");
+
+            self.im1 = Texture::blank_texture(&self.renderer, w, h, "im1");
+            self.im2 = Texture::blank_texture(&self.renderer, w, h, "im1");
         }
     }
 
@@ -305,12 +317,15 @@ impl<'a> RenderState<'a> {
 
     fn draw_chunks(
         &self,
-        view: &wgpu::TextureView,
+        texture: &wgpu::Texture,
         commands: &[ChunkCommand],
         new_depth: bool,
     ) -> usize {
-        let (sx, sy) = self.window.get_size();
-        let screen = glam::DVec2::new(sx as f64, sy as f64);
+        let view = &texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let dims = texture.size();
+
+        let screen = glam::DVec2::new(dims.width as f64, dims.height as f64);
 
         let mut passes = 0;
 
@@ -339,7 +354,7 @@ impl<'a> RenderState<'a> {
                     pos: c.pos,
                     dims: c.dims,
                     angle: c.angle,
-                    fill: RectFill::Color(Color::PURPLE.alpha(0.3)),
+                    color: Color::PURPLE.alpha(0.3),
                     z: 0.0,
                 })
                 .collect();
@@ -430,23 +445,41 @@ impl<'a> RenderState<'a> {
         )
     }
 
-    #[allow(unused)]
-    fn blur_pass(&self, incoming: &Texture, outgoing: &wgpu::TextureView) {
-        let mut command_encoder = self
-            .renderer
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+    fn copy(&self, incoming: &Texture, outgoing: &wgpu::TextureView) {
+        self.blur_pass(incoming, outgoing, false, true, 5.0)
+    }
+
+    fn blur_pass(
+        &self,
+        incoming: &Texture,
+        outgoing: &wgpu::TextureView,
+        is_vertical: bool,
+        is_nullopt: bool,
+        kernel_size: f64,
+    ) {
+        let mut command_encoder = self.renderer.make_command_encoder();
 
         let mut rp = self.get_render_pass(&mut command_encoder, None, &outgoing, true);
 
-        self.pipelines
-            .blur_pipeline
-            .blur_pass(&mut rp, &incoming.bind_group);
+        let (width, height) = incoming.size;
+
+        let params = BlurParams {
+            resolution: Vec2::new(width as f32, height as f32),
+            is_vertical,
+            is_nullopt,
+            kernel_size: kernel_size as f32,
+        };
+
+        self.pipelines.blur_pipeline.blur_pass(
+            &mut rp,
+            &self.renderer.queue,
+            params,
+            &incoming.bind_group,
+        );
 
         drop(rp);
-        self.renderer
-            .queue
-            .submit(std::iter::once(command_encoder.finish()));
+
+        self.renderer.submit(command_encoder);
     }
 
     pub fn apply_geometry_commands(
@@ -460,7 +493,7 @@ impl<'a> RenderState<'a> {
 
         let view = &texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        passes += self.draw_chunks(view, &commands.chunk_commands, true);
+        passes += self.draw_chunks(texture, &commands.chunk_commands, true);
         passes += self.draw_rectangles(view, &commands.rect_commands, true);
         passes += self.draw_circles(texture, &commands.circle_commands, true);
         passes += self.draw_lines(view, &commands.line_commands, true);
@@ -469,19 +502,14 @@ impl<'a> RenderState<'a> {
         passes
     }
 
-    fn draw_sprites(
-        &self,
-        view: &wgpu::TextureView,
-        fallback: &Texture,
-        commands: &RenderCommands,
-    ) -> usize {
+    fn draw_sprites(&self, view: &wgpu::TextureView, commands: &RenderCommands) -> usize {
         let (sx, sy) = self.window.get_size();
         let screen = glam::DVec2::new(sx as f64, sy as f64);
 
         let mut passes = 0;
 
         for (sprite_id, rects) in &commands.sprite_commands {
-            // let texture = self.world.textures.get(*sprite_id).unwrap();
+            let texture = self.world.textures.get(*sprite_id).unwrap();
 
             for chunk in rects.chunks(RectanglePipeline::RECTS_PER_PASS) {
                 passes += 1;
@@ -499,7 +527,7 @@ impl<'a> RenderState<'a> {
 
                 self.pipelines.sprite_pipeline.draw(
                     &mut rp,
-                    &fallback.bind_group,
+                    &texture.bind_group,
                     &self.world.rect_data,
                     chunk.len(),
                 );
@@ -515,34 +543,9 @@ impl<'a> RenderState<'a> {
         passes
     }
 
-    pub fn draw_chunk_texture(&self, texture: &wgpu::Texture, index: ChunkIndex) {
-        let view = &texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut cmd = RenderCommands::from_fonts(&self.world.fonts);
-
-        let chunk = TerrainChunk::new(index);
-
-        cmd.chunk(
-            index.as_ivec2(),
-            index.isometry(),
-            DVec2::splat(TERRAIN_CHUNK_WIDTH_METERS),
-            chunk.height(),
-        );
-
-        for _ in 0..10 {
-            let x = rand(0.0, 100.0) as f64;
-            let y = rand(0.0, 100.0) as f64;
-            cmd.circle((x, y)).radius(10.0).color(Color::PURPLE);
-        }
-
-        // self.clear(view, Color::FOREST_GREEN);
-        self.apply_geometry_commands(&cmd, texture);
-    }
-
     pub fn render(
         &mut self,
         commands: &RenderCommands,
-        input: &InputState,
     ) -> Result<Option<(SurfaceTexture, usize)>, wgpu::SurfaceError> {
         let (w, h) = self.window.get_size();
 
@@ -566,23 +569,44 @@ impl<'a> RenderState<'a> {
 
         let mut passes = 0;
 
-        if input.just_pressed_debounced(rdev::Key::KeyL) {
-            info!("Rerendering tile");
+        self.clear(&self.im1.view, Color::rgb(117, 186, 255, 1.0));
+        passes += self.draw_sprites(&self.im1.view, commands);
 
-            for (index, texture) in &self.world.chunk_textures {
-                self.draw_chunk_texture(&texture.texture, *index);
-            }
-        }
+        self.blur_pass(&self.im1, &self.im2.view, false, false, 40.0);
+        self.blur_pass(&self.im2, &self.im1.view, true, false, 40.0);
 
-        self.clear(&view, Color::rgb(117, 186, 255, 1.0));
-        if let Some(tex) = self.world.chunk_textures.get(&ChunkIndex::ZERO) {
-            passes += self.draw_sprites(&view, &tex, commands);
-        }
+        passes += self.apply_geometry_commands(commands, &self.im1.texture);
 
-        passes += self.apply_geometry_commands(commands, &drawable.texture);
+        self.copy(&self.im1, &view);
 
         self.renderer.device.poll(wgpu::Maintain::wait());
 
         Ok(Some((drawable, passes)))
     }
+}
+
+pub fn update_chunk_texture(rs: &RenderState, world: &World, texture_id: Ent, index: ChunkIndex) {
+    let texture = rs.world.textures.get(texture_id).unwrap();
+
+    let view = &texture
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+
+    let mut cmd = RenderCommands::from_fonts(&rs.world.fonts);
+
+    let chunk = TerrainChunk::new(index);
+
+    cmd.chunk(Isometry2d::ZERO, DVec2::splat(500.0), chunk.height());
+
+    for _ in 0..10 {
+        let x = rand(0.0, 500.0) as f64;
+        let y = rand(0.0, 500.0) as f64;
+
+        let color = Color::hsl(rand(0.3, 0.4) as f64, 0.5, 0.6, 1.0);
+
+        cmd.circle((x, y)).radius(10.0).color(color);
+    }
+
+    rs.clear(view, Color::SKY);
+    rs.apply_geometry_commands(&cmd, &texture.texture);
 }

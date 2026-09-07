@@ -14,8 +14,6 @@ pub struct RenderWorld {
     pub textures: Components<Texture>,
     pub memory: Components<BufferResource>,
 
-    pub chunk_textures: BTreeMap<ChunkIndex, Texture>,
-
     pub rect_data: RectDataBuffer,
     pub height_data_chunks: BufferResource,
 
@@ -29,7 +27,6 @@ impl RenderWorld {
             meshes: Components::default(),
             textures: Components::default(),
             memory: Components::default(),
-            chunk_textures: BTreeMap::new(),
             rect_data: rect,
             height_data_chunks: height,
             spawner: EntitySpawner::default(),
@@ -79,10 +76,15 @@ impl RenderWorld {
                     continue;
                 };
 
+                let id = world.spawner.spawn();
+
                 warn!("Spawning texture for chunk {:?}", chunk.index());
 
-                let texture = Texture::blank_texture(rd, 100, 100, "");
-                self.chunk_textures.insert(chunk.index(), texture);
+                let texture = rd.make_texture(500, 500, "");
+
+                self.textures.spawn(id, texture);
+
+                chunk.set_gpu_data(id);
             }
         }
     }

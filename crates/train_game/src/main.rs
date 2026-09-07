@@ -37,6 +37,7 @@ mod world;
 
 struct TrainApp<'a> {
     last: Instant,
+    frame_timer: WallTimer,
     timers: BTreeMap<&'static str, Duration>,
     draw_calls: usize,
     world: World,
@@ -88,6 +89,7 @@ impl<'a> TrainApp<'a> {
         let world = make_world(&mut events, font_id, inv_id, mush_id);
 
         Self {
+            frame_timer: WallTimer::hz(10000),
             last: Instant::now(),
             rs,
             timers: BTreeMap::new(),
@@ -110,6 +112,8 @@ impl<'a> TrainApp<'a> {
 
 impl<'a> RendApp for TrainApp<'a> {
     fn update(&mut self) {
+        self.frame_timer.tick();
+
         let start = Instant::now();
 
         self.input_state.on_frame_boundary();
@@ -142,6 +146,7 @@ impl<'a> RendApp for TrainApp<'a> {
 
         process_input(
             &mut self.world,
+            &mut self.rs,
             &mut self.events,
             &mut self.selection,
             &self.input_state,
@@ -195,6 +200,7 @@ impl<'a> RendApp for TrainApp<'a> {
             mouse,
             &self.animations,
             self.draw_calls,
+            &self.frame_timer,
             &self.timers,
         );
 
@@ -211,11 +217,10 @@ impl<'a> RendApp for TrainApp<'a> {
 
     fn render(&mut self, commands: &RenderCommands) {
         let start = Instant::now();
+        let render = self.rs.render(&commands);
+        self.timers.insert("render", Instant::now() - start);
 
-        let render = self.rs.render(&commands, &self.input_state);
-
-        let stop = Instant::now();
-
+        let start = Instant::now();
         match render {
             Ok(Some((drawable, count))) => {
                 drawable.present();
@@ -228,8 +233,7 @@ impl<'a> RendApp for TrainApp<'a> {
             }
             Err(e) => error!("{:?}", e),
         }
-
-        self.timers.insert("render", stop - start);
+        self.timers.insert("present", Instant::now() - start);
     }
 
     fn should_close(&self) -> bool {

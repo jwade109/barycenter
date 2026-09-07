@@ -73,9 +73,20 @@ impl<'a> Renderer<'a> {
             config,
         }
     }
-}
 
-impl<'a> Renderer<'a> {
+    pub fn make_command_encoder(&self) -> wgpu::CommandEncoder {
+        self.device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None })
+    }
+
+    pub fn submit(&self, encoder: wgpu::CommandEncoder) {
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    pub fn make_texture(&self, width: u32, height: u32, label: &str) -> Texture {
+        Texture::blank_texture(self, width, height, label)
+    }
+
     pub fn get_render_pass<'b>(
         &self,
         command_encoder: &'b mut wgpu::CommandEncoder,
@@ -89,15 +100,6 @@ impl<'a> Renderer<'a> {
         } else {
             wgpu::LoadOp::Load
         };
-
-        // let depth_stencil_attachment = Some(wgpu::RenderPassDepthStencilAttachment {
-        //     view: &depth_texture.view,
-        //     depth_ops: Some(wgpu::Operations {
-        //         load,
-        //         store: wgpu::StoreOp::Store,
-        //     }),
-        //     stencil_ops: None,
-        // });
 
         let depth_stencil_attachment = None;
 

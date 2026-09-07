@@ -16,11 +16,16 @@ pub fn ease_in_out_exp(t: f64) -> f64 {
     }
 }
 
+pub fn lpf_tween(t: f64) -> f64 {
+    11.0 * t / (10.0 * t + 1.0)
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum Tween {
     Linear,
     Polynomial(f64),
     Exponential,
+    LowPassFilter,
 }
 
 struct Animation {
@@ -37,6 +42,7 @@ impl Animation {
             Tween::Linear => linear_tween(t),
             Tween::Polynomial(power) => power_tween(t, power),
             Tween::Exponential => ease_in_out_exp(t),
+            Tween::LowPassFilter => lpf_tween(t),
         }
     }
 }

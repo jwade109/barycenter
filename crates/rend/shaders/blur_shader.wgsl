@@ -1,74 +1,77 @@
 @group(0) @binding(0) var texture: texture_2d<f32>;
 @group(0) @binding(1) var sample: sampler;
+@group(1) @binding(0) var<uniform> blur_params: BlurParams;
+
+struct BlurParams
+{
+    resolution: vec2f,
+    kernel_size: f32,
+    is_vertical: i32,
+    is_nullopt: i32,
+};
 
 struct Vertex {
     @builtin(instance_index) instance_index: u32,
     @location(0) position: vec3<f32>,
     @location(1) color: vec4<f32>,
-    @location(2) tex_coord: vec2<f32>,
+    @location(2) uv: vec2<f32>,
 };
 
 struct VertexShaderOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) tex_coord: vec2<f32>,
+    @location(0) uv: vec2<f32>,
 };
 
 @vertex
 fn vs_main(vertex: Vertex) -> VertexShaderOutput {
     var out: VertexShaderOutput;
     out.position = vec4<f32>(vertex.position, 1.0);
-    out.tex_coord = vertex.tex_coord;
-    out.tex_coord.y = 1.0 - out.tex_coord.y;
+    out.uv = vertex.uv;
+    out.uv.y = 1.0 - out.uv.y;
     return out;
+}
+
+fn gaussian_weights(n: u32) -> array<f32, 3> {
+    return array<f32, 3>(0.0044, 0.0540, 0.2420);
 }
 
 fn do_blur(in: VertexShaderOutput) -> vec4<f32> {
 
     var color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
-    // // Example simple 5-tap horizontal offset weights
-    const weights = array<f32, 3>(0.227027, 0.316216, 0.070270);
-    // color += textureSample(texture, sample, in.tex_coord) * weights[0];
 
-    var uv = (in.tex_coord * 1.0) / 1.0;
-    let off = 0.002;
-    let n = 5;
-    let w = 1.0 / f32(n * 2);
+    // const weights = array<f32, 10>(0.0044, 0.0540, 0.2420, 0.3991, 0.2420, 0.0540, 0.0044, 0.0, 0.0, 0.0);
 
-    // uv.x = pow(uv.x, 2.0);
-    // uv.y = pow(uv.y, 2.0);
+    let off = vec2f(1.0, 1.0) / blur_params.resolution;
 
-    // color = textureSample(texture, sample, uv);
+    let n = max(min(u32(round(blur_params.kernel_size)), 1000u), 1u);
 
-    for (var i = 0; i < n; i += 1) {
-        let offset = vec2<f32>(off * f32(i), 0.0);
-        color += textureSample(texture, sample, uv + offset) * w;
-        color += textureSample(texture, sample, uv - offset) * w;
+    // let dddd = gaussian_weights(n);
+
+    if blur_params.is_vertical > 0 {
+        for (var i = 0u; i < n; i = i + 1u) {
+            let w = 1.0 / f32(n);
+            let y = f32(i) - f32(n) / 2.0;
+            let uv = in.uv + vec2<f32>(0.0, off.y * y);
+            color += textureSample(texture, sample, uv) * w;
+        }
+    } else {
+        for (var i = 0u; i < n; i = i + 1u) {
+            let w = 1.0 / f32(n);
+            let x = f32(i) - f32(n) / 2.0;
+            let uv = in.uv + vec2<f32>(off.x * x, 0.0);
+            color += textureSample(texture, sample, uv) * w;
+        }
     }
-
-    // for (var i = 0; i < n; i += 1) {
-    //     let offset = vec2<f32>(0.0, off * f32(i));
-    //     color += textureSample(texture, sample, uv + offset) * w;
-    //     color += textureSample(texture, sample, uv - offset) * w;
-    // }
 
     color.w = 1.0;
 
     return color;
 }
 
-fn pixelate(in: VertexShaderOutput, n: f32) -> vec4<f32> {
-    let uv = round(in.tex_coord * n) / n;
-    return textureSample(texture, sample, uv);
-}
-
-fn desaturate(in: VertexShaderOutput) -> vec4<f32> {
-    let color = textureSample(texture, sample, in.tex_coord);
-    return vec4<f32>(color.xyz * 0.3, color.a);
-}
-
 @fragment
 fn fs_main(in: VertexShaderOutput) -> @location(0) vec4<f32> {
-    // return desaturate(in);
-    return pixelate(in, 200.0);
-    // return do_blur(in);
+    if blur_params.is_nullopt > 0 {
+        return textureSample(texture, sample, in.uv);
+    }
+    return do_blur(in);
 }

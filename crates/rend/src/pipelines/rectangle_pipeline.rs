@@ -12,17 +12,15 @@ pub struct RectanglePipeline {
 const RECT_DATA_F32_COUNT: usize = 12;
 
 pub fn to_packed_array(cmd: &RectCommand, screen_size: DVec2) -> [f32; RECT_DATA_F32_COUNT] {
-    let color = cmd.fill.color();
-
     [
         cmd.pos.x as f32,
         cmd.pos.y as f32,
         cmd.dims.x as f32,
         cmd.dims.y as f32,
-        color.r as f32,
-        color.g as f32,
-        color.b as f32,
-        color.a as f32,
+        cmd.color.r as f32,
+        cmd.color.g as f32,
+        cmd.color.b as f32,
+        cmd.color.a as f32,
         cmd.angle as f32,
         screen_size.x as f32,
         screen_size.y as f32,
@@ -89,12 +87,8 @@ impl RectanglePipeline {
         (Self { pipeline, mesh }, height_data)
     }
 
-    pub fn pipeline(&self) -> &RenderPipeline {
-        &self.pipeline
-    }
-
     pub fn draw(&self, rp: &mut RenderPass, n: usize, buffers: &[&BufferResource]) {
-        rp.set_pipeline(self.pipeline());
+        rp.set_pipeline(&self.pipeline);
 
         for (i, buffer) in buffers.into_iter().enumerate() {
             rp.set_bind_group(i as u32, buffer.bind_group(), &[]);

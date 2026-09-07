@@ -14,27 +14,12 @@ pub enum RenderCommand {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum RectFill {
-    Color(Color),
-    Sprite(Ent),
-}
-
-impl RectFill {
-    pub fn color(&self) -> Color {
-        match self {
-            Self::Color(c) => *c,
-            _ => Color::GRAY.alpha(0.1),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
 pub struct RectCommand {
     pub pos: DVec2,
     pub z: f64,
     pub dims: DVec2,
     pub angle: f64,
-    pub fill: RectFill,
+    pub color: Color,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -66,7 +51,6 @@ pub struct LineCommand {
 
 #[derive(Debug, Clone, Copy)]
 pub struct ChunkCommand {
-    pub chunk: IVec2,
     pub pos: DVec2,
     pub dims: DVec2,
     pub angle: f64,
@@ -196,29 +180,22 @@ impl RenderCommands {
         self.linestring(vec![a, b, c, d, a])
     }
 
-    pub fn sprite(&mut self, iso: impl Into<Isometry2d>, dims: impl Into<DVec2>) {
+    pub fn sprite(&mut self, id: Ent, iso: impl Into<Isometry2d>, dims: impl Into<DVec2>) {
         let iso = iso.into();
         let cmd = RectCommand {
             pos: iso.tr(),
             z: 0.5,
             dims: dims.into(),
             angle: iso.rotation as f64,
-            fill: RectFill::Sprite(Ent(0)),
+            color: Color::WHITE,
         };
 
-        self.enqueue(RenderCommand::Sprite(Ent(0), cmd));
+        self.enqueue(RenderCommand::Sprite(id, cmd));
     }
 
-    pub fn chunk(
-        &mut self,
-        index: IVec2,
-        iso: impl Into<Isometry2d>,
-        dims: impl Into<DVec2>,
-        height: [f32; 4],
-    ) {
+    pub fn chunk(&mut self, iso: impl Into<Isometry2d>, dims: impl Into<DVec2>, height: [f32; 4]) {
         let iso = iso.into();
         let c = ChunkCommand {
-            chunk: index,
             pos: iso.tr(),
             dims: dims.into(),
             angle: iso.rotation as f64,
@@ -502,7 +479,7 @@ pub struct RectBuilder<'a> {
     dims: DVec2,
     angle: f64,
     z: f64,
-    fill: RectFill,
+    color: Color,
     centered: bool,
 }
 
@@ -515,7 +492,7 @@ impl<'a> RectBuilder<'a> {
             dims: DVec2::splat(70.0),
             angle: iso.rotation as f64,
             z: 0.5,
-            fill: RectFill::Color(Color::new(0.2, 1.0, 0.2, 1.0)),
+            color: Color::new(0.2, 1.0, 0.2, 1.0),
             centered: false,
         }
     }
@@ -526,7 +503,7 @@ impl<'a> RectBuilder<'a> {
     }
 
     pub fn color(mut self, color: Color) -> Self {
-        self.fill = RectFill::Color(color);
+        self.color = color;
         self
     }
 
@@ -542,11 +519,6 @@ impl<'a> RectBuilder<'a> {
 
     pub fn z(mut self, z: f64) -> Self {
         self.z = z;
-        self
-    }
-
-    pub fn sprite(mut self, id: Ent) -> Self {
-        self.fill = RectFill::Sprite(id);
         self
     }
 }
@@ -568,15 +540,11 @@ impl<'a> Drop for RectBuilder<'a> {
             pos,
             dims: self.dims,
             angle: self.angle,
-            fill: self.fill,
+            color: self.color,
             z: self.z,
         };
 
-        if let RectFill::Sprite(id) = cmd.fill {
-            self.commands.enqueue(RenderCommand::Sprite(id, cmd));
-        } else {
-            self.commands.enqueue(RenderCommand::Rect(cmd));
-        }
+        self.commands.enqueue(RenderCommand::Rect(cmd));
     }
 }
 

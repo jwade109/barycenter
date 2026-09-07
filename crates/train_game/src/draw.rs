@@ -66,6 +66,10 @@ fn draw_button(
 
 fn draw_terrain(cmd: &mut RenderCommands, world: &World, view: &Viewport) {
     for chunk in world.chunks.values() {
+        if chunk.index().as_ivec2().as_dvec2().length() > 5.0 {
+            continue;
+        }
+
         let iso = view.w2s_iso(chunk.isometry());
         let dims = DVec2::splat(view.meters(TERRAIN_CHUNK_WIDTH_METERS));
         // cmd.rect(iso).dims(dims);
@@ -77,7 +81,9 @@ fn draw_terrain(cmd: &mut RenderCommands, world: &World, view: &Viewport) {
             world.inv_id
         };
         // cmd.chunk(chunk.index().as_ivec2(), iso, dims, chunk.height(), id);
-        cmd.sprite(iso, dims);
+        if let Some(id) = chunk.gpu_data() {
+            cmd.sprite(id, iso, dims);
+        }
         // }
     }
 }
@@ -249,11 +255,13 @@ fn draw_debug_info(
     anim: &AnimationStates,
     draw_calls: usize,
     timers: &BTreeMap<&'static str, Duration>,
+    frame_timer: &WallTimer,
 ) {
     let p = DVec2::new(20.0, view.dims().y - 30.0);
 
     let mut lines = vec![
         format!("{} ticks", world.ticks),
+        format!("framerate      {:0.1} Hz", frame_timer.actual_rate()),
         format!("zoom           {:0.3}", world.camera.zoom),
         format!("hovered        {:?}", sel.hovered),
         format!("selected_nodes {:?}", sel.selected_nodes),
@@ -293,6 +301,7 @@ pub fn draw_world(
     mouse: DVec2,
     anim: &AnimationStates,
     draw_calls: usize,
+    frame_timer: &WallTimer,
     timers: &BTreeMap<&'static str, Duration>,
 ) {
     let view = Viewport::new(world.camera, screen_width);
@@ -328,7 +337,16 @@ pub fn draw_world(
     draw_clouds(cmd, world, &view);
     draw_ruler(cmd, sel, &view, mouse);
 
-    draw_debug_info(cmd, world, &view, sel, anim, draw_calls, timers);
+    draw_debug_info(
+        cmd,
+        world,
+        &view,
+        sel,
+        anim,
+        draw_calls,
+        timers,
+        frame_timer,
+    );
     draw_font_ui(cmd, anim, events, fonts, mouse, input);
 
     cmd.circle(mouse).diameter(11.0).color(Color::RED);
