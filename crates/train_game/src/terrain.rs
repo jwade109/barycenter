@@ -3,10 +3,11 @@ use crate::{
     render_world::RenderWorld,
     world::World,
 };
-use bary_core::prelude::{Ent, Isometry2d, vfloor_f64};
+use bary_core::prelude::{Ent, Isometry2d, linspace_f64, vfloor_f64};
 use glam::{DVec2, IVec2};
 use log::warn;
 use noise::{NoiseFn, Perlin};
+use rend::TextureHandle;
 use std::collections::BTreeSet;
 
 pub const TERRAIN_CHUNK_WIDTH_METERS: f64 = 3000.0;
@@ -59,7 +60,8 @@ pub struct TerrainChunk {
     tracks: BTreeSet<Ent>,
     nodes: BTreeSet<Ent>,
     height: [f32; 4],
-    gpu_data: Option<Ent>,
+    pub trees: Vec<DVec2>,
+    pub texture: Option<TextureHandle>,
 }
 
 fn height_func(pos: DVec2) -> f64 {
@@ -83,6 +85,16 @@ impl TerrainChunk {
         let c = a + DVec2::splat(TERRAIN_CHUNK_WIDTH_METERS);
         let d = a + DVec2::Y * TERRAIN_CHUNK_WIDTH_METERS;
 
+        let trees = (0..300)
+            .filter_map(|_| {
+                let x = bary_core::prelude::rand(0.0, TERRAIN_CHUNK_WIDTH_METERS as f32) as f64;
+                let y = bary_core::prelude::rand(0.0, TERRAIN_CHUNK_WIDTH_METERS as f32) as f64;
+                let p = DVec2::new(x, y);
+                let h = height_func(index.isometry().tr() + p);
+                (h > 0.0 && h < 17.0).then_some(p)
+            })
+            .collect();
+
         Self {
             index,
             tracks: BTreeSet::new(),
@@ -93,7 +105,8 @@ impl TerrainChunk {
                 height_func(c) as f32,
                 height_func(d) as f32,
             ],
-            gpu_data: None,
+            trees,
+            texture: None,
         }
     }
 
@@ -136,14 +149,6 @@ impl TerrainChunk {
     pub fn height(&self) -> [f32; 4] {
         self.height
     }
-
-    pub fn set_gpu_data(&mut self, id: impl Into<Option<Ent>>) {
-        self.gpu_data = id.into();
-    }
-
-    pub fn gpu_data(&self) -> Option<Ent> {
-        self.gpu_data
-    }
 }
 
 pub fn get_chunk_index(pos: impl Into<DVec2>) -> ChunkIndex {
@@ -152,7 +157,7 @@ pub fn get_chunk_index(pos: impl Into<DVec2>) -> ChunkIndex {
 
 pub fn spawn_new_chunk(
     world: &mut World,
-    events: &mut EventBus,
+    events: &mut EventBus<TrainEvent>,
     index: impl Into<ChunkIndex>,
 ) -> Option<Ent> {
     let index = index.into();
@@ -171,7 +176,11 @@ pub fn spawn_new_chunk(
     Some(id)
 }
 
-pub fn ensure_chunk_exists(world: &mut World, events: &mut EventBus, index: ChunkIndex) {
+pub fn ensure_chunk_exists(
+    world: &mut World,
+    events: &mut EventBus<TrainEvent>,
+    index: ChunkIndex,
+) {
     for x in -2..=2 {
         for y in -2..=2 {
             let idx = index.as_ivec2() + IVec2::new(x, y);
@@ -196,7 +205,7 @@ pub fn remove_chunk_if_empty(world: &mut World, id: Ent, index: ChunkIndex) -> O
 
 pub fn chunk_register_track(
     world: &mut World,
-    events: &mut EventBus,
+    events: &mut EventBus<TrainEvent>,
     index: ChunkIndex,
     track_id: Ent,
 ) -> Option<()> {
@@ -217,7 +226,7 @@ pub fn chunk_deregister_track(world: &mut World, index: ChunkIndex, track_id: En
 
 pub fn chunk_register_node(
     world: &mut World,
-    events: &mut EventBus,
+    events: &mut EventBus<TrainEvent>,
     index: ChunkIndex,
     node_id: Ent,
 ) -> Option<()> {

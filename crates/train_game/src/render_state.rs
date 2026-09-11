@@ -1,4 +1,4 @@
-use crate::{render_world::RenderWorld, terrain::*, *};
+use crate::{render_world::RenderWorld, terrain::*, viewport::Viewport, *};
 use glam::DVec2;
 use wgpu::SurfaceTexture;
 
@@ -461,10 +461,8 @@ impl<'a> RenderState<'a> {
 
         let mut rp = self.get_render_pass(&mut command_encoder, None, &outgoing, true);
 
-        let (width, height) = incoming.size;
-
         let params = BlurParams {
-            resolution: Vec2::new(width as f32, height as f32),
+            resolution: incoming.size.as_vec2(),
             is_vertical,
             is_nullopt,
             kernel_size: kernel_size as f32,
@@ -494,6 +492,7 @@ impl<'a> RenderState<'a> {
         let view = &texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         passes += self.draw_chunks(texture, &commands.chunk_commands, true);
+        passes += self.draw_sprites(texture, commands);
         passes += self.draw_rectangles(view, &commands.rect_commands, true);
         passes += self.draw_circles(texture, &commands.circle_commands, true);
         passes += self.draw_lines(view, &commands.line_commands, true);
@@ -502,9 +501,11 @@ impl<'a> RenderState<'a> {
         passes
     }
 
-    fn draw_sprites(&self, view: &wgpu::TextureView, commands: &RenderCommands) -> usize {
+    fn draw_sprites(&self, texture: &wgpu::Texture, commands: &RenderCommands) -> usize {
         let (sx, sy) = self.window.get_size();
         let screen = glam::DVec2::new(sx as f64, sy as f64);
+
+        let view = &texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let mut passes = 0;
 
@@ -570,12 +571,13 @@ impl<'a> RenderState<'a> {
         let mut passes = 0;
 
         self.clear(&self.im1.view, Color::rgb(117, 186, 255, 1.0));
-        passes += self.draw_sprites(&self.im1.view, commands);
-
-        self.blur_pass(&self.im1, &self.im2.view, false, false, 40.0);
-        self.blur_pass(&self.im2, &self.im1.view, true, false, 40.0);
 
         passes += self.apply_geometry_commands(commands, &self.im1.texture);
+
+        // self.blur_pass(&self.im1, &self.im2.view, false, false, 40.0);
+        // self.blur_pass(&self.im2, &self.im1.view, true, false, 40.0);
+
+        // passes += self.apply_geometry_commands(commands, &self.im1.texture);
 
         self.copy(&self.im1, &view);
 
@@ -585,8 +587,15 @@ impl<'a> RenderState<'a> {
     }
 }
 
-pub fn update_chunk_texture(rs: &RenderState, world: &World, texture_id: Ent, index: ChunkIndex) {
-    let texture = rs.world.textures.get(texture_id).unwrap();
+pub fn update_chunk_texture(
+    rs: &RenderState,
+    world: &World,
+    handle: TextureHandle,
+    index: ChunkIndex,
+) -> Option<()> {
+    let texture = rs.world.textures.get(handle.id)?;
+
+    let size = texture.size;
 
     let view = &texture
         .texture
@@ -594,19 +603,25 @@ pub fn update_chunk_texture(rs: &RenderState, world: &World, texture_id: Ent, in
 
     let mut cmd = RenderCommands::from_fonts(&rs.world.fonts);
 
-    let chunk = TerrainChunk::new(index);
+    let id = *world.chunk_map.get(&index)?;
+    let chunk = world.chunks.get(id)?;
 
-    cmd.chunk(Isometry2d::ZERO, DVec2::splat(500.0), chunk.height());
+    cmd.chunk(Isometry2d::ZERO, size.as_dvec2(), chunk.height());
 
-    for _ in 0..10 {
-        let x = rand(0.0, 500.0) as f64;
-        let y = rand(0.0, 500.0) as f64;
-
-        let color = Color::hsl(rand(0.3, 0.4) as f64, 0.5, 0.6, 1.0);
-
-        cmd.circle((x, y)).radius(10.0).color(color);
+    for tree in &chunk.trees {
+        let color = Color::hsl(
+            rand(0.02, 0.15) as f64,
+            rand(0.4, 0.7) as f64,
+            rand(0.5, 0.6) as f64,
+            1.0,
+        );
+        let r = rand(8.0, 16.0) as f64;
+        let p = *tree / TERRAIN_CHUNK_WIDTH_METERS * size.as_dvec2();
+        cmd.circle(p).radius(r).color(color);
     }
 
     rs.clear(view, Color::SKY);
     rs.apply_geometry_commands(&cmd, &texture.texture);
+
+    Some(())
 }

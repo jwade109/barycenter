@@ -4,6 +4,7 @@ use std::time::Duration;
 use crate::bezier::{BezierCurve, nearest_point_segment};
 use crate::event_bus::{EventBus, FontSelection, TrainEvent};
 use crate::railcar::RailCar;
+use crate::sounds::{SoundKind, SoundManager};
 use crate::terrain::{TERRAIN_CHUNK_WIDTH_METERS, TerrainChunk};
 use crate::track::{Terminus, TrackSegment};
 use crate::tweens::{AnimationStates, Tween};
@@ -72,19 +73,9 @@ fn draw_terrain(cmd: &mut RenderCommands, world: &World, view: &Viewport) {
 
         let iso = view.w2s_iso(chunk.isometry());
         let dims = DVec2::splat(view.meters(TERRAIN_CHUNK_WIDTH_METERS));
-        // cmd.rect(iso).dims(dims);
-        // if let Some(id) = chunk.gpu_data() {
-        let p = chunk.index().as_ivec2();
-        let id = if (p.x + p.y) % 2 == 0 {
-            world.mush_id
-        } else {
-            world.inv_id
-        };
-        // cmd.chunk(chunk.index().as_ivec2(), iso, dims, chunk.height(), id);
-        if let Some(id) = chunk.gpu_data() {
-            cmd.sprite(id, iso, dims);
+        if let Some(handle) = chunk.texture {
+            cmd.sprite(handle, iso).dims(dims);
         }
-        // }
     }
 }
 
@@ -121,7 +112,7 @@ fn draw_grid_lines(cmd: &mut RenderCommands, view: &Viewport) {
 fn draw_font_ui(
     cmd: &mut RenderCommands,
     anim: &AnimationStates,
-    events: &mut EventBus,
+    events: &mut EventBus<TrainEvent>,
     font_selection: &mut FontSelection,
     mouse: DVec2,
     input: &InputState,
@@ -136,7 +127,7 @@ fn draw_font_ui(
         let (e, clicked) = draw_button(cmd, anim, &text, p, mouse, input, i, color);
         if clicked {
             font_selection.clicked(*font_id);
-            events.enqueue(TrainEvent::Sound);
+            events.enqueue(TrainEvent::Sound(SoundKind::ButtonUp));
         }
         p.y += e.y + 15.0;
     }
@@ -256,6 +247,7 @@ fn draw_debug_info(
     draw_calls: usize,
     timers: &BTreeMap<&'static str, Duration>,
     frame_timer: &WallTimer,
+    sounds: &SoundManager,
 ) {
     let p = DVec2::new(20.0, view.dims().y - 30.0);
 
@@ -278,6 +270,16 @@ fn draw_debug_info(
         lines.push(format!("{} {:?}", name, dur.as_millis()));
     }
 
+    for sound in sounds.iter() {
+        lines.push(format!(
+            "{}: {:0.4} {:0.4} {:?}",
+            sound.name,
+            sound.handle.position(),
+            sound.duration.as_secs_f64(),
+            sound.handle.state()
+        ));
+    }
+
     let text = lines.join("\n");
 
     for (off, color) in [(0.0, Color::WHITE)] {
@@ -293,7 +295,7 @@ fn draw_debug_info(
 pub fn draw_world(
     cmd: &mut RenderCommands,
     sel: &SelectionInfo,
-    events: &mut EventBus,
+    events: &mut EventBus<TrainEvent>,
     fonts: &mut FontSelection,
     input: &InputState,
     world: &World,
@@ -302,6 +304,7 @@ pub fn draw_world(
     anim: &AnimationStates,
     draw_calls: usize,
     frame_timer: &WallTimer,
+    sounds: &SoundManager,
     timers: &BTreeMap<&'static str, Duration>,
 ) {
     let view = Viewport::new(world.camera, screen_width);
@@ -346,6 +349,7 @@ pub fn draw_world(
         draw_calls,
         timers,
         frame_timer,
+        sounds,
     );
     draw_font_ui(cmd, anim, events, fonts, mouse, input);
 
@@ -362,6 +366,17 @@ pub fn draw_world(
             Color::WHITE,
             Color::BLACK.alpha(0.7),
         );
+    }
+
+    let handle = world.textures.iter().skip(3).next().unwrap();
+
+    for t in linspace_f64(0.0, 1.0, 1) {
+        let x = t * 1200.0 + 500.0;
+        let y = t * 700.0 + 300.0;
+        let color = Color::hsl(t / 2.0, 0.6, 0.6, 1.0);
+        let dims = DVec2::splat(700.0);
+        let iso: Isometry2d = (x, y).into();
+        cmd.sprite(*handle, iso).dims(dims);
     }
 }
 

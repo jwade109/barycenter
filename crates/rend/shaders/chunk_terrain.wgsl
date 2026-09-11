@@ -76,6 +76,8 @@ fn fs_main(in: VertexShaderOutput) -> @location(0) vec4<f32> {
 
     var color = vec4f(0.0, g, 0.0, 1.0);
 
+    let white = vec4f(1.0, 1.0, 1.0, 1.0);
+
     if z < -2.0 {
         color = vec4f(0.2, 0.1, 0.5, 1.0);
     }
@@ -92,5 +94,5 @@ fn fs_main(in: VertexShaderOutput) -> @location(0) vec4<f32> {
         color = vec4f(0.6, 0.3, 0.0, 1.0);
     }
 
-    return lerp(color, vec4f(0.0, 0.0, 0.4, 1.0), 0.3);
+    return lerp(lerp(color, vec4f(0.0, 0.0, 0.4, 1.0), 0.3), white, 0.2);
 }

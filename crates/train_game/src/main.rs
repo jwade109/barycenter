@@ -41,7 +41,7 @@ struct TrainApp<'a> {
     timers: BTreeMap<&'static str, Duration>,
     draw_calls: usize,
     world: World,
-    events: EventBus,
+    events: EventBus<TrainEvent>,
     selection: SelectionInfo,
     animations: AnimationStates,
     input_state: InputState,
@@ -50,9 +50,6 @@ struct TrainApp<'a> {
     input_queue: MessageQueue<rdev::Event>,
     should_exit: bool,
     sounds: SoundManager,
-
-    inv_id: Ent,
-    mush_id: Ent,
 }
 
 impl<'a> TrainApp<'a> {
@@ -76,8 +73,11 @@ impl<'a> TrainApp<'a> {
         rs.world.load_font(&rs.renderer, "impact");
         rs.world.load_font(&rs.renderer, "courier_new");
 
-        let inv_id = rs.world.load_texture(&rs.renderer, "assets/invincible.jpg");
-        let mush_id = rs.world.load_texture(&rs.renderer, "assets/mushroom.jpg");
+        let inv = rs.world.load_texture(&rs.renderer, "assets/invincible.jpg");
+        let mush = rs.world.load_texture(&rs.renderer, "assets/mushroom.jpg");
+        let apple = rs.world.load_texture(&rs.renderer, "assets/apple.png");
+        let blob = rs.world.load_texture(&rs.renderer, "assets/blob.png");
+        let donut = rs.world.load_texture(&rs.renderer, "assets/donut.png");
 
         rs.window.set_framebuffer_size_polling(true);
         rs.window.set_key_polling(true);
@@ -86,7 +86,7 @@ impl<'a> TrainApp<'a> {
 
         let mut events = EventBus::new();
 
-        let world = make_world(&mut events, font_id, inv_id, mush_id);
+        let world = make_world(&mut events, font_id, vec![inv, mush, apple, blob, donut]);
 
         Self {
             frame_timer: WallTimer::hz(10000),
@@ -103,9 +103,6 @@ impl<'a> TrainApp<'a> {
             input_queue,
             should_exit: false,
             sounds: SoundManager::new(),
-
-            inv_id,
-            mush_id,
         }
     }
 }
@@ -138,6 +135,7 @@ impl<'a> RendApp for TrainApp<'a> {
 
         update_world(
             &mut self.world,
+            &mut self.events,
             &mut self.selection,
             dt as f64,
             mouse,
@@ -201,6 +199,7 @@ impl<'a> RendApp for TrainApp<'a> {
             &self.animations,
             self.draw_calls,
             &self.frame_timer,
+            &self.sounds,
             &self.timers,
         );
 
@@ -274,7 +273,11 @@ async fn init() {
 }
 
 fn main() {
-    simple_logger::init_with_level(Level::Info).unwrap();
+    simple_logger::SimpleLogger::new()
+        .with_level(LevelFilter::Warn)
+        .with_module_level("choochoo", LevelFilter::Info)
+        .init()
+        .unwrap();
 
     pollster::block_on(init());
 }

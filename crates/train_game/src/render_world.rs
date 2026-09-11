@@ -4,6 +4,7 @@ use crate::{
     world::World,
 };
 use bary_core::prelude::{Components, Ent, EntitySpawner};
+use glam::UVec2;
 use log::*;
 use rend::*;
 use std::{collections::BTreeMap, rc::Rc};
@@ -39,11 +40,13 @@ impl RenderWorld {
         id
     }
 
-    pub fn load_texture(&mut self, rd: &Renderer, path: &str) -> Ent {
+    pub fn load_texture(&mut self, rd: &Renderer, path: &str) -> TextureHandle {
         let sprite = Texture::load_sprite(path, rd).unwrap();
+        let size = sprite.size;
         let id = self.spawner.spawn();
         self.textures.spawn(id, sprite);
-        id
+
+        TextureHandle { id, size }
     }
 
     pub fn load_font(&mut self, rd: &Renderer, name: &str) -> Ent {
@@ -69,7 +72,12 @@ impl RenderWorld {
         id
     }
 
-    pub fn handle_events(&mut self, rd: &Renderer, events: &EventBus, world: &mut World) {
+    pub fn handle_events(
+        &mut self,
+        rd: &Renderer,
+        events: &EventBus<TrainEvent>,
+        world: &mut World,
+    ) {
         for event in events.iter() {
             if let TrainEvent::ChunkUpdate(id) = event {
                 let Ok(chunk) = world.chunks.try_get_mut(*id) else {
@@ -81,10 +89,12 @@ impl RenderWorld {
                 warn!("Spawning texture for chunk {:?}", chunk.index());
 
                 let texture = rd.make_texture(500, 500, "");
-
+                let handle = TextureHandle {
+                    id,
+                    size: texture.size,
+                };
                 self.textures.spawn(id, texture);
-
-                chunk.set_gpu_data(id);
+                chunk.texture = Some(handle);
             }
         }
     }

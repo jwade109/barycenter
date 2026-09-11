@@ -1,4 +1,4 @@
-use crate::event_bus::EventBus;
+use crate::event_bus::{EventBus, TrainEvent};
 use crate::terrain::*;
 use crate::{bezier::BezierCurve, node::*, world::World};
 use bary_core::prelude::{Components, Ent, Isometry2d, linspace_f64, rand, wrap_0_2pi_f64};
@@ -197,7 +197,11 @@ pub fn despawn_track(world: &mut World, track_id: Ent) -> Option<()> {
     Some(())
 }
 
-pub fn spawn_new_track(world: &mut World, events: &mut EventBus, nodes: Vec<Ent>) -> Option<Ent> {
+pub fn spawn_new_track(
+    world: &mut World,
+    events: &mut EventBus<TrainEvent>,
+    nodes: Vec<Ent>,
+) -> Option<Ent> {
     let track = TrackSegment::new(nodes.clone(), &world.nodes)?;
 
     let track_id = world.spawner.spawn();
@@ -299,7 +303,7 @@ pub fn pathfind(world: &World, start: Ent, target: Ent) -> Option<Route> {
 
 pub fn spawn_three_way_junction(
     world: &mut World,
-    events: &mut EventBus,
+    events: &mut EventBus<TrainEvent>,
     a: Ent,
     b: Ent,
     c: Ent,
@@ -321,7 +325,7 @@ pub fn spawn_three_way_junction(
 
 pub fn spawn_four_way_junction(
     world: &mut World,
-    events: &mut EventBus,
+    events: &mut EventBus<TrainEvent>,
     a: Ent,
     b: Ent,
     c: Ent,
@@ -347,7 +351,11 @@ pub fn spawn_four_way_junction(
     Some(())
 }
 
-pub fn spawn_very_large_track(world: &mut World, events: &mut EventBus, ids: &[Ent]) -> Option<()> {
+pub fn spawn_very_large_track(
+    world: &mut World,
+    events: &mut EventBus<TrainEvent>,
+    ids: &[Ent],
+) -> Option<()> {
     if ids.len() < 2 {
         return None;
     }
@@ -394,7 +402,7 @@ pub fn move_node(world: &mut World, node_id: Ent, pos: DVec2) -> Option<()> {
 
 pub fn spawn_random_track_extension(
     world: &mut World,
-    events: &mut EventBus,
+    events: &mut EventBus<TrainEvent>,
     track_id: Ent,
     term: Terminus,
 ) -> Option<Ent> {

@@ -56,7 +56,7 @@ pub fn get_car_isometry(world: &World, car_id: Ent) -> Option<Isometry2d> {
     Some(iso)
 }
 
-pub fn spawn_new_consist(world: &mut World, loc: TrackLocation, n_cars: usize) -> Option<()> {
+pub fn spawn_new_consist(world: &mut World, loc: TrackLocation, n_cars: usize) -> Option<Ent> {
     let track = world.segments.get(loc.track_id)?;
 
     let vel = 800.0;
@@ -88,7 +88,7 @@ pub fn spawn_new_consist(world: &mut World, loc: TrackLocation, n_cars: usize) -
     let consist = RailConsist::new(cars.into_iter());
     world.consists.spawn(consist_id, consist);
 
-    Some(())
+    Some(consist_id)
 }
 
 pub fn update_track_parentage(world: &mut World, car_id: Ent) -> Option<()> {

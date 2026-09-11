@@ -4,6 +4,7 @@ use crate::persistence::*;
 use crate::railcar::*;
 use crate::render_state::RenderState;
 use crate::render_state::update_chunk_texture;
+use crate::sounds::SoundKind;
 use crate::terrain::*;
 use crate::track::*;
 use crate::viewport::Viewport;
@@ -12,6 +13,7 @@ use bary_input::InputState;
 use bary_sim::Camera;
 use log::*;
 use rdev::Key;
+use rend::TextureHandle;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::time::Instant;
@@ -53,8 +55,7 @@ pub struct World {
     pub ticks: u64,
     pub current_font_id: Option<Ent>,
 
-    pub inv_id: Ent,
-    pub mush_id: Ent,
+    pub textures: Vec<TextureHandle>,
 
     pub time: f64,
     pub show_detail: bool,
@@ -76,7 +77,7 @@ pub struct World {
 }
 
 impl World {
-    pub fn new(font_id: Ent, inv_id: Ent, mush_id: Ent) -> Self {
+    pub fn new(font_id: Ent, textures: Vec<TextureHandle>) -> Self {
         let n_clouds = 500;
 
         let clouds = (0..n_clouds)
@@ -111,14 +112,14 @@ impl World {
             clouds,
             chunk_map: BTreeMap::new(),
             calculated_route: None,
-            inv_id,
-            mush_id,
+            textures,
         }
     }
 }
 
 pub fn update_world(
     world: &mut World,
+    events: &mut EventBus<TrainEvent>,
     sel: &mut SelectionInfo,
     dt: f64,
     mouse: DVec2,
@@ -143,6 +144,7 @@ pub fn update_world(
 
     for car_id in needs_reparenting {
         update_track_parentage(world, car_id);
+        events.enqueue(TrainEvent::CarReparent(car_id));
     }
 
     world.camera.isometry.translation +=
@@ -201,8 +203,12 @@ pub fn update_world(
     sel.hovered_chunk = Some(get_chunk_index(view.screen_to_world(mouse)));
 }
 
-pub fn make_world(events: &mut EventBus, font_id: Ent, inv_id: Ent, mush_id: Ent) -> World {
-    let mut world: World = World::new(font_id, inv_id, mush_id);
+pub fn make_world(
+    events: &mut EventBus<TrainEvent>,
+    font_id: Ent,
+    textures: Vec<TextureHandle>,
+) -> World {
+    let mut world: World = World::new(font_id, textures);
 
     if load_world(&mut world, events, "train_world").is_none() {
         error!("Failed to load world");
@@ -214,7 +220,7 @@ pub fn make_world(events: &mut EventBus, font_id: Ent, inv_id: Ent, mush_id: Ent
 pub fn process_input(
     world: &mut World,
     rs: &mut RenderState,
-    events: &mut EventBus,
+    events: &mut EventBus<TrainEvent>,
     sel: &mut SelectionInfo,
     input: &InputState,
     dt: f64,
@@ -290,10 +296,11 @@ pub fn process_input(
 
     if input.just_pressed_debounced(rdev::Key::KeyL) {
         info!("Rerendering tile");
+        events.enqueue(TrainEvent::RedrawTiles);
 
         for chunk in world.chunks.values() {
-            if let Some(id) = chunk.gpu_data() {
-                update_chunk_texture(rs, world, id, chunk.index());
+            if let Some(handle) = chunk.texture {
+                update_chunk_texture(rs, world, handle, chunk.index());
             }
         }
     }
@@ -364,7 +371,7 @@ pub fn process_input(
     }
 
     if input.just_pressed_debounced(Key::KeyP) {
-        events.enqueue(TrainEvent::Sound);
+        events.enqueue(TrainEvent::Sound(SoundKind::ButtonUp));
     }
 
     if input.just_pressed_debounced(Key::Num5) {
@@ -391,7 +398,9 @@ pub fn process_input(
 
     if input.just_pressed_debounced(Key::KeyG) {
         if let Some(loc) = sel.selected_track {
-            spawn_new_consist(world, loc, randint(7, 32) as usize);
+            if let Some(id) = spawn_new_consist(world, loc, randint(7, 32) as usize) {
+                events.enqueue(TrainEvent::NewConsist(id))
+            }
         }
     }
 

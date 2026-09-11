@@ -1,4 +1,4 @@
-use crate::{event_bus::EventBus, terrain::*, track::*, world::World};
+use crate::{event_bus::{EventBus, TrainEvent}, terrain::*, track::*, world::World};
 use bary_core::prelude::{Ent, Isometry2d, randint, wrap_0_2pi_f64};
 use glam::DVec2;
 use log::*;
@@ -167,7 +167,7 @@ impl Node {
     }
 }
 
-pub fn spawn_new_node(world: &mut World, events: &mut EventBus, pos: DVec2) -> Ent {
+pub fn spawn_new_node(world: &mut World, events: &mut EventBus<TrainEvent>, pos: DVec2) -> Ent {
     let node = Node::new(pos);
     let id = world.spawner.spawn();
     chunk_register_node(world, events, get_chunk_index(pos), id);

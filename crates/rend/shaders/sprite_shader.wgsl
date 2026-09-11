@@ -11,7 +11,8 @@ struct Vertex {
 
 struct VertexShaderOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2f,
+    @location(0) instance_index: u32,
+    @location(1) uv: vec2f,
 };
 
 @vertex
@@ -37,13 +38,16 @@ fn vs_main(vertex: Vertex) -> VertexShaderOutput {
     var v = corners[vertex.vertex_index] / dims * 2.0 - 1.0;
     out.position = vec4<f32>(v, 1.0, 1.0);
     out.uv = uvs[vertex.vertex_index];
+    out.instance_index = vertex.instance_index;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexShaderOutput) -> @location(0) vec4<f32> {
-
-    let col = textureSample(texture, sample, in.uv);
-
-    return vec4f(color_correct(col.xyz), col.w);
+    let data = rect_data[in.instance_index];
+    let tint_color = vec4f(data.r, data.g, data.b, data.a);
+    var col = textureSample(texture, sample, in.uv);
+    col = vec4f(color_correct(col.xyz), col.w);
+    col = col * tint_color;
+    return col;
 }

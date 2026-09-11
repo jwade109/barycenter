@@ -1,6 +1,7 @@
 use bary_core::prelude::Ent;
+use log::info;
 
-use crate::terrain::ChunkIndex;
+use crate::{sounds::SoundKind, terrain::ChunkIndex};
 
 pub struct FontSelection {
     font_id: Option<Ent>,
@@ -20,26 +21,31 @@ impl FontSelection {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum TrainEvent {
     ChunkUpdate(Ent),
-    Sound,
+    Sound(SoundKind),
+    CarReparent(Ent),
+    NewConsist(Ent),
+    RedrawTiles,
     Other,
 }
 
-pub struct EventBus {
-    events: Vec<TrainEvent>,
+pub struct EventBus<T> {
+    events: Vec<T>,
 }
 
-impl EventBus {
+impl<T: std::fmt::Debug> EventBus<T> {
     pub fn new() -> Self {
         Self { events: Vec::new() }
     }
 
-    pub fn enqueue(&mut self, event: TrainEvent) {
+    pub fn enqueue(&mut self, event: T) {
+        info!("E: {event:?}");
         self.events.push(event);
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &TrainEvent> {
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.events.iter()
     }
 

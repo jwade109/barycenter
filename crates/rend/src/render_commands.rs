@@ -1,4 +1,4 @@
-use crate::{Color, FontInfo, Texture};
+use crate::{Color, FontInfo, Texture, TextureHandle};
 use bary_core::prelude::{rotate_f64, Components, Ent, Isometry2d};
 use glam::{DVec2, DVec3, IVec2};
 use std::collections::BTreeMap;
@@ -180,17 +180,15 @@ impl RenderCommands {
         self.linestring(vec![a, b, c, d, a])
     }
 
-    pub fn sprite(&mut self, id: Ent, iso: impl Into<Isometry2d>, dims: impl Into<DVec2>) {
-        let iso = iso.into();
-        let cmd = RectCommand {
-            pos: iso.tr(),
-            z: 0.5,
-            dims: dims.into(),
-            angle: iso.rotation as f64,
-            color: Color::WHITE,
-        };
-
-        self.enqueue(RenderCommand::Sprite(id, cmd));
+    pub fn sprite<'a>(
+        &'a mut self,
+        handle: TextureHandle,
+        iso: impl Into<Isometry2d>,
+    ) -> RectBuilder<'a> {
+        RectBuilder::new(self, iso)
+            .dims(handle.size.as_dvec2())
+            .sprite(handle.id)
+            .color(Color::WHITE)
     }
 
     pub fn chunk(&mut self, iso: impl Into<Isometry2d>, dims: impl Into<DVec2>, height: [f32; 4]) {
@@ -481,6 +479,7 @@ pub struct RectBuilder<'a> {
     z: f64,
     color: Color,
     centered: bool,
+    sprite_id: Option<Ent>,
 }
 
 impl<'a> RectBuilder<'a> {
@@ -494,6 +493,7 @@ impl<'a> RectBuilder<'a> {
             z: 0.5,
             color: Color::new(0.2, 1.0, 0.2, 1.0),
             centered: false,
+            sprite_id: None,
         }
     }
 
@@ -514,6 +514,11 @@ impl<'a> RectBuilder<'a> {
 
     pub fn centered(mut self) -> Self {
         self.centered = true;
+        self
+    }
+
+    pub fn sprite(mut self, id: Ent) -> Self {
+        self.sprite_id = Some(id);
         self
     }
 
@@ -544,7 +549,11 @@ impl<'a> Drop for RectBuilder<'a> {
             z: self.z,
         };
 
-        self.commands.enqueue(RenderCommand::Rect(cmd));
+        if let Some(id) = self.sprite_id {
+            self.commands.enqueue(RenderCommand::Sprite(id, cmd));
+        } else {
+            self.commands.enqueue(RenderCommand::Rect(cmd));
+        }
     }
 }
 
@@ -577,6 +586,45 @@ impl<'a> LineStringBuilder<'a> {
 }
 
 impl<'a> Drop for LineStringBuilder<'a> {
+    fn drop(&mut self) {
+        for points in self.points.windows(2) {
+            self.commands
+                .line(points[0], points[1])
+                .color(self.color)
+                .thickness(self.thickness);
+        }
+    }
+}
+
+pub struct SpriteBuilder<'a> {
+    commands: &'a mut RenderCommands,
+    points: Vec<DVec2>,
+    color: Color,
+    thickness: f64,
+}
+
+impl<'a> SpriteBuilder<'a> {
+    fn new(commands: &'a mut RenderCommands, points: Vec<DVec2>) -> Self {
+        Self {
+            commands,
+            points,
+            thickness: 10.0,
+            color: Color::new(0.0, 0.0, 0.0, 1.0),
+        }
+    }
+
+    pub fn thickness(mut self, thickness: f64) -> Self {
+        self.thickness = thickness;
+        self
+    }
+
+    pub fn color(mut self, color: Color) -> Self {
+        self.color = color;
+        self
+    }
+}
+
+impl<'a> Drop for SpriteBuilder<'a> {
     fn drop(&mut self) {
         for points in self.points.windows(2) {
             self.commands

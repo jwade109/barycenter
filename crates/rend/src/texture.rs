@@ -1,9 +1,11 @@
 use crate::*;
+use bary_core::prelude::Ent;
+use glam::UVec2;
 use image::GenericImageView;
 use wgpu::*;
 
 pub struct Texture {
-    pub size: (u32, u32),
+    pub size: UVec2,
     pub bind_group: wgpu::BindGroup,
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -79,9 +81,9 @@ impl Texture {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Linear,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         };
 
@@ -93,7 +95,7 @@ impl Texture {
         let bind_group = builder.build(label);
 
         Some(Texture {
-            size,
+            size: UVec2::new(size.0, size.1),
             texture,
             bind_group,
             view,
@@ -105,17 +107,15 @@ impl Texture {
         TextureSampleRange {
             origin_x: 0,
             origin_y: 0,
-            sample_width: self.size.0,
-            sample_height: self.size.1,
-            image_width: self.size.0,
-            image_height: self.size.1,
+            sample_width: self.size.x,
+            sample_height: self.size.y,
+            image_width: self.size.x,
+            image_height: self.size.y,
         }
     }
 
     pub fn blank_texture(rd: &Renderer, width: u32, height: u32, label: &str) -> Self {
         let bgl = Self::make_bind_group_layout(&rd.device, label);
-
-        let size = (rd.config.width, rd.config.height);
 
         let texture_descriptor = wgpu::TextureDescriptor {
             size: wgpu::Extent3d {
@@ -152,7 +152,7 @@ impl Texture {
         let bind_group = builder.build(label);
 
         Self {
-            size,
+            size: UVec2::new(width, height),
             bind_group,
             texture,
             view,
@@ -202,11 +202,17 @@ impl Texture {
         let size = (rd.config.width, rd.config.height);
 
         Self {
-            size,
+            size: UVec2::new(size.0, size.1),
             texture,
             view,
             sampler,
             bind_group,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextureHandle {
+    pub id: Ent,
+    pub size: UVec2,
 }

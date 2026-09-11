@@ -1,4 +1,4 @@
-use crate::{event_bus::EventBus, node::*, track::*, world::World};
+use crate::{event_bus::{EventBus, TrainEvent}, node::*, track::*, world::World};
 use bary_core::prelude::{Components, Ent, EntitySpawner};
 use glam::DVec2;
 use serde::{Deserialize, Serialize};
@@ -57,7 +57,7 @@ pub fn save_world(world: &World, path: impl AsRef<Path>) -> Option<()> {
     Some(())
 }
 
-pub fn load_world(world: &mut World, events: &mut EventBus, path: impl AsRef<Path>) -> Option<()> {
+pub fn load_world(world: &mut World, events: &mut EventBus<TrainEvent>, path: impl AsRef<Path>) -> Option<()> {
     let path = path.as_ref();
 
     let geometry: TrackGeometry = load(path, "geometry.yaml")?;
