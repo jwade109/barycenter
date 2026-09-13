@@ -1,9 +1,13 @@
 #![allow(unused)]
 
 use crate::draw::draw_world;
+use crate::draw::update_chunk_texture;
 use crate::event_bus::*;
 use crate::rend_app::*;
 use crate::render_state::RenderState;
+use crate::render_world::RenderWorld;
+use crate::terrain::handle_regen_trees_events;
+use crate::terrain::regenerate_trees;
 use crate::tweens::AnimationStates;
 use crate::world::*;
 use bary_core::prelude::*;
@@ -41,6 +45,7 @@ struct TrainApp<'a> {
     timers: BTreeMap<&'static str, Duration>,
     draw_calls: usize,
     world: World,
+    render_world: RenderWorld,
     events: EventBus<TrainEvent>,
     selection: SelectionInfo,
     animations: AnimationStates,
@@ -64,20 +69,22 @@ impl<'a> TrainApp<'a> {
             }
         });
 
-        let font_id = rs.world.load_font(&rs.renderer, "consolas_spritesheet");
-        rs.world.load_font(&rs.renderer, "cambria");
-        rs.world.load_font(&rs.renderer, "garamond");
-        rs.world.load_font(&rs.renderer, "arial");
-        rs.world.load_font(&rs.renderer, "calibri");
-        rs.world.load_font(&rs.renderer, "verdana");
-        rs.world.load_font(&rs.renderer, "impact");
-        rs.world.load_font(&rs.renderer, "courier_new");
+        let mut render_world = RenderWorld::new();
 
-        let inv = rs.world.load_texture(&rs.renderer, "assets/invincible.jpg");
-        let mush = rs.world.load_texture(&rs.renderer, "assets/mushroom.jpg");
-        let apple = rs.world.load_texture(&rs.renderer, "assets/apple.png");
-        let blob = rs.world.load_texture(&rs.renderer, "assets/blob.png");
-        let donut = rs.world.load_texture(&rs.renderer, "assets/donut.png");
+        let font_id = render_world.load_font(&rs.renderer, "consolas_spritesheet");
+        render_world.load_font(&rs.renderer, "cambria");
+        render_world.load_font(&rs.renderer, "garamond");
+        render_world.load_font(&rs.renderer, "arial");
+        render_world.load_font(&rs.renderer, "calibri");
+        render_world.load_font(&rs.renderer, "verdana");
+        render_world.load_font(&rs.renderer, "impact");
+        render_world.load_font(&rs.renderer, "courier_new");
+
+        let inv = render_world.load_texture(&rs.renderer, "assets/invincible.jpg");
+        let mush = render_world.load_texture(&rs.renderer, "assets/mushroom.jpg");
+        let apple = render_world.load_texture(&rs.renderer, "assets/apple.png");
+        let blob = render_world.load_texture(&rs.renderer, "assets/blob.png");
+        let donut = render_world.load_texture(&rs.renderer, "assets/donut.png");
 
         rs.window.set_framebuffer_size_polling(true);
         rs.window.set_key_polling(true);
@@ -95,6 +102,7 @@ impl<'a> TrainApp<'a> {
             timers: BTreeMap::new(),
             draw_calls: 0,
             world,
+            render_world,
             events,
             selection: SelectionInfo::new(),
             animations: AnimationStates::new(),
@@ -103,6 +111,43 @@ impl<'a> TrainApp<'a> {
             input_queue,
             should_exit: false,
             sounds: SoundManager::new(),
+        }
+    }
+}
+
+pub fn generate_chunk_textures(
+    rs: &RenderState,
+    rw: &mut RenderWorld,
+    rd: &Renderer,
+    events: &EventBus<TrainEvent>,
+    world: &mut World,
+) {
+    for event in events.iter() {
+        if let TrainEvent::RedrawTile(index) = event {
+            update_chunk_texture(rs, rw, world, *index);
+        }
+
+        if let TrainEvent::ChunkUpdate(chunk_id) = event {
+            let Ok(chunk) = world.chunks.try_get_mut(*chunk_id) else {
+                continue;
+            };
+
+            if chunk.texture.is_some() {
+                debug!("Chunk already has texture: {:?}", chunk.texture);
+                continue;
+            }
+
+            let id = rw.spawner.spawn();
+
+            warn!("Spawning texture for chunk {:?}", chunk.index());
+
+            let texture = rd.make_texture(2000, 2000, "");
+            let handle = TextureHandle {
+                id,
+                size: texture.size,
+            };
+            rw.textures.spawn(id, texture);
+            chunk.texture = Some(handle);
         }
     }
 }
@@ -144,7 +189,8 @@ impl<'a> RendApp for TrainApp<'a> {
 
         process_input(
             &mut self.world,
-            &mut self.rs,
+            &self.render_world,
+            &self.rs,
             &mut self.events,
             &mut self.selection,
             &self.input_state,
@@ -159,9 +205,15 @@ impl<'a> RendApp for TrainApp<'a> {
             self.should_exit = true;
         }
 
-        self.rs
-            .world
-            .handle_events(&self.rs.renderer, &self.events, &mut self.world);
+        generate_chunk_textures(
+            &self.rs,
+            &mut self.render_world,
+            &self.rs.renderer,
+            &self.events,
+            &mut self.world,
+        );
+
+        handle_regen_trees_events(&mut self.world, &self.events);
 
         self.sounds.handle_events(&self.events);
 
@@ -175,7 +227,7 @@ impl<'a> RendApp for TrainApp<'a> {
     fn emit_render_commands(&mut self) -> RenderCommands {
         let start = Instant::now();
 
-        let mut cmd = RenderCommands::from_fonts(&self.rs.world.fonts);
+        let mut cmd = RenderCommands::from_fonts(&self.render_world.fonts);
         cmd.current_font_id = self.world.current_font_id.unwrap();
         let (width, height) = self.rs.window.get_size();
         let dims = DVec2::new(width as f64, height as f64);
@@ -216,7 +268,7 @@ impl<'a> RendApp for TrainApp<'a> {
 
     fn render(&mut self, commands: &RenderCommands) {
         let start = Instant::now();
-        let render = self.rs.render(&commands);
+        let render = self.rs.render(&self.render_world, &commands);
         self.timers.insert("render", Instant::now() - start);
 
         let start = Instant::now();

@@ -4,8 +4,10 @@ use std::time::Duration;
 use crate::bezier::{BezierCurve, nearest_point_segment};
 use crate::event_bus::{EventBus, FontSelection, TrainEvent};
 use crate::railcar::RailCar;
+use crate::render_state::RenderState;
+use crate::render_world::RenderWorld;
 use crate::sounds::{SoundKind, SoundManager};
-use crate::terrain::{TERRAIN_CHUNK_WIDTH_METERS, TerrainChunk};
+use crate::terrain::{ChunkIndex, TERRAIN_CHUNK_WIDTH_METERS, TerrainChunk};
 use crate::track::{Terminus, TrackSegment};
 use crate::tweens::{AnimationStates, Tween};
 use crate::viewport::Viewport;
@@ -67,15 +69,21 @@ fn draw_button(
 
 fn draw_terrain(cmd: &mut RenderCommands, world: &World, view: &Viewport) {
     for chunk in world.chunks.values() {
-        if chunk.index().as_ivec2().as_dvec2().length() > 5.0 {
-            continue;
-        }
-
         let iso = view.w2s_iso(chunk.isometry());
         let dims = DVec2::splat(view.meters(TERRAIN_CHUNK_WIDTH_METERS));
         if let Some(handle) = chunk.texture {
             cmd.sprite(handle, iso).dims(dims);
         }
+
+        // if view.zoom() > 0.5 {
+        //     for tree in &chunk.trees {
+        //         let p = view.world_to_screen(tree.pos);
+        //         let r = view.meters(tree.radius);
+        //         if view.is_on_screen(p) && r > 0.5 {
+        //             cmd.circle(p).radius(r).color(tree.color);
+        //         }
+        //     }
+        // }
     }
 }
 
@@ -316,6 +324,8 @@ pub fn draw_world(
         draw_terrain(cmd, world, &view);
     }
 
+    cmd.is_blur = input.is_key_pressed(rdev::Key::KeyY);
+
     if world.show_detail {
         draw_track_bounds(cmd, world, &view);
         draw_track_chunk_occupancy(cmd, world, &view);
@@ -366,17 +376,6 @@ pub fn draw_world(
             Color::WHITE,
             Color::BLACK.alpha(0.7),
         );
-    }
-
-    let handle = world.textures.iter().skip(3).next().unwrap();
-
-    for t in linspace_f64(0.0, 1.0, 1) {
-        let x = t * 1200.0 + 500.0;
-        let y = t * 700.0 + 300.0;
-        let color = Color::hsl(t / 2.0, 0.6, 0.6, 1.0);
-        let dims = DVec2::splat(700.0);
-        let iso: Isometry2d = (x, y).into();
-        cmd.sprite(*handle, iso).dims(dims);
     }
 }
 
@@ -469,7 +468,13 @@ fn draw_hovered_chunk(
     let id = *world.chunk_map.get(&index)?;
     let chunk = world.chunks.get(id)?;
 
-    let text = format!("{:?}\n{:?}\n{:?}", index, chunk.nodes(), chunk.tracks());
+    let text = format!(
+        "{:?}\n{:?}\n{:?}\n{} trees",
+        index,
+        chunk.nodes(),
+        chunk.tracks(),
+        chunk.trees.len()
+    );
 
     let size = 32.0f64.max(view.meters(3.0));
 
@@ -679,6 +684,83 @@ fn draw_hovered_node(
         node.backward()
     );
     cmd.text(p, text).size(32.0).color(Color::WHITE);
+
+    Some(())
+}
+
+pub fn update_chunk_texture(
+    rs: &RenderState,
+    rw: &RenderWorld,
+    world: &World,
+    index: ChunkIndex,
+) -> Option<()> {
+    let chunk_id = world.chunk_map.get(&index)?;
+    let chunk = world.chunks.get(*chunk_id)?;
+    let handle = chunk.texture?;
+    let texture = rw.textures.get(handle.id)?;
+
+    let size = texture.size;
+
+    let mut cmd = RenderCommands::from_fonts(&rw.fonts);
+
+    // cmd.chunk(Isometry2d::ZERO, size.as_dvec2(), chunk.height());
+
+    let zoom = size.x as f64 / TERRAIN_CHUNK_WIDTH_METERS;
+
+    let camera = bary_sim::Camera {
+        isometry: Isometry2d::new(
+            chunk.isometry().tr() + DVec2::splat(TERRAIN_CHUNK_WIDTH_METERS / 2.0),
+            0.0,
+        ),
+        zoom: zoom as f32,
+    };
+
+    let view = Viewport::new(camera, size.as_dvec2());
+
+    let padding = 20.0;
+
+    for _ in 0..10000 {
+        let x = rand(-padding, TERRAIN_CHUNK_WIDTH_METERS as f32 + padding) as f64;
+        let y = rand(-padding, TERRAIN_CHUNK_WIDTH_METERS as f32 + padding) as f64;
+        let p = chunk.isometry().tr() + DVec2::new(x, y);
+        let h = TerrainChunk::height_func(p);
+        let t = rand(0.0, 1.0) as f64;
+        let color = if h < 0.0 {
+            let b1 = Color::rgb(1, 31, 75, 0.3);
+            let b2 = Color::rgb(10, 40, 150, 0.3);
+            b1.mix(b2, t)
+        } else if h < 0.5 {
+            Color::rgb(194, 178, 128, 1.0)
+        } else if h < 7.0 {
+            let f2 = Color::rgb(37, 89, 31, 0.3);
+            Color::FOREST_GREEN.alpha(0.3).mix(f2, t)
+        } else {
+            let m1 = Color::rgb(201, 130, 99, 0.3);
+            let m2 = Color::rgb(41, 39, 39, 0.3);
+            m1.mix(m2, t)
+        };
+        let r = rand(10.0, 17.0) as f64;
+        let p = view.world_to_screen(p);
+        cmd.circle(p).radius(view.meters(r)).color(color.alpha(0.1));
+    }
+
+    let tview = &texture
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+
+    rs.clear(tview, Color::WHITE);
+
+    rs.apply_geometry_commands(rw, &cmd, &texture.texture);
+
+    cmd.clear();
+
+    for tree in &chunk.trees {
+        let p = view.world_to_screen(tree.pos);
+        let r = view.meters(tree.radius);
+        cmd.circle(p).radius(r).color(tree.color);
+    }
+
+    rs.apply_geometry_commands(rw, &cmd, &texture.texture);
 
     Some(())
 }

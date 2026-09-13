@@ -15,6 +15,11 @@ impl Viewport {
         }
     }
 
+    pub fn is_on_screen(&self, p: impl Into<DVec2>) -> bool {
+        let p = p.into() / self.screen_width;
+        p.min_element() > 0.0 && p.max_element() < 1.0
+    }
+
     pub fn world_to_screen(&self, p: impl Into<DVec2>) -> DVec2 {
         self.camera.world_to_screen(p.into(), self.screen_width)
     }

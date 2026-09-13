@@ -3,7 +3,7 @@ use crate::node::*;
 use crate::persistence::*;
 use crate::railcar::*;
 use crate::render_state::RenderState;
-use crate::render_state::update_chunk_texture;
+use crate::render_world::RenderWorld;
 use crate::sounds::SoundKind;
 use crate::terrain::*;
 use crate::track::*;
@@ -219,7 +219,8 @@ pub fn make_world(
 
 pub fn process_input(
     world: &mut World,
-    rs: &mut RenderState,
+    rw: &RenderWorld,
+    rs: &RenderState,
     events: &mut EventBus<TrainEvent>,
     sel: &mut SelectionInfo,
     input: &InputState,
@@ -291,17 +292,6 @@ pub fn process_input(
         let nodes: Vec<Ent> = sel.selected_nodes.clone().into_iter().collect();
         if spawn_new_track(world, events, nodes).is_none() {
             error!("Failed to spawn new track");
-        }
-    }
-
-    if input.just_pressed_debounced(rdev::Key::KeyL) {
-        info!("Rerendering tile");
-        events.enqueue(TrainEvent::RedrawTiles);
-
-        for chunk in world.chunks.values() {
-            if let Some(handle) = chunk.texture {
-                update_chunk_texture(rs, world, handle, chunk.index());
-            }
         }
     }
 
@@ -393,6 +383,14 @@ pub fn process_input(
             if let Some(id) = world.chunk_map.get(&id) {
                 events.enqueue(TrainEvent::ChunkUpdate(*id));
             }
+            events.enqueue(TrainEvent::RedrawTile(id));
+        }
+    }
+
+    if input.just_pressed_debounced(Key::KeyT) {
+        if let Some(id) = sel.hovered_chunk {
+            events.enqueue(TrainEvent::RegenerateTrees(id));
+            events.enqueue(TrainEvent::RedrawTile(id));
         }
     }
 

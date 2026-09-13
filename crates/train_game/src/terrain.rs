@@ -3,14 +3,15 @@ use crate::{
     render_world::RenderWorld,
     world::World,
 };
-use bary_core::prelude::{Ent, Isometry2d, linspace_f64, vfloor_f64};
+use bary_core::prelude::*;
+use early_returns::{ok_or_continue, some_or_continue};
 use glam::{DVec2, IVec2};
 use log::warn;
 use noise::{NoiseFn, Perlin};
-use rend::TextureHandle;
+use rend::{Color, TextureHandle};
 use std::collections::BTreeSet;
 
-pub const TERRAIN_CHUNK_WIDTH_METERS: f64 = 3000.0;
+pub const TERRAIN_CHUNK_WIDTH_METERS: f64 = 300.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChunkIndex(IVec2);
@@ -54,13 +55,20 @@ impl ChunkIndex {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Tree {
+    pub pos: DVec2,
+    pub radius: f64,
+    pub color: Color,
+}
+
 #[derive(Debug, Clone)]
 pub struct TerrainChunk {
     index: ChunkIndex,
     tracks: BTreeSet<Ent>,
     nodes: BTreeSet<Ent>,
     height: [f32; 4],
-    pub trees: Vec<DVec2>,
+    pub trees: Vec<Tree>,
     pub texture: Option<TextureHandle>,
 }
 
@@ -73,8 +81,8 @@ fn height_func(pos: DVec2) -> f64 {
     let y1 = perlin.get([x as f64 / 50.0, 0.5, z as f64 / 50.0 + 0.5]);
     let y2 = perlin.get([x as f64 / 500.0 + 0.5, 0.5, z as f64 / 500.0 + 0.5]);
     let y3 = perlin.get([x as f64 / 3000.0, 0.5, z as f64 / 3000.0 + 0.5]);
-    let y4 = perlin.get([x as f64 / 10000.0, 0.5, z as f64 / 10000.0 + 0.5]);
-    return y1 * 0.5 + y2 * 5.0 + y3 * 10.0 + y4 * 30.0 + 10.0;
+    // let y4 = perlin.get([x as f64 / 10000.0, 0.5, z as f64 / 10000.0 + 0.5]);
+    return y1 * 0.5 + y2 * 5.0 + y3 * 10.0; // + y4 * 30.0 + 10.0;
 }
 
 impl TerrainChunk {
@@ -84,16 +92,6 @@ impl TerrainChunk {
         let b = a + DVec2::X * TERRAIN_CHUNK_WIDTH_METERS;
         let c = a + DVec2::splat(TERRAIN_CHUNK_WIDTH_METERS);
         let d = a + DVec2::Y * TERRAIN_CHUNK_WIDTH_METERS;
-
-        let trees = (0..300)
-            .filter_map(|_| {
-                let x = bary_core::prelude::rand(0.0, TERRAIN_CHUNK_WIDTH_METERS as f32) as f64;
-                let y = bary_core::prelude::rand(0.0, TERRAIN_CHUNK_WIDTH_METERS as f32) as f64;
-                let p = DVec2::new(x, y);
-                let h = height_func(index.isometry().tr() + p);
-                (h > 0.0 && h < 17.0).then_some(p)
-            })
-            .collect();
 
         Self {
             index,
@@ -105,7 +103,7 @@ impl TerrainChunk {
                 height_func(c) as f32,
                 height_func(d) as f32,
             ],
-            trees,
+            trees: Vec::new(),
             texture: None,
         }
     }
@@ -149,6 +147,10 @@ impl TerrainChunk {
     pub fn height(&self) -> [f32; 4] {
         self.height
     }
+
+    pub fn height_func(p: DVec2) -> f64 {
+        height_func(p)
+    }
 }
 
 pub fn get_chunk_index(pos: impl Into<DVec2>) -> ChunkIndex {
@@ -171,7 +173,7 @@ pub fn spawn_new_chunk(
     world.chunks.spawn(id, chunk);
     world.chunk_map.insert(index, id);
 
-    events.enqueue(TrainEvent::ChunkUpdate(id));
+    // events.enqueue(TrainEvent::ChunkUpdate(id));
 
     Some(id)
 }
@@ -243,4 +245,47 @@ pub fn chunk_deregister_node(world: &mut World, index: ChunkIndex, node_id: Ent)
     chunk.remove_node(node_id);
     // remove_chunk_if_empty(world, *chunk_id, index);
     Some(())
+}
+
+pub fn regenerate_trees(world: &mut World, index: ChunkIndex) -> Option<()> {
+    let chunk_id = world.chunk_map.get(&index)?;
+    let chunk = world.chunks.try_get_mut(*chunk_id).ok()?;
+
+    chunk.trees = (0..7000)
+        .filter_map(|_| {
+            let x = rand(0.0, TERRAIN_CHUNK_WIDTH_METERS as f32) as f64;
+            let y = rand(0.0, TERRAIN_CHUNK_WIDTH_METERS as f32) as f64;
+            let r = rand(2.0, 8.0) as f64;
+            let p = index.isometry().tr() + DVec2::new(x, y);
+            let h = height_func(p);
+            let color = Color::hsl(
+                rand(0.02, 0.3) as f64,
+                rand(0.4, 0.7) as f64,
+                rand(0.2, 0.3) as f64,
+                rand(0.3, 0.5) as f64,
+            );
+
+            let shore: f64 = h / 4.0;
+            let flats: f64 = 1.0;
+            let slopes: f64 = (7.0 - h) / 5.0;
+
+            let prob = shore.min(flats.min(slopes)).clamp(0.0, 1.0);
+
+            chance(prob as f32).then_some(Tree {
+                pos: p,
+                radius: r,
+                color,
+            })
+        })
+        .collect();
+
+    Some(())
+}
+
+pub fn handle_regen_trees_events(world: &mut World, events: &EventBus<TrainEvent>) {
+    for event in events.iter() {
+        if let TrainEvent::RegenerateTrees(index) = event {
+            regenerate_trees(world, *index);
+        }
+    }
 }

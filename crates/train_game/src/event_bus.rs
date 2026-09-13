@@ -27,7 +27,8 @@ pub enum TrainEvent {
     Sound(SoundKind),
     CarReparent(Ent),
     NewConsist(Ent),
-    RedrawTiles,
+    RegenerateTrees(ChunkIndex),
+    RedrawTile(ChunkIndex),
     Other,
 }
 

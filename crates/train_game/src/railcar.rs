@@ -59,7 +59,7 @@ pub fn get_car_isometry(world: &World, car_id: Ent) -> Option<Isometry2d> {
 pub fn spawn_new_consist(world: &mut World, loc: TrackLocation, n_cars: usize) -> Option<Ent> {
     let track = world.segments.get(loc.track_id)?;
 
-    let vel = 800.0;
+    let vel = 40.0;
     let d = RailCar::LENGTH_METERS + 3.0;
 
     let consist_id = world.spawner.spawn();

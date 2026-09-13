@@ -17,10 +17,12 @@ struct Pipelines {
 
 pub struct RenderState<'a> {
     pub renderer: Renderer<'a>,
-    pub world: RenderWorld,
     pub window: &'a mut glfw::Window,
 
     pipelines: Pipelines,
+
+    pub rect_data: RectDataBuffer,
+    pub height_data_chunks: BufferResource,
 
     depth_texture: Texture,
     im1: Texture,
@@ -87,7 +89,7 @@ impl<'a> RenderState<'a> {
 
         let shadow_pipeline = ShadowPipeline::new(&renderer);
 
-        let world = RenderWorld::new(rect_data, height_data_chunks);
+        let world = RenderWorld::new();
 
         let pipelines = Pipelines {
             lava_lamp_pipeline,
@@ -105,10 +107,11 @@ impl<'a> RenderState<'a> {
             renderer,
             window,
             pipelines,
-            world,
             depth_texture,
             im1,
             im2,
+            rect_data,
+            height_data_chunks,
         }
     }
 
@@ -171,7 +174,7 @@ impl<'a> RenderState<'a> {
             .submit(std::iter::once(command_encoder.finish()));
     }
 
-    fn clear(&self, view: &wgpu::TextureView, color: Color) {
+    pub fn clear(&self, view: &wgpu::TextureView, color: Color) {
         let mut command_encoder = self
             .renderer
             .device
@@ -292,17 +295,12 @@ impl<'a> RenderState<'a> {
 
             let mut rp = self.get_render_pass(&mut command_encoder, None, &view, new_depth);
 
-            self.world
-                .rect_data
-                .write(&self.renderer.queue, cmds, screen);
+            self.rect_data.write(&self.renderer.queue, cmds, screen);
 
             self.pipelines.rectangle_pipeline.draw(
                 &mut rp,
                 cmds.len(),
-                &[
-                    self.world.rect_data.buffer(),
-                    &self.world.height_data_chunks,
-                ],
+                &[self.rect_data.buffer(), &self.height_data_chunks],
             );
 
             drop(rp);
@@ -344,8 +342,7 @@ impl<'a> RenderState<'a> {
                 .collect::<Vec<_>>()
                 .concat();
 
-            self.world
-                .height_data_chunks
+            self.height_data_chunks
                 .write(&self.renderer.queue, &height_data);
 
             let rcmds: Vec<_> = cmds
@@ -361,17 +358,12 @@ impl<'a> RenderState<'a> {
 
             let mut rp = self.get_render_pass(&mut command_encoder, None, &view, new_depth);
 
-            self.world
-                .rect_data
-                .write(&self.renderer.queue, &rcmds, screen);
+            self.rect_data.write(&self.renderer.queue, &rcmds, screen);
 
             self.pipelines.chunk_pipeline.draw(
                 &mut rp,
                 cmds.len(),
-                &[
-                    self.world.rect_data.buffer(),
-                    &self.world.height_data_chunks,
-                ],
+                &[self.rect_data.buffer(), &self.height_data_chunks],
             );
 
             drop(rp);
@@ -386,6 +378,7 @@ impl<'a> RenderState<'a> {
 
     fn draw_ui(
         &self,
+        world: &RenderWorld,
         view: &wgpu::TextureView,
         font_id: Ent,
         commands: &[CharCommand],
@@ -394,7 +387,7 @@ impl<'a> RenderState<'a> {
         let (sx, sy) = self.window.get_size();
         let screen = glam::DVec2::new(sx as f64, sy as f64);
 
-        let (font, material) = self.world.fonts.get(font_id).unwrap();
+        let (font, material) = world.fonts.get(font_id).unwrap();
 
         let mut passes = 0;
 
@@ -449,7 +442,7 @@ impl<'a> RenderState<'a> {
         self.blur_pass(incoming, outgoing, false, true, 5.0)
     }
 
-    fn blur_pass(
+    pub fn blur_pass(
         &self,
         incoming: &Texture,
         outgoing: &wgpu::TextureView,
@@ -482,6 +475,7 @@ impl<'a> RenderState<'a> {
 
     pub fn apply_geometry_commands(
         &self,
+        world: &RenderWorld,
         commands: &RenderCommands,
         texture: &wgpu::Texture,
     ) -> usize {
@@ -492,16 +486,21 @@ impl<'a> RenderState<'a> {
         let view = &texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         passes += self.draw_chunks(texture, &commands.chunk_commands, true);
-        passes += self.draw_sprites(texture, commands);
+        passes += self.draw_sprites(world, texture, commands);
         passes += self.draw_rectangles(view, &commands.rect_commands, true);
         passes += self.draw_circles(texture, &commands.circle_commands, true);
         passes += self.draw_lines(view, &commands.line_commands, true);
-        passes += self.draw_ui(view, font_id, &commands.char_commands, true);
+        passes += self.draw_ui(world, view, font_id, &commands.char_commands, true);
 
         passes
     }
 
-    fn draw_sprites(&self, texture: &wgpu::Texture, commands: &RenderCommands) -> usize {
+    fn draw_sprites(
+        &self,
+        world: &RenderWorld,
+        texture: &wgpu::Texture,
+        commands: &RenderCommands,
+    ) -> usize {
         let (sx, sy) = self.window.get_size();
         let screen = glam::DVec2::new(sx as f64, sy as f64);
 
@@ -510,7 +509,7 @@ impl<'a> RenderState<'a> {
         let mut passes = 0;
 
         for (sprite_id, rects) in &commands.sprite_commands {
-            let texture = self.world.textures.get(*sprite_id).unwrap();
+            let texture = world.textures.get(*sprite_id).unwrap();
 
             for chunk in rects.chunks(RectanglePipeline::RECTS_PER_PASS) {
                 passes += 1;
@@ -522,14 +521,12 @@ impl<'a> RenderState<'a> {
 
                 let mut rp = self.get_render_pass(&mut command_encoder, None, view, true);
 
-                self.world
-                    .rect_data
-                    .write(&self.renderer.queue, &chunk, screen);
+                self.rect_data.write(&self.renderer.queue, &chunk, screen);
 
                 self.pipelines.sprite_pipeline.draw(
                     &mut rp,
                     &texture.bind_group,
-                    &self.world.rect_data,
+                    &self.rect_data,
                     chunk.len(),
                 );
 
@@ -546,6 +543,7 @@ impl<'a> RenderState<'a> {
 
     pub fn render(
         &mut self,
+        world: &RenderWorld,
         commands: &RenderCommands,
     ) -> Result<Option<(SurfaceTexture, usize)>, wgpu::SurfaceError> {
         let (w, h) = self.window.get_size();
@@ -572,12 +570,13 @@ impl<'a> RenderState<'a> {
 
         self.clear(&self.im1.view, Color::rgb(117, 186, 255, 1.0));
 
-        passes += self.apply_geometry_commands(commands, &self.im1.texture);
+        passes += self.apply_geometry_commands(&world, commands, &self.im1.texture);
 
-        // self.blur_pass(&self.im1, &self.im2.view, false, false, 40.0);
-        // self.blur_pass(&self.im2, &self.im1.view, true, false, 40.0);
-
-        // passes += self.apply_geometry_commands(commands, &self.im1.texture);
+        if commands.is_blur {
+            self.blur_pass(&self.im1, &self.im2.view, false, false, 40.0);
+            self.blur_pass(&self.im2, &self.im1.view, true, false, 40.0);
+            passes += 2;
+        }
 
         self.copy(&self.im1, &view);
 
@@ -585,43 +584,4 @@ impl<'a> RenderState<'a> {
 
         Ok(Some((drawable, passes)))
     }
-}
-
-pub fn update_chunk_texture(
-    rs: &RenderState,
-    world: &World,
-    handle: TextureHandle,
-    index: ChunkIndex,
-) -> Option<()> {
-    let texture = rs.world.textures.get(handle.id)?;
-
-    let size = texture.size;
-
-    let view = &texture
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-
-    let mut cmd = RenderCommands::from_fonts(&rs.world.fonts);
-
-    let id = *world.chunk_map.get(&index)?;
-    let chunk = world.chunks.get(id)?;
-
-    cmd.chunk(Isometry2d::ZERO, size.as_dvec2(), chunk.height());
-
-    for tree in &chunk.trees {
-        let color = Color::hsl(
-            rand(0.02, 0.15) as f64,
-            rand(0.4, 0.7) as f64,
-            rand(0.5, 0.6) as f64,
-            1.0,
-        );
-        let r = rand(8.0, 16.0) as f64;
-        let p = *tree / TERRAIN_CHUNK_WIDTH_METERS * size.as_dvec2();
-        cmd.circle(p).radius(r).color(color);
-    }
-
-    rs.clear(view, Color::SKY);
-    rs.apply_geometry_commands(&cmd, &texture.texture);
-
-    Some(())
 }

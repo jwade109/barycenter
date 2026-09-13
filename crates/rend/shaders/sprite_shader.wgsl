@@ -47,7 +47,7 @@ fn fs_main(in: VertexShaderOutput) -> @location(0) vec4<f32> {
     let data = rect_data[in.instance_index];
     let tint_color = vec4f(data.r, data.g, data.b, data.a);
     var col = textureSample(texture, sample, in.uv);
-    col = vec4f(color_correct(col.xyz), col.w);
+    col = vec4f(col.xyz, col.w);
     col = col * tint_color;
     return col;
 }

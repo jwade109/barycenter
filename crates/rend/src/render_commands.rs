@@ -67,6 +67,8 @@ pub struct RenderCommands {
     pub chunk_commands: Vec<ChunkCommand>,
     pub sprite_commands: BTreeMap<Ent, Vec<RectCommand>>,
 
+    pub is_blur: bool,
+
     pub current_font_id: Ent,
 }
 
@@ -93,7 +95,17 @@ impl RenderCommands {
             chunk_commands: Vec::new(),
             sprite_commands: BTreeMap::new(),
             current_font_id: id,
+            is_blur: false,
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.rect_commands.clear();
+        self.char_commands.clear();
+        self.circle_commands.clear();
+        self.line_commands.clear();
+        self.chunk_commands.clear();
+        self.sprite_commands.clear();
     }
 
     pub fn enqueue(&mut self, command: RenderCommand) {
