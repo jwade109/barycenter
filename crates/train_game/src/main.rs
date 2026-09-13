@@ -32,6 +32,7 @@ mod railcar;
 mod rend_app;
 mod render_state;
 mod render_world;
+mod smoke_particle;
 mod sounds;
 mod terrain;
 mod track;

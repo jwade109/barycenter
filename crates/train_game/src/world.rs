@@ -4,6 +4,7 @@ use crate::persistence::*;
 use crate::railcar::*;
 use crate::render_state::RenderState;
 use crate::render_world::RenderWorld;
+use crate::smoke_particle::SmokeParticle;
 use crate::sounds::SoundKind;
 use crate::terrain::*;
 use crate::track::*;
@@ -72,6 +73,7 @@ pub struct World {
 
     pub chunks: Components<TerrainChunk>,
     pub chunk_map: BTreeMap<ChunkIndex, Ent>,
+    pub smoke_particles: Vec<SmokeParticle>,
 
     pub calculated_route: Option<Route>,
 }
@@ -109,6 +111,7 @@ impl World {
             cars: Components::default(),
             chunks: Components::default(),
             consists: Components::default(),
+            smoke_particles: Vec::new(),
             clouds,
             chunk_map: BTreeMap::new(),
             calculated_route: None,
@@ -146,6 +149,21 @@ pub fn update_world(
         update_track_parentage(world, car_id);
         events.enqueue(TrainEvent::CarReparent(car_id));
     }
+
+    for car in world.cars.values() {
+        if car.is_front() && world.ticks % 5 == 0 {
+            let track = world.segments.get(car.segment).unwrap();
+            let iso = track.eval_at(car.origin, car.pos);
+            let particle = SmokeParticle::new(iso.tr());
+            world.smoke_particles.push(particle);
+        }
+    }
+
+    for part in &mut world.smoke_particles {
+        part.step(dt);
+    }
+
+    world.smoke_particles.retain(|s| s.age < 4.0);
 
     world.camera.isometry.translation +=
         (world.target_camera.isometry.translation - world.camera.isometry.translation) * 0.2;

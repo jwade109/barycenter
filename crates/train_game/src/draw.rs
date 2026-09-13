@@ -347,6 +347,7 @@ pub fn draw_world(
     draw_calculated_route(cmd, world, &view);
     draw_hovered_node(cmd, world, sel, &view);
     draw_hovered_chunk(cmd, world, sel, &view);
+    draw_smoke_particles(cmd, world, &view);
     draw_clouds(cmd, world, &view);
     draw_ruler(cmd, sel, &view, mouse);
 
@@ -456,6 +457,15 @@ fn draw_ruler(
         .color(Color::WHITE);
 
     Some(())
+}
+
+fn draw_smoke_particles(cmd: &mut RenderCommands, world: &World, view: &Viewport) {
+    for part in &world.smoke_particles {
+        let p = view.world_to_screen(part.pos);
+        cmd.circle(p)
+            .radius(view.meters(4.0))
+            .color(Color::gray(0.3, 0.7));
+    }
 }
 
 fn draw_hovered_chunk(
