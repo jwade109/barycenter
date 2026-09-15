@@ -28,8 +28,10 @@ impl RailCar {
         }
     }
 
-    pub fn step(&mut self, dt: f64) {
+    pub fn step(&mut self, dt: f64, target_vel: f64) {
+        let a = ((target_vel - self.vel) * 0.3).clamp(-3.0, 3.0);
         self.pos += self.vel * dt;
+        self.vel += a * dt;
     }
 
     pub fn is_front(&self) -> bool {
@@ -38,12 +40,14 @@ impl RailCar {
 }
 
 pub struct RailConsist {
+    pub target_vel: f64,
     pub cars: Vec<Ent>,
 }
 
 impl RailConsist {
     pub fn new(cars: impl Iterator<Item = Ent>) -> Self {
         Self {
+            target_vel: rand(25.0, 38.0) as f64,
             cars: cars.collect(),
         }
     }
@@ -59,7 +63,6 @@ pub fn get_car_isometry(world: &World, car_id: Ent) -> Option<Isometry2d> {
 pub fn spawn_new_consist(world: &mut World, loc: TrackLocation, n_cars: usize) -> Option<Ent> {
     let track = world.segments.get(loc.track_id)?;
 
-    let vel = 40.0;
     let d = RailCar::LENGTH_METERS + 3.0;
 
     let consist_id = world.spawner.spawn();
@@ -78,7 +81,7 @@ pub fn spawn_new_consist(world: &mut World, loc: TrackLocation, n_cars: usize) -
             break;
         }
 
-        let mut car = RailCar::new(loc.track_id, pos, vel, loc.origin, consist_id);
+        let mut car = RailCar::new(loc.track_id, pos, 14.0, loc.origin, consist_id);
         car.forward_connection = in_front;
         car.backward_connection = behind;
         cars.push(this_id);

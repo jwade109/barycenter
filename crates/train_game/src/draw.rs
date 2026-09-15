@@ -16,55 +16,84 @@ use bary_core::prelude::*;
 use bary_input::InputState;
 use rend::*;
 
-fn draw_button(
-    cmd: &mut RenderCommands,
-    anim: &AnimationStates,
-    text: &str,
-    p: DVec2,
-    mouse: DVec2,
-    input: &InputState,
-    id: usize,
-    color: Color,
-) -> (DVec2, bool) {
-    let padding = DVec2::splat(15.0);
-    let extent = cmd
-        .text(p + padding, text)
-        .size(22.0)
-        .color(Color::WHITE)
-        .extent();
-    let extent = extent.max(DVec2::new(160.0, extent.y));
-    let full_extent = extent + padding * 2.0;
-    let rect_origin = p - extent.y * DVec2::Y;
-    let aabb = AABB::from_arbitrary(rect_origin.as_vec2(), (rect_origin + full_extent).as_vec2());
-    let contains = aabb.contains(mouse.as_vec2());
+mod ui {
+    use super::*;
 
-    let t = anim.anim(("button", id), Tween::Exponential, 0.1, contains);
-    let alpha = lerp(0.7, 1.0, t as f32) as f64;
+    pub fn draw_button(
+        cmd: &mut RenderCommands,
+        anim: &AnimationStates,
+        text: &str,
+        p: DVec2,
+        mouse: DVec2,
+        input: &InputState,
+        id: usize,
+        color: Color,
+    ) -> (DVec2, bool) {
+        let padding = DVec2::splat(15.0);
+        let extent = cmd
+            .text(p + padding, text)
+            .size(22.0)
+            .color(Color::WHITE)
+            .extent();
+        let extent = extent.max(DVec2::new(160.0, extent.y));
+        let full_extent = extent + padding * 2.0;
+        let rect_origin = p - extent.y * DVec2::Y;
+        let aabb =
+            AABB::from_arbitrary(rect_origin.as_vec2(), (rect_origin + full_extent).as_vec2());
+        let contains = aabb.contains(mouse.as_vec2());
 
-    let extra_extent = DVec2::new(200.0 * t, 0.0);
+        let t = anim.anim(("button", id), Tween::Exponential, 0.1, contains);
+        let alpha = lerp(0.7, 1.0, t as f32) as f64;
 
-    let expanded_extent = full_extent + extra_extent;
-    let expanded_origin = rect_origin.with_y(rect_origin.y - extra_extent.y);
+        let extra_extent = DVec2::new(200.0 * t, 0.0);
 
-    let alpha = contains as u8 as f64 * 0.2 + 0.9;
+        let expanded_extent = full_extent + extra_extent;
+        let expanded_origin = rect_origin.with_y(rect_origin.y - extra_extent.y);
 
-    cmd.rect(rect_origin)
-        .dims(expanded_extent)
-        .color(color.alpha(alpha))
-        .z(0.52);
-    cmd.text_with_shadow(
-        p + padding,
-        (-2.0, -2.0),
-        text,
-        22.0,
-        Color::WHITE,
-        Color::BLACK.alpha(0.7),
-    );
+        let alpha = contains as u8 as f64 * 0.2 + 0.9;
 
-    (
-        full_extent,
-        input.just_pressed(rdev::Button::Left) && contains,
-    )
+        cmd.rect(rect_origin)
+            .dims(expanded_extent)
+            .color(color.alpha(alpha))
+            .z(0.52);
+        cmd.text_with_shadow(
+            p + padding,
+            (-2.0, -2.0),
+            text,
+            22.0,
+            Color::WHITE,
+            Color::BLACK.alpha(0.7),
+        );
+
+        (
+            full_extent,
+            input.just_pressed(rdev::Button::Left) && contains,
+        )
+    }
+
+    pub fn draw_font_ui(
+        cmd: &mut RenderCommands,
+        anim: &AnimationStates,
+        events: &mut EventBus<TrainEvent>,
+        font_selection: &mut FontSelection,
+        mouse: DVec2,
+        input: &InputState,
+    ) {
+        let fonts = cmd.fonts.clone();
+
+        let mut p = DVec2::new(30.0, 300.0);
+        for (i, (font_id, font)) in fonts.iter().enumerate() {
+            let color = Color::hsl(i as f64 / 10.0, 0.3, 0.45, 0.95);
+
+            let text = format!("{} {}", font_id, font.name);
+            let (e, clicked) = draw_button(cmd, anim, &text, p, mouse, input, i, color);
+            if clicked {
+                font_selection.clicked(*font_id);
+                events.enqueue(TrainEvent::Sound(SoundKind::ButtonUp));
+            }
+            p.y += e.y + 15.0;
+        }
+    }
 }
 
 fn draw_terrain(cmd: &mut RenderCommands, world: &World, view: &Viewport) {
@@ -114,30 +143,6 @@ fn draw_grid_lines(cmd: &mut RenderCommands, view: &Viewport) {
         cmd.line(view.world_to_screen(s), view.world_to_screen(e))
             .color(Color::GRAY.alpha(0.5))
             .thickness(3.0);
-    }
-}
-
-fn draw_font_ui(
-    cmd: &mut RenderCommands,
-    anim: &AnimationStates,
-    events: &mut EventBus<TrainEvent>,
-    font_selection: &mut FontSelection,
-    mouse: DVec2,
-    input: &InputState,
-) {
-    let fonts = cmd.fonts.clone();
-
-    let mut p = DVec2::new(30.0, 300.0);
-    for (i, (font_id, font)) in fonts.iter().enumerate() {
-        let color = Color::hsl(i as f64 / 10.0, 0.3, 0.45, 0.95);
-
-        let text = format!("{} {}", font_id, font.name);
-        let (e, clicked) = draw_button(cmd, anim, &text, p, mouse, input, i, color);
-        if clicked {
-            font_selection.clicked(*font_id);
-            events.enqueue(TrainEvent::Sound(SoundKind::ButtonUp));
-        }
-        p.y += e.y + 15.0;
     }
 }
 
@@ -264,9 +269,8 @@ fn draw_debug_info(
         format!("framerate      {:0.1} Hz", frame_timer.actual_rate()),
         format!("zoom           {:0.3}", world.camera.zoom),
         format!("hovered        {:?}", sel.hovered),
-        format!("selected_nodes {:?}", sel.selected_nodes),
+        format!("selected       {:?}", sel.selected),
         format!("pressed_node   {:?}", sel.pressed_node),
-        format!("selected_track {:?}", sel.selected_track),
         format!("draw_calls     {:?}", draw_calls),
     ];
 
@@ -324,8 +328,6 @@ pub fn draw_world(
         draw_terrain(cmd, world, &view);
     }
 
-    cmd.is_blur = input.is_key_pressed(rdev::Key::KeyY);
-
     if world.show_detail {
         draw_track_bounds(cmd, world, &view);
         draw_track_chunk_occupancy(cmd, world, &view);
@@ -341,15 +343,27 @@ pub fn draw_world(
     }
 
     draw_selected_track(cmd, world, sel, &view);
+
+    cmd.new_layer("tracks");
+
     draw_hovered_track(cmd, world, sel, &view);
+    draw_hovered_car(cmd, world, sel, &view);
     draw_railcars(cmd, world, &view);
     draw_selected_nodes(cmd, world, sel, &view);
     draw_calculated_route(cmd, world, &view);
     draw_hovered_node(cmd, world, sel, &view);
     draw_hovered_chunk(cmd, world, sel, &view);
+
+    cmd.new_layer("smoke");
+
     draw_smoke_particles(cmd, world, &view);
+
+    cmd.new_layer("clouds");
+
     draw_clouds(cmd, world, &view);
     draw_ruler(cmd, sel, &view, mouse);
+
+    cmd.new_layer("ui");
 
     draw_debug_info(
         cmd,
@@ -362,7 +376,8 @@ pub fn draw_world(
         frame_timer,
         sounds,
     );
-    draw_font_ui(cmd, anim, events, fonts, mouse, input);
+
+    ui::draw_font_ui(cmd, anim, events, fonts, mouse, input);
 
     cmd.circle(mouse).diameter(11.0).color(Color::RED);
     let mouse_world = view.screen_to_world(mouse);
@@ -420,13 +435,20 @@ fn draw_z_index_demo(cmd: &mut RenderCommands, view: &Viewport) {
 
 fn draw_clouds(cmd: &mut RenderCommands, world: &World, view: &Viewport) {
     let alpha = (1.0 - view.zoom() * 10.0).clamp(0.0, 1.0) * 0.4;
+    if alpha < 0.01 {
+        return;
+    }
 
     for (pos, radius) in &world.clouds {
         let p = view.world_to_screen_parallax(*pos);
-        cmd.circle(p)
-            .radius(view.meters(*radius))
-            .color(Color::WHITE.alpha(alpha))
-            .z(0.1);
+
+        let r = view.meters(*radius);
+        if view.is_on_screen(p, r) {
+            cmd.circle(p)
+                .radius(r)
+                .color(Color::WHITE.alpha(alpha))
+                .z(0.1);
+        }
     }
 }
 
@@ -460,11 +482,11 @@ fn draw_ruler(
 }
 
 fn draw_smoke_particles(cmd: &mut RenderCommands, world: &World, view: &Viewport) {
-    for part in &world.smoke_particles {
+    for part in world.smoke_particles.iter().rev() {
         let p = view.world_to_screen(part.pos);
         cmd.circle(p)
-            .radius(view.meters(4.0))
-            .color(Color::gray(0.3, 0.7));
+            .radius(view.meters(part.radius()))
+            .color(part.color());
     }
 }
 
@@ -544,9 +566,9 @@ fn draw_railcars(cmd: &mut RenderCommands, world: &World, view: &Viewport) {
         let iso = track.eval_at(car.origin, car.pos);
 
         let color = if car.is_front() {
-            Color::PURPLE
+            Color::ORANGE
         } else {
-            Color::BLUE
+            Color::BLACK
         };
 
         draw_railcar(cmd, iso, &view).color(color);
@@ -559,7 +581,9 @@ fn draw_selected_track(
     sel: &SelectionInfo,
     view: &Viewport,
 ) -> Option<()> {
-    let loc = sel.selected_track?;
+    let SelectedEntity::Track(loc) = sel.selected.as_ref()? else {
+        return None;
+    };
     let track = world.segments.get(loc.track_id)?;
 
     draw_track(
@@ -650,17 +674,54 @@ fn draw_hovered_track(
     Some(())
 }
 
+fn draw_hovered_car(cmd: &mut RenderCommands, world: &World, sel: &SelectionInfo, view: &Viewport) {
+    if let Some(SelectedEntity::Car(car_id)) = sel.selected {
+        highlight_consist(cmd, world, car_id, view, Color::BLUE);
+    }
+    if let Some(HoveredEntity::Car(car_id)) = sel.hovered {
+        highlight_consist(cmd, world, car_id, view, Color::ORANGE);
+    }
+}
+
+fn highlight_consist(
+    cmd: &mut RenderCommands,
+    world: &World,
+    car_id: Ent,
+    view: &Viewport,
+    color: Color,
+) -> Option<()> {
+    let car = world.cars.get(car_id)?;
+    let consist = world.consists.get(car.consist)?;
+
+    for id in &consist.cars {
+        let car = world.cars.get(*id)?;
+        let track = world.segments.get(car.segment)?;
+        let pos = track.eval_at(car.origin, car.pos);
+        let p = view.world_to_screen(pos.tr());
+        let color = if *id == car_id {
+            color.alpha(1.0)
+        } else {
+            color.alpha(0.3)
+        };
+        cmd.circle(p).radii(40.0, 50.0).color(color);
+    }
+
+    Some(())
+}
+
 fn draw_selected_nodes(
     cmd: &mut RenderCommands,
     world: &World,
     sel: &SelectionInfo,
     view: &Viewport,
 ) {
-    for id in &sel.selected_nodes {
-        if let Some(node) = world.nodes.get(*id) {
-            cmd.circle(view.world_to_screen(node.pos()))
-                .radii(15.0, 25.0)
-                .color(Color::ORANGE);
+    if let Some(SelectedEntity::Nodes(n)) = &sel.selected {
+        for id in n {
+            if let Some(node) = world.nodes.get(*id) {
+                cmd.circle(view.world_to_screen(node.pos()))
+                    .radii(15.0, 25.0)
+                    .color(Color::ORANGE);
+            }
         }
     }
 }
@@ -729,7 +790,13 @@ pub fn update_chunk_texture(
 
     let padding = 20.0;
 
-    for _ in 0..10000 {
+    let tview = &texture
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+
+    rs.clear(tview, Color::WHITE);
+
+    for _ in 0..2000 {
         let x = rand(-padding, TERRAIN_CHUNK_WIDTH_METERS as f32 + padding) as f64;
         let y = rand(-padding, TERRAIN_CHUNK_WIDTH_METERS as f32 + padding) as f64;
         let p = chunk.isometry().tr() + DVec2::new(x, y);
@@ -749,20 +816,12 @@ pub fn update_chunk_texture(
             let m2 = Color::rgb(41, 39, 39, 0.3);
             m1.mix(m2, t)
         };
-        let r = rand(10.0, 17.0) as f64;
+        let r = rand(10.0, 17.0) as f64 * 4.0;
         let p = view.world_to_screen(p);
         cmd.circle(p).radius(view.meters(r)).color(color.alpha(0.1));
     }
 
-    let tview = &texture
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-
-    rs.clear(tview, Color::WHITE);
-
-    rs.apply_geometry_commands(rw, &cmd, &texture.texture);
-
-    cmd.clear();
+    cmd.new_layer("trees");
 
     for tree in &chunk.trees {
         let p = view.world_to_screen(tree.pos);
@@ -770,7 +829,9 @@ pub fn update_chunk_texture(
         cmd.circle(p).radius(r).color(tree.color);
     }
 
-    rs.apply_geometry_commands(rw, &cmd, &texture.texture);
+    for layer in cmd.layers() {
+        rs.apply_geometry_commands(rw, cmd.current_font_id, layer, &texture.texture);
+    }
 
     Some(())
 }

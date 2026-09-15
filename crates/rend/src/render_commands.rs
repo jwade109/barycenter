@@ -57,18 +57,30 @@ pub struct ChunkCommand {
     pub height: [f32; 4],
 }
 
-pub struct RenderCommands {
-    pub fonts: Components<FontInfo>,
-
+#[derive(Debug, Default, Clone)]
+pub struct RenderLayer {
+    pub name: &'static str,
     pub rect_commands: Vec<RectCommand>,
     pub char_commands: Vec<CharCommand>,
     pub circle_commands: Vec<CircleCommand>,
     pub line_commands: Vec<LineCommand>,
     pub chunk_commands: Vec<ChunkCommand>,
     pub sprite_commands: BTreeMap<Ent, Vec<RectCommand>>,
+}
 
-    pub is_blur: bool,
+impl RenderLayer {
+    pub fn new(name: &'static str) -> Self {
+        Self {
+            name,
+            ..Default::default()
+        }
+    }
+}
 
+pub struct RenderCommands {
+    layers: Vec<RenderLayer>,
+    current_layer: usize,
+    pub fonts: Components<FontInfo>,
     pub current_font_id: Ent,
 }
 
@@ -88,35 +100,41 @@ impl RenderCommands {
         let id = *id;
         Self {
             fonts,
-            rect_commands: Vec::new(),
-            char_commands: Vec::new(),
-            circle_commands: Vec::new(),
-            line_commands: Vec::new(),
-            chunk_commands: Vec::new(),
-            sprite_commands: BTreeMap::new(),
+            layers: vec![RenderLayer::default()],
+            current_layer: 0,
             current_font_id: id,
-            is_blur: false,
         }
     }
 
     pub fn clear(&mut self) {
-        self.rect_commands.clear();
-        self.char_commands.clear();
-        self.circle_commands.clear();
-        self.line_commands.clear();
-        self.chunk_commands.clear();
-        self.sprite_commands.clear();
+        self.layers = vec![RenderLayer::default()];
+        self.current_layer = 0;
+    }
+
+    fn current_layer(&mut self) -> &mut RenderLayer {
+        self.layers.get_mut(self.current_layer).unwrap()
+    }
+
+    pub fn layers(&self) -> impl Iterator<Item = &RenderLayer> {
+        self.layers.iter()
+    }
+
+    pub fn new_layer(&mut self, name: &'static str) {
+        self.layers.push(RenderLayer::default());
+        self.current_layer += 1;
     }
 
     pub fn enqueue(&mut self, command: RenderCommand) {
+        let layer = self.current_layer();
         match command {
-            RenderCommand::Char(c) => self.char_commands.push(c),
-            RenderCommand::Rect(c) => self.rect_commands.push(c),
-            RenderCommand::Circle(c) => self.circle_commands.push(c),
-            RenderCommand::Line(c) => self.line_commands.push(c),
-            RenderCommand::Chunk(c) => self.chunk_commands.push(c),
+            RenderCommand::Char(c) => layer.char_commands.push(c),
+            RenderCommand::Rect(c) => layer.rect_commands.push(c),
+            RenderCommand::Circle(c) => layer.circle_commands.push(c),
+            RenderCommand::Line(c) => layer.line_commands.push(c),
+            RenderCommand::Chunk(c) => layer.chunk_commands.push(c),
             RenderCommand::Sprite(id, rect) => {
-                self.sprite_commands
+                layer
+                    .sprite_commands
                     .entry(id)
                     .and_modify(|v| v.push(rect))
                     .or_insert(vec![rect]);
@@ -365,7 +383,8 @@ impl<'a> TextBuilder<'a> {
 impl<'a> Drop for TextBuilder<'a> {
     fn drop(&mut self) {
         let (c, _) = self.build();
-        self.commands.char_commands.extend(c);
+        let layer = self.commands.current_layer();
+        layer.char_commands.extend(c);
     }
 }
 

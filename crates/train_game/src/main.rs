@@ -206,6 +206,8 @@ impl<'a> RendApp for TrainApp<'a> {
             self.should_exit = true;
         }
 
+        handle_regen_trees_events(&mut self.world, &self.events);
+
         generate_chunk_textures(
             &self.rs,
             &mut self.render_world,
@@ -213,8 +215,6 @@ impl<'a> RendApp for TrainApp<'a> {
             &self.events,
             &mut self.world,
         );
-
-        handle_regen_trees_events(&mut self.world, &self.events);
 
         self.sounds.handle_events(&self.events);
 

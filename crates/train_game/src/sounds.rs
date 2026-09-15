@@ -46,13 +46,13 @@ impl SoundManager {
         //     info!("{} sounds playing", self.track.num_sounds());
         // }
 
-        // self.sounds.retain(|(_name, handle)| {
-        //     if handle.state() == PlaybackState::Stopped {
-        //         false
-        //     } else {
-        //         true
-        //     }
-        // });
+        self.sounds.retain(|_id, sound| {
+            if sound.handle.state() == PlaybackState::Stopped {
+                false
+            } else {
+                true
+            }
+        });
     }
 
     fn play_sound(&mut self, path: &str) -> Result<(), Box<dyn std::error::Error>> {

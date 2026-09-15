@@ -476,21 +476,20 @@ impl<'a> RenderState<'a> {
     pub fn apply_geometry_commands(
         &self,
         world: &RenderWorld,
-        commands: &RenderCommands,
+        font_id: Ent,
+        layer: &RenderLayer,
         texture: &wgpu::Texture,
     ) -> usize {
         let mut passes = 0;
 
-        let font_id = commands.current_font_id;
-
         let view = &texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        passes += self.draw_chunks(texture, &commands.chunk_commands, true);
-        passes += self.draw_sprites(world, texture, commands);
-        passes += self.draw_rectangles(view, &commands.rect_commands, true);
-        passes += self.draw_circles(texture, &commands.circle_commands, true);
-        passes += self.draw_lines(view, &commands.line_commands, true);
-        passes += self.draw_ui(world, view, font_id, &commands.char_commands, true);
+        passes += self.draw_chunks(texture, &layer.chunk_commands, true);
+        passes += self.draw_sprites(world, texture, &layer);
+        passes += self.draw_rectangles(view, &layer.rect_commands, true);
+        passes += self.draw_circles(texture, &layer.circle_commands, true);
+        passes += self.draw_lines(view, &layer.line_commands, true);
+        passes += self.draw_ui(world, view, font_id, &layer.char_commands, true);
 
         passes
     }
@@ -499,7 +498,7 @@ impl<'a> RenderState<'a> {
         &self,
         world: &RenderWorld,
         texture: &wgpu::Texture,
-        commands: &RenderCommands,
+        layer: &RenderLayer,
     ) -> usize {
         let (sx, sy) = self.window.get_size();
         let screen = glam::DVec2::new(sx as f64, sy as f64);
@@ -508,7 +507,7 @@ impl<'a> RenderState<'a> {
 
         let mut passes = 0;
 
-        for (sprite_id, rects) in &commands.sprite_commands {
+        for (sprite_id, rects) in &layer.sprite_commands {
             let texture = world.textures.get(*sprite_id).unwrap();
 
             for chunk in rects.chunks(RectanglePipeline::RECTS_PER_PASS) {
@@ -570,12 +569,13 @@ impl<'a> RenderState<'a> {
 
         self.clear(&self.im1.view, Color::rgb(117, 186, 255, 1.0));
 
-        passes += self.apply_geometry_commands(&world, commands, &self.im1.texture);
-
-        if commands.is_blur {
-            self.blur_pass(&self.im1, &self.im2.view, false, false, 40.0);
-            self.blur_pass(&self.im2, &self.im1.view, true, false, 40.0);
-            passes += 2;
+        for layer in commands.layers() {
+            passes += self.apply_geometry_commands(
+                &world,
+                commands.current_font_id,
+                layer,
+                &self.im1.texture,
+            );
         }
 
         self.copy(&self.im1, &view);

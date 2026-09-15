@@ -28,10 +28,16 @@ pub enum HoveredEntity {
     Car(Ent),
 }
 
+#[derive(Debug, Clone)]
+pub enum SelectedEntity {
+    Track(TrackLocation),
+    Nodes(Vec<Ent>),
+    Car(Ent),
+}
+
 pub struct SelectionInfo {
     pub pressed_node: Option<(Ent, Instant)>,
-    pub selected_nodes: Vec<Ent>,
-    pub selected_track: Option<TrackLocation>,
+    pub selected: Option<SelectedEntity>,
     pub hovered_chunk: Option<ChunkIndex>,
     pub hovered: Option<HoveredEntity>,
     pub ruler_start: Option<DVec2>,
@@ -41,11 +47,10 @@ pub struct SelectionInfo {
 impl SelectionInfo {
     pub fn new() -> Self {
         Self {
-            selected_nodes: Vec::new(),
             pressed_node: None,
-            selected_track: None,
             hovered_chunk: None,
             hovered: None,
+            selected: None,
             ruler_start: None,
             cursor_origin: Terminus::Start,
         }
@@ -76,13 +81,14 @@ pub struct World {
     pub smoke_particles: Vec<SmokeParticle>,
 
     pub calculated_route: Option<Route>,
+    pub followed_car: Option<Ent>,
 }
 
 impl World {
     pub fn new(font_id: Ent, textures: Vec<TextureHandle>) -> Self {
-        let n_clouds = 500;
+        let n_clouds = 5000;
 
-        let clouds = (0..n_clouds)
+        let mut clouds: Vec<(DVec3, f64)> = (0..n_clouds)
             .map(|_| {
                 let x = rand(-400000.0, 400000.0) as f64;
                 let y = rand(-400000.0, 400000.0) as f64;
@@ -115,6 +121,7 @@ impl World {
             clouds,
             chunk_map: BTreeMap::new(),
             calculated_route: None,
+            followed_car: None,
             textures,
         }
     }
@@ -134,7 +141,8 @@ pub fn update_world(
     let mut needs_reparenting = Vec::new();
 
     for (car_id, car) in world.cars.iter_mut() {
-        car.step(dt);
+        let consist = world.consists.get(car.consist).unwrap();
+        car.step(dt, consist.target_vel);
 
         let Some(track) = world.segments.get(car.segment) else {
             continue;
@@ -154,7 +162,11 @@ pub fn update_world(
         if car.is_front() && world.ticks % 5 == 0 {
             let track = world.segments.get(car.segment).unwrap();
             let iso = track.eval_at(car.origin, car.pos);
-            let particle = SmokeParticle::new(iso.tr());
+            let mut vel = car.vel * iso.local_x().as_dvec2();
+            if car.origin == Terminus::End {
+                vel = rotate_f64(vel, PI_64);
+            }
+            let particle = SmokeParticle::new(iso.tr(), vel);
             world.smoke_particles.push(particle);
         }
     }
@@ -163,7 +175,16 @@ pub fn update_world(
         part.step(dt);
     }
 
-    world.smoke_particles.retain(|s| s.age < 4.0);
+    world.smoke_particles.retain(|s| s.opacity() > 0.0);
+
+    if let Some(iso) = world
+        .followed_car
+        .map(|id| get_car_isometry(world, id))
+        .flatten()
+    {
+        world.target_camera.isometry = iso;
+        world.camera.isometry = iso;
+    }
 
     world.camera.isometry.translation +=
         (world.target_camera.isometry.translation - world.camera.isometry.translation) * 0.2;
@@ -178,7 +199,7 @@ pub fn update_world(
     sel.hovered = None;
 
     {
-        let mut best_dist = MOUSEOVER_RADIUS;
+        let mut best_dist = MOUSEOVER_RADIUS.max(view.meters(20.0));
 
         for (id, car) in world.cars.iter() {
             if let Some(iso) = get_car_isometry(world, *id) {
@@ -190,7 +211,7 @@ pub fn update_world(
             }
         }
 
-        if sel.pressed_node.is_none() {
+        if sel.hovered.is_none() && sel.pressed_node.is_none() {
             for (id, node) in world.nodes.iter() {
                 let node_screen = view.world_to_screen(node.pos());
                 let d = node_screen.distance(mouse);
@@ -307,9 +328,11 @@ pub fn process_input(
     }
 
     if input.just_pressed_debounced(Key::KeyV) {
-        let nodes: Vec<Ent> = sel.selected_nodes.clone().into_iter().collect();
-        if spawn_new_track(world, events, nodes).is_none() {
-            error!("Failed to spawn new track");
+        if let Some(SelectedEntity::Nodes(v)) = &sel.selected {
+            let nodes: Vec<Ent> = v.clone().into_iter().collect();
+            if spawn_new_track(world, events, nodes).is_none() {
+                error!("Failed to spawn new track");
+            }
         }
     }
 
@@ -318,34 +341,47 @@ pub fn process_input(
     }
 
     if input.just_pressed_debounced(rdev::Button::Left) {
-        if let Some(HoveredEntity::Track(id)) = sel.hovered {
-            sel.selected_track = Some(id)
-        } else {
-            sel.selected_track = None;
+        match sel.hovered {
+            Some(HoveredEntity::Track(id)) => {
+                sel.selected = Some(SelectedEntity::Track(id));
+            }
+            Some(HoveredEntity::Car(id)) => {
+                sel.selected = Some(SelectedEntity::Car(id));
+            }
+            Some(HoveredEntity::Node(id)) => {
+                sel.pressed_node = Some((id, Instant::now()));
+
+                if let Some(SelectedEntity::Nodes(v)) = &mut sel.selected {
+                    let contains = v.contains(&id);
+                    match (shift, contains) {
+                        (true, true) => {
+                            v.retain(|d| *d != id);
+                        }
+                        (true, false) => {
+                            v.push(id);
+                        }
+                        (false, false) => {
+                            *v = vec![id];
+                        }
+                        (false, true) => {
+                            v.clear();
+                        }
+                    }
+                } else {
+                    sel.selected = Some(SelectedEntity::Nodes(vec![id]));
+                }
+            }
+            None => {
+                sel.selected = None;
+            }
         }
     }
 
-    if input.just_pressed_debounced(rdev::Button::Left) {
-        if let Some(HoveredEntity::Node(id)) = sel.hovered {
-            sel.pressed_node = Some((id, Instant::now()));
-
-            let contains = sel.selected_nodes.contains(&id);
-            match (shift, contains) {
-                (true, true) => {
-                    sel.selected_nodes.retain(|d| *d != id);
-                }
-                (true, false) => {
-                    sel.selected_nodes.push(id);
-                }
-                (false, false) => {
-                    sel.selected_nodes = vec![id];
-                }
-                (false, true) => {
-                    sel.selected_nodes.clear();
-                }
-            }
+    if input.just_pressed_debounced(rdev::Key::KeyF) {
+        if let Some(SelectedEntity::Car(id)) = sel.selected {
+            world.followed_car = Some(id)
         } else {
-            sel.selected_nodes.clear();
+            world.followed_car = None;
         }
     }
 
@@ -359,23 +395,27 @@ pub fn process_input(
     }
 
     if input.just_pressed_debounced(Key::KeyN) {
-        if let Some(ids) = sel.selected_nodes.get(0..2) {
-            world.calculated_route = pathfind(world, ids[0], ids[1]);
-        } else {
-            world.calculated_route = None;
+        if let Some(SelectedEntity::Nodes(ids)) = &sel.selected {
+            if let Some(ids) = ids.get(0..2) {
+                world.calculated_route = pathfind(world, ids[0], ids[1]);
+            }
         }
     }
 
-    if let Some(ids) = sel.selected_nodes.get(0..3)
-        && input.just_pressed_debounced(Key::Num3)
-    {
-        spawn_three_way_junction(world, events, ids[0], ids[1], ids[2]);
+    if input.just_pressed_debounced(Key::Num3) {
+        if let Some(SelectedEntity::Nodes(ids)) = &sel.selected {
+            if let Some(ids) = ids.get(0..3) {
+                spawn_three_way_junction(world, events, ids[0], ids[1], ids[2]);
+            }
+        }
     }
 
-    if let Some(ids) = sel.selected_nodes.get(0..4)
-        && input.just_pressed_debounced(Key::Num4)
-    {
-        spawn_four_way_junction(world, events, ids[0], ids[1], ids[2], ids[3]);
+    if input.just_pressed_debounced(Key::Num4) {
+        if let Some(SelectedEntity::Nodes(ids)) = &sel.selected {
+            if let Some(ids) = ids.get(0..4) {
+                spawn_four_way_junction(world, events, ids[0], ids[1], ids[2], ids[3]);
+            }
+        }
     }
 
     if input.just_pressed_debounced(Key::KeyP) {
@@ -383,12 +423,8 @@ pub fn process_input(
     }
 
     if input.just_pressed_debounced(Key::Num5) {
-        spawn_very_large_track(world, events, &sel.selected_nodes);
-    }
-
-    if input.just_pressed_debounced(Key::KeyJ) {
-        for id in sel.selected_nodes.clone() {
-            update_switch_node(world, id);
+        if let Some(SelectedEntity::Nodes(n)) = &sel.selected {
+            spawn_very_large_track(world, events, &n);
         }
     }
 
@@ -413,7 +449,7 @@ pub fn process_input(
     }
 
     if input.just_pressed_debounced(Key::KeyG) {
-        if let Some(loc) = sel.selected_track {
+        if let Some(SelectedEntity::Track(loc)) = sel.selected {
             if let Some(id) = spawn_new_consist(world, loc, randint(7, 32) as usize) {
                 events.enqueue(TrainEvent::NewConsist(id))
             }
@@ -421,11 +457,11 @@ pub fn process_input(
     }
 
     if input.just_pressed_debounced(Key::KeyM) {
-        if let Some(loc) = sel.selected_track {
+        if let Some(SelectedEntity::Track(loc)) = sel.selected {
             let term = loc.origin.other();
             if let Some(id) = spawn_random_track_extension(world, events, loc.track_id, term) {
                 let loc = TrackLocation::new(id, 0.0, Terminus::Start);
-                sel.selected_track = Some(loc);
+                sel.selected = Some(SelectedEntity::Track(loc));
             }
         }
     }

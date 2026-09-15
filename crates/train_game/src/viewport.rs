@@ -15,8 +15,9 @@ impl Viewport {
         }
     }
 
-    pub fn is_on_screen(&self, p: impl Into<DVec2>) -> bool {
-        let p = p.into() / self.screen_width;
+    pub fn is_on_screen(&self, p: impl Into<DVec2>, r: f64) -> bool {
+        let width = self.screen_width + DVec2::splat(r * 2.0);
+        let p = (p.into() + DVec2::splat(r)) / width;
         p.min_element() > 0.0 && p.max_element() < 1.0
     }
 
