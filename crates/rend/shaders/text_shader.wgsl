@@ -95,7 +95,7 @@ fn fs_main(in: VertexShaderOutput) -> @location(0) vec4<f32> {
     c.y = pow(c.y, 2.0);
     c.z = pow(c.z, 2.0);
 
-    let l = c.x;
+    let l = length(c.xyz);
 
     let col = color_array[in.instance_index];
 
@@ -105,7 +105,8 @@ fn fs_main(in: VertexShaderOutput) -> @location(0) vec4<f32> {
     // }
 
     // let alpha = sqrt(sqrt(round(l * 5.0) / 5.0));
-    let alpha = length(c.xyz); // smoothstep(0.09, 0.29, l);
+    // let alpha = length(c.xyz);
+    let alpha = smoothstep(0.23, 0.28, l);
 
     return vec4<f32>(col.xyz * alpha, col.w * alpha);
 }

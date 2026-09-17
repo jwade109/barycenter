@@ -308,18 +308,6 @@ pub fn draw_world(
 
     cmd.new_layer("ui");
 
-    draw_debug_info(
-        cmd,
-        world,
-        &view,
-        sel,
-        anim,
-        draw_calls,
-        timers,
-        frame_timer,
-        sounds,
-    );
-
     let mut ui = Ui::new(mouse, input.clone(), cmd, anim);
 
     ui::draw_ui(&mut ui, sounds, events);
@@ -342,6 +330,34 @@ pub fn draw_world(
             Color::BLACK.alpha(0.7),
         );
     }
+
+    cmd.new_layer("circles");
+
+    for (p, r, c) in world.transition_circles.values() {
+        cmd.circle(*p).radius(*r).color(*c);
+    }
+
+    if !world.transition_circles.is_empty() {
+        let t = format!(
+            "Hello there.\nThere are {} circles.",
+            world.transition_circles.len()
+        );
+        cmd.text((200.0, 1300.0), t).size(144.0);
+    }
+
+    cmd.new_layer("debug");
+
+    draw_debug_info(
+        cmd,
+        world,
+        &view,
+        sel,
+        anim,
+        draw_calls,
+        timers,
+        frame_timer,
+        sounds,
+    );
 }
 
 fn draw_z_index_demo(cmd: &mut RenderCommands, view: &Viewport) {

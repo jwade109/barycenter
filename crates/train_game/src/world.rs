@@ -14,6 +14,7 @@ use bary_input::InputState;
 use bary_sim::Camera;
 use log::*;
 use rdev::Key;
+use rend::Color;
 use rend::TextureHandle;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -80,6 +81,9 @@ pub struct World {
     pub chunk_map: BTreeMap<ChunkIndex, Ent>,
     pub smoke_particles: Vec<SmokeParticle>,
 
+    pub transition_circles: Components<(DVec2, f64, Color)>,
+    pub transition_circle_next_color: f64,
+
     pub calculated_route: Option<Route>,
     pub followed_car: Option<Ent>,
 }
@@ -118,6 +122,8 @@ impl World {
             chunks: Components::default(),
             consists: Components::default(),
             smoke_particles: Vec::new(),
+            transition_circles: Components::default(),
+            transition_circle_next_color: 0.0,
             clouds,
             chunk_map: BTreeMap::new(),
             calculated_route: None,
@@ -267,6 +273,13 @@ pub fn process_input(
     mouse: DVec2,
     screen_width: DVec2,
 ) {
+    for (p, r, c) in world.transition_circles.values_mut() {
+        *r += (700.0 - *r) * 0.07;
+        c.a -= 0.05 * dt;
+    }
+
+    world.transition_circles.retain(|id, circ| circ.2.a > 0.0);
+
     if input.is_key_pressed(Key::Minus) {
         world.target_camera.zoom /= 1.03;
     }
@@ -471,6 +484,19 @@ pub fn process_input(
     }
 
     let mouse_world = view.screen_to_world(mouse);
+
+    if input.just_pressed_debounced(rdev::Button::Right) {
+        let p = mouse;
+        let r = 0.0;
+        let c = Color::hsl(world.transition_circle_next_color, 0.4, 0.5, 1.0);
+        world.transition_circle_next_color = (world.transition_circle_next_color + 0.07) % 1.0;
+        let id = world.spawner.spawn();
+        world.transition_circles.spawn(id, (p, r, c));
+    }
+
+    if input.just_pressed_debounced(rdev::Button::Middle) {
+        world.transition_circles.clear();
+    }
 
     if input.is_key_pressed(Key::KeyB) {
         let index = get_chunk_index(mouse_world);

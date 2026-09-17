@@ -73,7 +73,7 @@ impl<'a> TrainApp<'a> {
 
         let mut render_world = RenderWorld::new();
 
-        let font_id = render_world.load_font(&rs.renderer, "consolas_spritesheet");
+        let font_id = render_world.load_font(&rs.renderer, "consolas");
         render_world.load_font(&rs.renderer, "cambria");
         render_world.load_font(&rs.renderer, "garamond");
         render_world.load_font(&rs.renderer, "arial");
