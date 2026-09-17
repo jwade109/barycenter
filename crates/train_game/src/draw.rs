@@ -10,88 +10,41 @@ use crate::sounds::{SoundKind, SoundManager};
 use crate::terrain::{ChunkIndex, TERRAIN_CHUNK_WIDTH_METERS, TerrainChunk};
 use crate::track::{Terminus, TrackSegment};
 use crate::tweens::{AnimationStates, Tween};
+use crate::ui::Ui;
 use crate::viewport::Viewport;
 use crate::world::*;
 use bary_core::prelude::*;
 use bary_input::InputState;
+use log::warn;
 use rend::*;
 
 mod ui {
     use super::*;
 
-    pub fn draw_button(
-        cmd: &mut RenderCommands,
-        anim: &AnimationStates,
-        text: &str,
-        p: DVec2,
-        mouse: DVec2,
-        input: &InputState,
-        id: usize,
-        color: Color,
-    ) -> (DVec2, bool) {
-        let padding = DVec2::splat(15.0);
-        let extent = cmd
-            .text(p + padding, text)
-            .size(22.0)
-            .color(Color::WHITE)
-            .extent();
-        let extent = extent.max(DVec2::new(160.0, extent.y));
-        let full_extent = extent + padding * 2.0;
-        let rect_origin = p - extent.y * DVec2::Y;
-        let aabb =
-            AABB::from_arbitrary(rect_origin.as_vec2(), (rect_origin + full_extent).as_vec2());
-        let contains = aabb.contains(mouse.as_vec2());
-
-        let t = anim.anim(("button", id), Tween::Exponential, 0.1, contains);
-        let alpha = lerp(0.7, 1.0, t as f32) as f64;
-
-        let extra_extent = DVec2::new(200.0 * t, 0.0);
-
-        let expanded_extent = full_extent + extra_extent;
-        let expanded_origin = rect_origin.with_y(rect_origin.y - extra_extent.y);
-
-        let alpha = contains as u8 as f64 * 0.2 + 0.9;
-
-        cmd.rect(rect_origin)
-            .dims(expanded_extent)
-            .color(color.alpha(alpha))
-            .z(0.52);
-        cmd.text_with_shadow(
-            p + padding,
-            (-2.0, -2.0),
-            text,
-            22.0,
-            Color::WHITE,
-            Color::BLACK.alpha(0.7),
-        );
-
-        (
-            full_extent,
-            input.just_pressed(rdev::Button::Left) && contains,
-        )
-    }
-
-    pub fn draw_font_ui(
-        cmd: &mut RenderCommands,
-        anim: &AnimationStates,
-        events: &mut EventBus<TrainEvent>,
-        font_selection: &mut FontSelection,
-        mouse: DVec2,
-        input: &InputState,
-    ) {
-        let fonts = cmd.fonts.clone();
-
-        let mut p = DVec2::new(30.0, 300.0);
+    pub fn draw_ui(ui: &mut Ui, sounds: &SoundManager, events: &mut EventBus<TrainEvent>) {
+        let fonts = ui.fonts().clone();
         for (i, (font_id, font)) in fonts.iter().enumerate() {
             let color = Color::hsl(i as f64 / 10.0, 0.3, 0.45, 0.95);
 
             let text = format!("{} {}", font_id, font.name);
-            let (e, clicked) = draw_button(cmd, anim, &text, p, mouse, input, i, color);
-            if clicked {
-                font_selection.clicked(*font_id);
-                events.enqueue(TrainEvent::Sound(SoundKind::ButtonUp));
+            ui.button(text, color);
+        }
+
+        let mut state = false;
+
+        ui.checkbox("Goodbye", &mut state);
+        if ui.checkbox("Hello", &mut state).is_clicked {
+            events.enqueue(TrainEvent::Sound(SoundKind::HouseOfLeaves));
+        }
+
+        ui.label("Songs that we're playing...");
+        for (id, sound) in sounds.iter() {
+            if ui
+                .button(format!("{} {}", id, sound), Color::BROWN)
+                .is_clicked
+            {
+                events.enqueue(TrainEvent::KillSound(*id));
             }
-            p.y += e.y + 15.0;
         }
     }
 }
@@ -282,21 +235,11 @@ fn draw_debug_info(
         lines.push(format!("{} {:?}", name, dur.as_millis()));
     }
 
-    for sound in sounds.iter() {
-        lines.push(format!(
-            "{}: {:0.4} {:0.4} {:?}",
-            sound.name,
-            sound.handle.position(),
-            sound.duration.as_secs_f64(),
-            sound.handle.state()
-        ));
-    }
-
     let text = lines.join("\n");
 
     for (off, color) in [(0.0, Color::WHITE)] {
         let p = p - DVec2::splat(off);
-        let extent = cmd.text(p, &text).size(28.0).color(color).extent();
+        let extent = cmd.text(p, &text).size(22.0).color(color).extent();
 
         cmd.rect(p - extent.y * DVec2::Y)
             .dims(extent)
@@ -377,7 +320,13 @@ pub fn draw_world(
         sounds,
     );
 
-    ui::draw_font_ui(cmd, anim, events, fonts, mouse, input);
+    let mut ui = Ui::new(mouse, input.clone(), cmd, anim);
+
+    ui::draw_ui(&mut ui, sounds, events);
+
+    for event in ui.sounds() {
+        events.enqueue(TrainEvent::Sound(*event));
+    }
 
     cmd.circle(mouse).diameter(11.0).color(Color::RED);
     let mouse_world = view.screen_to_world(mouse);

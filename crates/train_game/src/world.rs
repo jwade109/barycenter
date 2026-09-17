@@ -299,6 +299,10 @@ pub fn process_input(
     let s = input.is_key_pressed(Key::KeyS) && !input.is_key_pressed(Key::ControlLeft);
     let e = input.is_key_pressed(Key::KeyD) && !input.is_key_pressed(Key::ControlLeft);
 
+    if n || w || s || e {
+        world.followed_car = None;
+    }
+
     let x_pull = -(w as i8) + e as i8;
     let y_pull = -(s as i8) + n as i8;
 

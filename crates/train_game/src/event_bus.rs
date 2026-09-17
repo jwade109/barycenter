@@ -29,6 +29,7 @@ pub enum TrainEvent {
     NewConsist(Ent),
     RegenerateTrees(ChunkIndex),
     RedrawTile(ChunkIndex),
+    KillSound(Ent),
     Other,
 }
 

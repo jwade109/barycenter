@@ -7,10 +7,24 @@ use kira::*;
 use log::info;
 use std::time::Duration;
 
+#[derive(Debug)]
 pub struct Sound {
     pub name: String,
     pub duration: Duration,
     pub handle: StaticSoundHandle,
+}
+
+impl std::fmt::Display for Sound {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}: {:0.4}/{:0.4} {:?}",
+            self.name,
+            self.handle.position(),
+            self.duration.as_secs_f64(),
+            self.handle.state(),
+        )
+    }
 }
 
 pub struct SoundManager {
@@ -24,6 +38,7 @@ pub struct SoundManager {
 pub enum SoundKind {
     ButtonUp,
     Crossword,
+    HouseOfLeaves,
 }
 
 impl SoundManager {
@@ -42,10 +57,6 @@ impl SoundManager {
     }
 
     pub fn update(&mut self) {
-        // if self.track.num_sounds() > 0 {
-        //     info!("{} sounds playing", self.track.num_sounds());
-        // }
-
         self.sounds.retain(|_id, sound| {
             if sound.handle.state() == PlaybackState::Stopped {
                 false
@@ -75,20 +86,30 @@ impl SoundManager {
         let path = match s {
             SoundKind::ButtonUp => "assets/sfx/button-up.ogg",
             SoundKind::Crossword => "assets/sfx/button-up.ogg",
+            SoundKind::HouseOfLeaves => "assets/sfx/house_of_leaves.mp3",
         };
         self.play_sound(path);
+    }
+
+    fn remove_sound(&mut self, id: Ent) -> Option<()> {
+        let mut sound = self.sounds.despawn(id).ok()?;
+        sound.handle.stop(Tween::default());
+        Some(())
     }
 
     pub fn handle_events(&mut self, events: &EventBus<TrainEvent>) {
         for event in events.iter() {
             match event {
+                TrainEvent::KillSound(id) => {
+                    self.remove_sound(*id);
+                }
                 TrainEvent::Sound(s) => _ = self.spawn_sound(*s),
                 _ => (),
             }
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Sound> {
-        self.sounds.values()
+    pub fn iter(&self) -> impl Iterator<Item = (&Ent, &Sound)> {
+        self.sounds.iter()
     }
 }

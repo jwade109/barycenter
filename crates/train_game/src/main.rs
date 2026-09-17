@@ -37,6 +37,7 @@ mod sounds;
 mod terrain;
 mod track;
 mod tweens;
+mod ui;
 mod viewport;
 mod world;
 
