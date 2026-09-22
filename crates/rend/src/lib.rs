@@ -15,6 +15,7 @@ mod renderer;
 mod shader;
 mod shader_params;
 mod texture;
+mod transform;
 mod ubo;
 mod vertex;
 
@@ -33,6 +34,7 @@ pub use renderer::*;
 pub use shader::*;
 pub use shader_params::*;
 pub use texture::*;
+pub use transform::*;
 pub use ubo::*;
 pub use vertex::*;
 

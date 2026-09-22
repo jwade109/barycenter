@@ -15,8 +15,12 @@ pub struct Texture {
 impl Texture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-    pub fn load_sprite(filename: &str, rd: &Renderer) -> Option<Self> {
-        Texture::new_sprite(filename, &rd.device, &rd.queue, filename)
+    pub fn load_sprite(
+        filename: &str,
+        rd: &Renderer,
+        filter_mode: wgpu::FilterMode,
+    ) -> Option<Self> {
+        Texture::new_sprite(filename, &rd.device, &rd.queue, filename, filter_mode)
     }
 
     pub fn make_bind_group_layout(device: &Device, label: &str) -> BindGroupLayout {
@@ -30,6 +34,7 @@ impl Texture {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         label: &str,
+        filter_mode: wgpu::FilterMode,
     ) -> Option<Self> {
         let bgl = Self::make_bind_group_layout(device, filename);
 
@@ -81,8 +86,8 @@ impl Texture {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
+            mag_filter: filter_mode,
+            min_filter: filter_mode,
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         };

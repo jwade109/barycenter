@@ -5,6 +5,7 @@ use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle};
 use kira::track::*;
 use kira::*;
 use log::info;
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 #[derive(Debug)]
@@ -32,13 +33,24 @@ pub struct SoundManager {
     track: TrackHandle,
     spawner: EntitySpawner,
     sounds: Components<Sound>,
+    loaded_sounds: BTreeMap<SoundKind, StaticSoundData>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SoundKind {
     ButtonUp,
     Crossword,
     HouseOfLeaves,
+}
+
+impl SoundKind {
+    fn path(&self) -> &'static str {
+        match self {
+            SoundKind::ButtonUp => "assets/sfx/button-up.ogg",
+            SoundKind::Crossword => "assets/sfx/nyt-crossword.ogg",
+            SoundKind::HouseOfLeaves => "assets/sfx/house_of_leaves.mp3",
+        }
+    }
 }
 
 impl SoundManager {
@@ -48,11 +60,24 @@ impl SoundManager {
         let builder = TrackBuilder::new();
         let track = _manager.add_sub_track(builder).unwrap();
 
+        let mut loaded_sounds = BTreeMap::new();
+
+        for kind in [
+            SoundKind::ButtonUp,
+            SoundKind::Crossword,
+            SoundKind::HouseOfLeaves,
+        ] {
+            let path = kind.path();
+            let sound = StaticSoundData::from_file(path).unwrap();
+            loaded_sounds.insert(kind, sound);
+        }
+
         Self {
             _manager,
             track,
             spawner: EntitySpawner::default(),
             sounds: Components::default(),
+            loaded_sounds,
         }
     }
 
@@ -66,15 +91,15 @@ impl SoundManager {
         });
     }
 
-    fn play_sound(&mut self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
-        info!("playing sound {path}");
-        let sound = StaticSoundData::from_file(path)?;
+    fn spawn_sound(&mut self, kind: SoundKind) -> Result<(), Box<dyn std::error::Error>> {
+        info!("playing sound {kind:?}");
+        let sound = self.loaded_sounds.get(&kind).unwrap();
         let mut handle = self.track.play(sound.clone())?;
         let pbr = 1.0; // bary_core::prelude::rand(0.5, 2.0) as f64 * 0.1;
         handle.set_playback_rate(pbr, kira::Tween::default());
         let id = self.spawner.spawn();
         let sound = Sound {
-            name: path.into(),
+            name: format!("{:?}", kind),
             duration: sound.duration(),
             handle,
         };
@@ -82,18 +107,12 @@ impl SoundManager {
         Ok(())
     }
 
-    fn spawn_sound(&mut self, s: SoundKind) {
-        let path = match s {
-            SoundKind::ButtonUp => "assets/sfx/button-up.ogg",
-            SoundKind::Crossword => "assets/sfx/button-up.ogg",
-            SoundKind::HouseOfLeaves => "assets/sfx/house_of_leaves.mp3",
-        };
-        self.play_sound(path);
-    }
-
     fn remove_sound(&mut self, id: Ent) -> Option<()> {
         let mut sound = self.sounds.despawn(id).ok()?;
-        sound.handle.stop(Tween::default());
+        sound.handle.stop(Tween {
+            duration: Duration::from_millis(1000),
+            ..Default::default()
+        });
         Some(())
     }
 

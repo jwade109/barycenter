@@ -10,6 +10,7 @@ pub enum RenderCommand {
     Circle(CircleCommand),
     Line(LineCommand),
     Chunk(ChunkCommand),
+    Mesh(MeshCommand),
     Sprite(Ent, RectCommand),
 }
 
@@ -57,6 +58,13 @@ pub struct ChunkCommand {
     pub height: [f32; 4],
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct MeshCommand {
+    pub mesh_id: Ent,
+    pub iso: Isometry2d,
+    pub dims: DVec2,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct RenderLayer {
     pub name: &'static str,
@@ -66,6 +74,7 @@ pub struct RenderLayer {
     pub line_commands: Vec<LineCommand>,
     pub chunk_commands: Vec<ChunkCommand>,
     pub sprite_commands: BTreeMap<Ent, Vec<RectCommand>>,
+    pub mesh_commands: Vec<MeshCommand>,
 }
 
 impl RenderLayer {
@@ -138,6 +147,9 @@ impl RenderCommands {
                     .entry(id)
                     .and_modify(|v| v.push(rect))
                     .or_insert(vec![rect]);
+            }
+            RenderCommand::Mesh(c) => {
+                layer.mesh_commands.push(c);
             }
         }
     }
@@ -219,6 +231,16 @@ impl RenderCommands {
             .dims(handle.size.as_dvec2())
             .sprite(handle.id)
             .color(Color::WHITE)
+    }
+
+    pub fn mesh(&mut self, id: Ent, iso: impl Into<Isometry2d>, dims: impl Into<DVec2>) {
+        let iso = iso.into();
+        let c = MeshCommand {
+            mesh_id: id,
+            iso,
+            dims: dims.into(),
+        };
+        self.enqueue(RenderCommand::Mesh(c));
     }
 
     pub fn chunk(&mut self, iso: impl Into<Isometry2d>, dims: impl Into<DVec2>, height: [f32; 4]) {

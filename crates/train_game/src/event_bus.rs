@@ -30,6 +30,8 @@ pub enum TrainEvent {
     RegenerateTrees(ChunkIndex),
     RedrawTile(ChunkIndex),
     KillSound(Ent),
+    ToggleDebug,
+    ToggleDetail,
     Other,
 }
 

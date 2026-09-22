@@ -110,6 +110,11 @@ impl Into<AnimId> for u64 {
         AnimId { id: "", num: self }
     }
 }
+impl Into<AnimId> for usize {
+    fn into(self) -> AnimId {
+        AnimId { id: "", num: self as u64 }
+    }
+}
 
 impl Into<AnimId> for (&'static str, u64) {
     fn into(self) -> AnimId {

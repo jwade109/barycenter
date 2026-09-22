@@ -32,8 +32,18 @@ impl RenderWorld {
         id
     }
 
-    pub fn load_texture(&mut self, rd: &Renderer, path: &str) -> TextureHandle {
-        let sprite = Texture::load_sprite(path, rd).unwrap();
+    pub fn load_texture(
+        &mut self,
+        rd: &Renderer,
+        path: &str,
+        pixel_perfect: bool,
+    ) -> TextureHandle {
+        let mode = if pixel_perfect {
+            wgpu::FilterMode::Nearest
+        } else {
+            wgpu::FilterMode::Linear
+        };
+        let sprite = Texture::load_sprite(path, rd, mode).unwrap();
         let size = sprite.size;
         let id = self.spawner.spawn();
         self.textures.spawn(id, sprite);
@@ -44,7 +54,7 @@ impl RenderWorld {
     pub fn load_font(&mut self, rd: &Renderer, name: &str) -> Ent {
         let data_path = format!("assets/font_textures/{name}/font_data.json");
         let texture_path = format!("assets/font_textures/{name}/font.png");
-        let texture = Texture::load_sprite(&texture_path, rd).unwrap();
+        let texture = Texture::load_sprite(&texture_path, rd, wgpu::FilterMode::Linear).unwrap();
         let font = FontInfo::from_file(&data_path).unwrap();
         let id = self.spawner.spawn();
         self.fonts.spawn(id, (font, texture));

@@ -84,15 +84,15 @@ fn fs_main(in: VertexShaderOutput) -> @location(0) vec4<f32> {
     else if z < 0.0 {
         color = vec4f(0.2, 0.2, 1.0, 1.0);
     }
-    else if z > 25.0 {
-        return vec4f(0.1, 0.1, 0.1, 1.0);
+    else if z > 9.0 {
+        return vec4f(0.02, 0.02, 0.02, 1.0);
     }
-    else if z > 22.0 {
-        color = vec4f(0.1, 0.1, 0.0, 1.0);
+    else if z > 8.3 {
+        color = vec4f(0.1, 0.1, 0.1, 1.0);
     }
-    else if z > 19.0 {
-        color = vec4f(0.6, 0.3, 0.0, 1.0);
+    else if z > 7.5 {
+        color = vec4f(0.4, 0.2, 0.0, 1.0);
     }
 
-    return lerp(lerp(color, vec4f(0.0, 0.0, 0.4, 1.0), 0.3), white, 0.2);
+    return lerp(lerp(color, vec4f(0.0, 0.0, 0.4, 1.0), 0.3), white, 0.0);
 }

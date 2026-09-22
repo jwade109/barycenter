@@ -1,17 +1,20 @@
 use crate::{
     event_bus::{EventBus, TrainEvent},
+    render_state::RenderState,
     render_world::RenderWorld,
     world::World,
 };
 use bary_core::prelude::*;
 use early_returns::{ok_or_continue, some_or_continue};
-use glam::{DVec2, IVec2};
+use glam::{DVec2, DVec4, IVec2, Vec4};
 use log::warn;
 use noise::{NoiseFn, Perlin};
-use rend::{Color, TextureHandle};
+use rend::{
+    Color, FullVertex, Mesh, TextureHandle, make_quad_01, mesh_from_vi, quad_indices_to_tris,
+};
 use std::collections::BTreeSet;
 
-pub const TERRAIN_CHUNK_WIDTH_METERS: f64 = 300.0;
+pub const TERRAIN_CHUNK_WIDTH_METERS: f64 = 1000.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChunkIndex(IVec2);
@@ -67,9 +70,9 @@ pub struct TerrainChunk {
     index: ChunkIndex,
     tracks: BTreeSet<Ent>,
     nodes: BTreeSet<Ent>,
-    height: [f32; 4],
     pub trees: Vec<Tree>,
-    pub texture: Option<TextureHandle>,
+    pub terrain_mesh: Option<Ent>,
+    pub tree_mesh: Option<Ent>,
 }
 
 fn height_func(pos: DVec2) -> f64 {
@@ -78,11 +81,10 @@ fn height_func(pos: DVec2) -> f64 {
     let x = pos.x;
     let z = pos.y;
 
-    let y1 = perlin.get([x as f64 / 50.0, 0.5, z as f64 / 50.0 + 0.5]);
+    let y1 = perlin.get([x as f64 / 50.0 + 0.5, 0.5, z as f64 / 50.0 + 0.5]);
     let y2 = perlin.get([x as f64 / 500.0 + 0.5, 0.5, z as f64 / 500.0 + 0.5]);
-    let y3 = perlin.get([x as f64 / 3000.0, 0.5, z as f64 / 3000.0 + 0.5]);
-    // let y4 = perlin.get([x as f64 / 10000.0, 0.5, z as f64 / 10000.0 + 0.5]);
-    return y1 * 0.5 + y2 * 5.0 + y3 * 10.0; // + y4 * 30.0 + 10.0;
+    let y3 = perlin.get([x as f64 / 3000.0 + 0.5, 0.5, z as f64 / 3000.0 + 0.5]);
+    return y1 * 0.2 + y2 * 5.0 + y3 * 10.0;
 }
 
 impl TerrainChunk {
@@ -97,14 +99,9 @@ impl TerrainChunk {
             index,
             tracks: BTreeSet::new(),
             nodes: BTreeSet::new(),
-            height: [
-                height_func(a) as f32,
-                height_func(b) as f32,
-                height_func(c) as f32,
-                height_func(d) as f32,
-            ],
             trees: Vec::new(),
-            texture: None,
+            terrain_mesh: None,
+            tree_mesh: None,
         }
     }
 
@@ -142,10 +139,6 @@ impl TerrainChunk {
 
     pub fn is_empty(&self) -> bool {
         self.nodes.is_empty() && self.tracks.is_empty()
-    }
-
-    pub fn height(&self) -> [f32; 4] {
-        self.height
     }
 
     pub fn height_func(p: DVec2) -> f64 {
@@ -251,7 +244,11 @@ pub fn regenerate_trees(world: &mut World, index: ChunkIndex) -> Option<()> {
     let chunk_id = world.chunk_map.get(&index)?;
     let chunk = world.chunks.try_get_mut(*chunk_id).ok()?;
 
-    chunk.trees = (0..7000)
+    if !chunk.trees.is_empty() {
+        return Some(());
+    }
+
+    chunk.trees = (0..16000)
         .filter_map(|_| {
             let x = rand(0.0, TERRAIN_CHUNK_WIDTH_METERS as f32) as f64;
             let y = rand(0.0, TERRAIN_CHUNK_WIDTH_METERS as f32) as f64;
@@ -262,7 +259,7 @@ pub fn regenerate_trees(world: &mut World, index: ChunkIndex) -> Option<()> {
                 rand(0.02, 0.3) as f64,
                 rand(0.4, 0.7) as f64,
                 rand(0.2, 0.3) as f64,
-                rand(0.3, 0.5) as f64,
+                0.8,
             );
 
             let shore: f64 = h / 4.0;
@@ -288,4 +285,121 @@ pub fn handle_regen_trees_events(world: &mut World, events: &EventBus<TrainEvent
             regenerate_trees(world, *index);
         }
     }
+}
+
+pub fn get_quadtile(pos: DVec2) -> [ChunkIndex; 4] {
+    let mut root = get_chunk_index(pos);
+
+    let normalized = (pos - root.isometry().tr()) / TERRAIN_CHUNK_WIDTH_METERS;
+
+    if normalized.x < 0.5 {
+        root = ChunkIndex(root.as_ivec2() - IVec2::X);
+    }
+    if normalized.y < 0.5 {
+        root = ChunkIndex(root.as_ivec2() - IVec2::Y);
+    }
+
+    let b = ChunkIndex::new(root.as_ivec2() + IVec2::X);
+    let c = ChunkIndex::new(root.as_ivec2() + IVec2::Y);
+    let d = ChunkIndex::new(root.as_ivec2() + IVec2::ONE);
+
+    [root, b, c, d]
+}
+
+pub fn update_chunk_texture(
+    rs: &RenderState,
+    rw: &mut RenderWorld,
+    world: &mut World,
+    index: ChunkIndex,
+) -> Option<()> {
+    let chunk_id = world.chunk_map.get(&index)?;
+    let chunk = world.chunks.get(*chunk_id)?;
+
+    if chunk.terrain_mesh.is_some() {
+        return Some(());
+    }
+
+    let id = rw.spawner.spawn();
+
+    warn!("Spawning texture for chunk {:?}", chunk.index());
+
+    let chunk = world.chunks.try_get_mut(*chunk_id).ok()?;
+
+    let mesh = make_rough_ground_plane(&rs.renderer.device, chunk.isometry().tr(), 100);
+
+    let id = rw.spawn_mesh(mesh);
+    chunk.terrain_mesh = Some(id);
+
+    if !chunk.trees.is_empty() {
+        let mesh = make_tree_mesh(&rs.renderer.device, chunk);
+        let id = rw.spawn_mesh(mesh);
+        chunk.tree_mesh = Some(id);
+    }
+
+    Some(())
+}
+
+pub fn make_tree_mesh(device: &wgpu::Device, chunk: &TerrainChunk) -> Mesh {
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+    let da = PI_64 * 2.0 / 3.0;
+    for tree in &chunk.trees {
+        let offset = tree.pos - chunk.isometry().tr();
+        let z = rand(3.0, 7.0);
+        let r = rand(3.0, 8.0) as f64;
+        for _ in 0..2 {
+            let a0 = rand(0.0, PI * 2.0) as f64;
+            let root = indices.len() as u16;
+            indices.extend([root, root + 1, root + 2]);
+            for i in 0..3 {
+                let a = a0 + i as f64 * da;
+                let p = offset + rotate_f64(DVec2::X, a) * r;
+                let position = glm::Vec3::new(p.x as f32, p.y as f32, z);
+                let color = glm::Vec4::new(0.6, 0.4, 0.6, 1.0);
+                let tex_coord = glm::Vec2::new(0.0, 0.0);
+                let vertex = FullVertex::new(position, color, tex_coord);
+                vertices.push(vertex);
+            }
+        }
+    }
+
+    mesh_from_vi::<FullVertex>(device, &vertices, &indices)
+}
+
+pub fn make_rough_ground_plane(device: &wgpu::Device, origin: DVec2, n_quads: u16) -> Mesh {
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+
+    let n_quads_x = n_quads;
+    let n_quads_y = n_quads;
+
+    let perlin = Perlin::new(1);
+
+    for xi in linspace_f64(0.0, TERRAIN_CHUNK_WIDTH_METERS, n_quads_x as usize + 1) {
+        for yi in linspace_f64(0.0, TERRAIN_CHUNK_WIDTH_METERS, n_quads_y as usize + 1) {
+            let p = origin + DVec2::new(xi as f64, yi as f64);
+            let z = TerrainChunk::height_func(p);
+            let position = glm::Vec3::new(xi as f32, yi as f32, z as f32);
+            let color = glm::Vec4::new(0.2, 0.6, 1.0, 1.0);
+            let tex_coord = glm::Vec2::new(0.0, 0.0);
+            let v = FullVertex::new(position, color, tex_coord);
+            vertices.push(v);
+        }
+    }
+
+    for x in 0..n_quads_x {
+        for y in 0..n_quads_y {
+            let stride = n_quads_y + 1;
+            let b = x + y * (n_quads_y + 1);
+
+            let p1 = b;
+            let p2 = b + 1;
+            let p3 = b + stride + 1;
+            let p4 = b + stride;
+
+            indices.extend(quad_indices_to_tris(p4, p3, p2, p1));
+        }
+    }
+
+    mesh_from_vi(device, &vertices, &indices)
 }

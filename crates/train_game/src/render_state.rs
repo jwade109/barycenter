@@ -13,6 +13,7 @@ struct Pipelines {
     rectangle_pipeline: RectanglePipeline,
     chunk_pipeline: RectanglePipeline,
     sprite_pipeline: SpritePipeline,
+    mesh_pipeline: Standard3DPipeline,
 }
 
 pub struct RenderState<'a> {
@@ -89,6 +90,8 @@ impl<'a> RenderState<'a> {
 
         let shadow_pipeline = ShadowPipeline::new(&renderer);
 
+        let mesh_pipeline = Standard3DPipeline::new(&renderer);
+
         let world = RenderWorld::new();
 
         let pipelines = Pipelines {
@@ -101,6 +104,7 @@ impl<'a> RenderState<'a> {
             rectangle_pipeline,
             chunk_pipeline,
             sprite_pipeline,
+            mesh_pipeline,
         };
 
         Self {
@@ -484,12 +488,42 @@ impl<'a> RenderState<'a> {
 
         let view = &texture.create_view(&wgpu::TextureViewDescriptor::default());
 
+        passes += self.draw_meshes(world, view, &layer.mesh_commands, true);
         passes += self.draw_chunks(texture, &layer.chunk_commands, true);
         passes += self.draw_sprites(world, texture, &layer);
         passes += self.draw_rectangles(view, &layer.rect_commands, true);
         passes += self.draw_circles(texture, &layer.circle_commands, true);
         passes += self.draw_lines(view, &layer.line_commands, true);
         passes += self.draw_ui(world, view, font_id, &layer.char_commands, true);
+
+        passes
+    }
+
+    fn draw_meshes(
+        &self,
+        world: &RenderWorld,
+        view: &wgpu::TextureView,
+        commands: &[MeshCommand],
+        new_depth: bool,
+    ) -> usize {
+        let mut passes = 0;
+        let (sx, sy) = self.window.get_size();
+        let screen = glam::DVec2::new(sx as f64, sy as f64);
+
+        for command in commands {
+            let Some(mesh) = world.meshes.get(command.mesh_id) else {
+                continue;
+            };
+            let mut enc = self.renderer.make_command_encoder();
+            let mut rp = self.get_render_pass(&mut enc, None, view, true);
+            let tf = Transform32::from_iso(command.iso, command.dims, screen);
+            self.pipelines
+                .mesh_pipeline
+                .draw(&self.renderer.queue, &mut rp, &tf, mesh);
+            drop(rp);
+            self.renderer.submit(enc);
+            passes += 1;
+        }
 
         passes
     }

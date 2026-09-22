@@ -66,6 +66,7 @@ pub struct World {
 
     pub time: f64,
     pub show_detail: bool,
+    pub show_debug: bool,
 
     pub camera: Camera,
     pub target_camera: Camera,
@@ -107,6 +108,7 @@ impl World {
             current_font_id: Some(font_id),
             time: 0.0,
             show_detail: false,
+            show_debug: false,
             camera: Camera {
                 isometry: Isometry2d::ZERO,
                 zoom: 0.3,
@@ -189,7 +191,6 @@ pub fn update_world(
         .flatten()
     {
         world.target_camera.isometry = iso;
-        world.camera.isometry = iso;
     }
 
     world.camera.isometry.translation +=
@@ -285,10 +286,6 @@ pub fn process_input(
     }
     if input.is_key_pressed(Key::Equal) {
         world.target_camera.zoom *= 1.03;
-    }
-
-    if input.just_pressed_debounced(Key::ControlLeft) {
-        world.show_detail ^= true;
     }
 
     for event in input.events() {
@@ -449,22 +446,6 @@ pub fn process_input(
         sel.cursor_origin = sel.cursor_origin.other();
     }
 
-    if input.just_pressed_debounced(Key::KeyU) {
-        if let Some(id) = sel.hovered_chunk {
-            if let Some(id) = world.chunk_map.get(&id) {
-                events.enqueue(TrainEvent::ChunkUpdate(*id));
-            }
-            events.enqueue(TrainEvent::RedrawTile(id));
-        }
-    }
-
-    if input.just_pressed_debounced(Key::KeyT) {
-        if let Some(id) = sel.hovered_chunk {
-            events.enqueue(TrainEvent::RegenerateTrees(id));
-            events.enqueue(TrainEvent::RedrawTile(id));
-        }
-    }
-
     if input.just_pressed_debounced(Key::KeyG) {
         if let Some(SelectedEntity::Track(loc)) = sel.selected {
             if let Some(id) = spawn_new_consist(world, loc, randint(7, 32) as usize) {
@@ -484,6 +465,17 @@ pub fn process_input(
     }
 
     let mouse_world = view.screen_to_world(mouse);
+
+    if input.just_pressed_debounced(Key::KeyU) {
+        let tiles = get_quadtile(mouse_world);
+        for index in tiles {
+            if let Some(id) = world.chunk_map.get(&index) {
+                events.enqueue(TrainEvent::ChunkUpdate(*id));
+            }
+            events.enqueue(TrainEvent::RegenerateTrees(index));
+            events.enqueue(TrainEvent::RedrawTile(index));
+        }
+    }
 
     if input.just_pressed_debounced(rdev::Button::Right) {
         let p = mouse;
@@ -528,6 +520,16 @@ pub fn process_input(
     if input.is_key_pressed(Key::ControlLeft) && input.just_pressed_debounced(Key::KeyL) {
         if load_world(world, events, "train_world").is_none() {
             error!("Failed to load");
+        }
+    }
+}
+
+pub fn handle_ui_events(events: &EventBus<TrainEvent>, world: &mut World) {
+    for event in events.iter() {
+        match event {
+            TrainEvent::ToggleDebug => world.show_debug ^= true,
+            TrainEvent::ToggleDetail => world.show_detail ^= true,
+            _ => (),
         }
     }
 }

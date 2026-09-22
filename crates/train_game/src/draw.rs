@@ -7,7 +7,9 @@ use crate::railcar::RailCar;
 use crate::render_state::RenderState;
 use crate::render_world::RenderWorld;
 use crate::sounds::{SoundKind, SoundManager};
-use crate::terrain::{ChunkIndex, TERRAIN_CHUNK_WIDTH_METERS, TerrainChunk};
+use crate::terrain::{
+    ChunkIndex, TERRAIN_CHUNK_WIDTH_METERS, TerrainChunk, get_quadtile, make_rough_ground_plane,
+};
 use crate::track::{Terminus, TrackSegment};
 use crate::tweens::{AnimationStates, Tween};
 use crate::ui::Ui;
@@ -15,13 +17,19 @@ use crate::viewport::Viewport;
 use crate::world::*;
 use bary_core::prelude::*;
 use bary_input::InputState;
+use glam::FloatExt;
 use log::warn;
 use rend::*;
 
 mod ui {
     use super::*;
 
-    pub fn draw_ui(ui: &mut Ui, sounds: &SoundManager, events: &mut EventBus<TrainEvent>) {
+    pub fn draw_ui(
+        ui: &mut Ui,
+        sounds: &SoundManager,
+        events: &mut EventBus<TrainEvent>,
+        world: &World,
+    ) {
         let fonts = ui.fonts().clone();
         for (i, (font_id, font)) in fonts.iter().enumerate() {
             let color = Color::hsl(i as f64 / 10.0, 0.3, 0.45, 0.95);
@@ -30,14 +38,30 @@ mod ui {
             ui.button(text, color);
         }
 
-        let mut state = false;
-
-        ui.checkbox("Goodbye", &mut state);
-        if ui.checkbox("Hello", &mut state).is_clicked {
-            events.enqueue(TrainEvent::Sound(SoundKind::HouseOfLeaves));
+        if ui.checkbox("Detail", world.show_detail).is_clicked {
+            events.enqueue(TrainEvent::ToggleDetail);
+        }
+        if ui.checkbox("Debug Info", world.show_debug).is_clicked {
+            events.enqueue(TrainEvent::ToggleDebug);
         }
 
-        ui.label("Songs that we're playing...");
+        ui.separator();
+
+        for kind in [
+            SoundKind::ButtonUp,
+            SoundKind::Crossword,
+            SoundKind::HouseOfLeaves,
+        ] {
+            if ui
+                .button(format!("{:?}", kind), Color::hsl(0.5, 0.6, 0.5, 0.7))
+                .clicked()
+            {
+                events.enqueue(TrainEvent::Sound(kind));
+            }
+        }
+
+        ui.separator();
+
         for (id, sound) in sounds.iter() {
             if ui
                 .button(format!("{} {}", id, sound), Color::BROWN)
@@ -52,20 +76,22 @@ mod ui {
 fn draw_terrain(cmd: &mut RenderCommands, world: &World, view: &Viewport) {
     for chunk in world.chunks.values() {
         let iso = view.w2s_iso(chunk.isometry());
-        let dims = DVec2::splat(view.meters(TERRAIN_CHUNK_WIDTH_METERS));
-        if let Some(handle) = chunk.texture {
-            cmd.sprite(handle, iso).dims(dims);
+        if let Some(id) = chunk.terrain_mesh {
+            let iso = view.w2s_iso(chunk.isometry());
+            let meters = view.meters(1.0);
+            cmd.mesh(id, iso, DVec2::splat(meters));
         }
+    }
+}
 
-        // if view.zoom() > 0.5 {
-        //     for tree in &chunk.trees {
-        //         let p = view.world_to_screen(tree.pos);
-        //         let r = view.meters(tree.radius);
-        //         if view.is_on_screen(p) && r > 0.5 {
-        //             cmd.circle(p).radius(r).color(tree.color);
-        //         }
-        //     }
-        // }
+fn draw_terrain_trees(cmd: &mut RenderCommands, world: &World, view: &Viewport) {
+    for chunk in world.chunks.values() {
+        let iso = view.w2s_iso(chunk.isometry());
+        if let Some(id) = chunk.tree_mesh {
+            let iso = view.w2s_iso(chunk.isometry());
+            let meters = view.meters(1.0);
+            cmd.mesh(id, iso, DVec2::splat(meters));
+        }
     }
 }
 
@@ -239,11 +265,11 @@ fn draw_debug_info(
 
     for (off, color) in [(0.0, Color::WHITE)] {
         let p = p - DVec2::splat(off);
-        let extent = cmd.text(p, &text).size(22.0).color(color).extent();
+        let extent = cmd.text(p, &text).size(26.0).color(color).extent();
 
         cmd.rect(p - extent.y * DVec2::Y)
             .dims(extent)
-            .color(Color::BLACK.alpha(0.4));
+            .color(Color::BLACK.alpha(0.95));
     }
 }
 
@@ -297,6 +323,14 @@ pub fn draw_world(
     draw_hovered_node(cmd, world, sel, &view);
     draw_hovered_chunk(cmd, world, sel, &view);
 
+    cmd.new_layer("trees");
+
+    draw_terrain_trees(cmd, world, &view);
+
+    if world.show_detail {
+        draw_cursor_quadtile(cmd, &view, mouse);
+    }
+
     cmd.new_layer("smoke");
 
     draw_smoke_particles(cmd, world, &view);
@@ -310,17 +344,18 @@ pub fn draw_world(
 
     let mut ui = Ui::new(mouse, input.clone(), cmd, anim);
 
-    ui::draw_ui(&mut ui, sounds, events);
+    ui::draw_ui(&mut ui, sounds, events, world);
 
-    for event in ui.sounds() {
-        events.enqueue(TrainEvent::Sound(*event));
+    for event in ui.events() {
+        events.enqueue(TrainEvent::Sound(SoundKind::ButtonUp));
     }
 
     cmd.circle(mouse).diameter(11.0).color(Color::RED);
     let mouse_world = view.screen_to_world(mouse);
 
     {
-        let text = format!("{mouse_world:0.2}");
+        let h = TerrainChunk::height_func(mouse_world);
+        let text = format!("{mouse_world:0.2}   z = {h:0.2} m");
         cmd.text_with_shadow(
             (20.0, 50.0),
             (-2.0, -2.0),
@@ -345,19 +380,33 @@ pub fn draw_world(
         cmd.text((200.0, 1300.0), t).size(144.0);
     }
 
-    cmd.new_layer("debug");
+    if world.show_debug {
+        cmd.new_layer("debug");
 
-    draw_debug_info(
-        cmd,
-        world,
-        &view,
-        sel,
-        anim,
-        draw_calls,
-        timers,
-        frame_timer,
-        sounds,
-    );
+        draw_debug_info(
+            cmd,
+            world,
+            &view,
+            sel,
+            anim,
+            draw_calls,
+            timers,
+            frame_timer,
+            sounds,
+        );
+    }
+}
+
+fn draw_cursor_quadtile(cmd: &mut RenderCommands, view: &Viewport, mouse: DVec2) {
+    let mouse_world = view.screen_to_world(mouse);
+    let tiles = get_quadtile(mouse_world);
+    for idx in tiles {
+        let iso = view.w2s_iso(idx.isometry());
+        let width = view.meters(TERRAIN_CHUNK_WIDTH_METERS);
+        cmd.frame(iso, DVec2::splat(width))
+            .thickness(5.0)
+            .color(Color::GREEN);
+    }
 }
 
 fn draw_z_index_demo(cmd: &mut RenderCommands, view: &Viewport) {
@@ -442,6 +491,21 @@ fn draw_ruler(
     cmd.text(view.w2s_iso(iso), text)
         .size(32.0)
         .color(Color::WHITE);
+
+    let mut points = Vec::new();
+
+    let left = DVec2::new(200.0, 500.0);
+    let right = DVec2::new(view.dims().x - 200.0, 500.0);
+
+    for s in linspace_f64(0.0, 1.0, 40) {
+        let p = ruler_start.lerp(ruler_end, s);
+        let h = TerrainChunk::height_func(p);
+        let p = left.lerp(right, s) + DVec2::Y * h * 20.0;
+        points.push(p);
+    }
+
+    cmd.line(left, right).thickness(8.0);
+    cmd.linestring(points).color(Color::RED).thickness(5.0);
 
     Some(())
 }
@@ -720,83 +784,6 @@ fn draw_hovered_node(
         node.backward()
     );
     cmd.text(p, text).size(32.0).color(Color::WHITE);
-
-    Some(())
-}
-
-pub fn update_chunk_texture(
-    rs: &RenderState,
-    rw: &RenderWorld,
-    world: &World,
-    index: ChunkIndex,
-) -> Option<()> {
-    let chunk_id = world.chunk_map.get(&index)?;
-    let chunk = world.chunks.get(*chunk_id)?;
-    let handle = chunk.texture?;
-    let texture = rw.textures.get(handle.id)?;
-
-    let size = texture.size;
-
-    let mut cmd = RenderCommands::from_fonts(&rw.fonts);
-
-    // cmd.chunk(Isometry2d::ZERO, size.as_dvec2(), chunk.height());
-
-    let zoom = size.x as f64 / TERRAIN_CHUNK_WIDTH_METERS;
-
-    let camera = bary_sim::Camera {
-        isometry: Isometry2d::new(
-            chunk.isometry().tr() + DVec2::splat(TERRAIN_CHUNK_WIDTH_METERS / 2.0),
-            0.0,
-        ),
-        zoom: zoom as f32,
-    };
-
-    let view = Viewport::new(camera, size.as_dvec2());
-
-    let padding = 20.0;
-
-    let tview = &texture
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-
-    rs.clear(tview, Color::WHITE);
-
-    for _ in 0..2000 {
-        let x = rand(-padding, TERRAIN_CHUNK_WIDTH_METERS as f32 + padding) as f64;
-        let y = rand(-padding, TERRAIN_CHUNK_WIDTH_METERS as f32 + padding) as f64;
-        let p = chunk.isometry().tr() + DVec2::new(x, y);
-        let h = TerrainChunk::height_func(p);
-        let t = rand(0.0, 1.0) as f64;
-        let color = if h < 0.0 {
-            let b1 = Color::rgb(1, 31, 75, 0.3);
-            let b2 = Color::rgb(10, 40, 150, 0.3);
-            b1.mix(b2, t)
-        } else if h < 0.5 {
-            Color::rgb(194, 178, 128, 1.0)
-        } else if h < 7.0 {
-            let f2 = Color::rgb(37, 89, 31, 0.3);
-            Color::FOREST_GREEN.alpha(0.3).mix(f2, t)
-        } else {
-            let m1 = Color::rgb(201, 130, 99, 0.3);
-            let m2 = Color::rgb(41, 39, 39, 0.3);
-            m1.mix(m2, t)
-        };
-        let r = rand(10.0, 17.0) as f64 * 4.0;
-        let p = view.world_to_screen(p);
-        cmd.circle(p).radius(view.meters(r)).color(color.alpha(0.1));
-    }
-
-    cmd.new_layer("trees");
-
-    for tree in &chunk.trees {
-        let p = view.world_to_screen(tree.pos);
-        let r = view.meters(tree.radius);
-        cmd.circle(p).radius(r).color(tree.color);
-    }
-
-    for layer in cmd.layers() {
-        rs.apply_geometry_commands(rw, cmd.current_font_id, layer, &texture.texture);
-    }
 
     Some(())
 }

@@ -1,13 +1,13 @@
 #![allow(unused)]
 
 use crate::draw::draw_world;
-use crate::draw::update_chunk_texture;
 use crate::event_bus::*;
 use crate::rend_app::*;
 use crate::render_state::RenderState;
 use crate::render_world::RenderWorld;
 use crate::terrain::handle_regen_trees_events;
 use crate::terrain::regenerate_trees;
+use crate::terrain::update_chunk_texture;
 use crate::tweens::AnimationStates;
 use crate::world::*;
 use bary_core::prelude::*;
@@ -82,11 +82,11 @@ impl<'a> TrainApp<'a> {
         render_world.load_font(&rs.renderer, "impact");
         render_world.load_font(&rs.renderer, "courier_new");
 
-        let inv = render_world.load_texture(&rs.renderer, "assets/invincible.jpg");
-        let mush = render_world.load_texture(&rs.renderer, "assets/mushroom.jpg");
-        let apple = render_world.load_texture(&rs.renderer, "assets/apple.png");
-        let blob = render_world.load_texture(&rs.renderer, "assets/blob.png");
-        let donut = render_world.load_texture(&rs.renderer, "assets/donut.png");
+        let inv = render_world.load_texture(&rs.renderer, "assets/invincible.jpg", false);
+        let mush = render_world.load_texture(&rs.renderer, "assets/mushroom.jpg", false);
+        let apple = render_world.load_texture(&rs.renderer, "assets/apple.png", false);
+        let blob = render_world.load_texture(&rs.renderer, "assets/blob.png", false);
+        let donut = render_world.load_texture(&rs.renderer, "assets/donut.png", false);
 
         rs.window.set_framebuffer_size_polling(true);
         rs.window.set_key_polling(true);
@@ -127,29 +127,6 @@ pub fn generate_chunk_textures(
     for event in events.iter() {
         if let TrainEvent::RedrawTile(index) = event {
             update_chunk_texture(rs, rw, world, *index);
-        }
-
-        if let TrainEvent::ChunkUpdate(chunk_id) = event {
-            let Ok(chunk) = world.chunks.try_get_mut(*chunk_id) else {
-                continue;
-            };
-
-            if chunk.texture.is_some() {
-                debug!("Chunk already has texture: {:?}", chunk.texture);
-                continue;
-            }
-
-            let id = rw.spawner.spawn();
-
-            warn!("Spawning texture for chunk {:?}", chunk.index());
-
-            let texture = rd.make_texture(2000, 2000, "");
-            let handle = TextureHandle {
-                id,
-                size: texture.size,
-            };
-            rw.textures.spawn(id, texture);
-            chunk.texture = Some(handle);
         }
     }
 }
@@ -218,6 +195,8 @@ impl<'a> RendApp for TrainApp<'a> {
         );
 
         self.sounds.handle_events(&self.events);
+
+        handle_ui_events(&self.events, &mut self.world);
 
         self.events.clear();
 

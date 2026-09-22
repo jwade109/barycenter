@@ -49,7 +49,7 @@ fn indices_to_bytes(indices: &[u16]) -> Vec<u8> {
         .concat()
 }
 
-fn mesh_from_vi<T: Vertex>(device: &wgpu::Device, vertices: &[T], indices: &[u16]) -> Mesh {
+pub fn mesh_from_vi<T: Vertex>(device: &wgpu::Device, vertices: &[T], indices: &[u16]) -> Mesh {
     let bytes_1: &[u8] = &vertices_to_bytes(vertices);
     let bytes_2: &[u8] = &indices_to_bytes(&indices);
     let bytes_merged: &[u8] = &[bytes_1, bytes_2].concat();
@@ -100,7 +100,36 @@ pub fn make_quad(device: &wgpu::Device) -> Mesh {
     mesh_from_vi(device, &vertices, &indices)
 }
 
-pub fn make_n_gon(device: &wgpu::Device, n: usize) -> Mesh {
+pub fn make_quad_01(device: &wgpu::Device) -> Mesh {
+    let vertices: [FullVertex; 4] = [
+        FullVertex::new(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec4::new(1.0, 0.0, 0.0, 1.0),
+            Vec2::new(0.0, 0.0),
+        ),
+        FullVertex::new(
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec4::new(0.0, 1.0, 1.0, 1.0),
+            Vec2::new(1.0, 0.0),
+        ),
+        FullVertex::new(
+            Vec3::new(1.0, 1.0, 0.0),
+            Vec4::new(0.0, 0.0, 1.0, 1.0),
+            Vec2::new(1.0, 1.0),
+        ),
+        FullVertex::new(
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec4::new(1.0, 0.0, 1.0, 1.0),
+            Vec2::new(0.0, 1.0),
+        ),
+    ];
+
+    let indices: [u16; 6] = [0, 1, 2, 2, 3, 0];
+
+    mesh_from_vi(device, &vertices, &indices)
+}
+
+pub fn make_n_gon(device: &wgpu::Device, n: usize, color: Color) -> Mesh {
     let vertices = (0..n)
         .map(|i| {
             let a = 2.0 * std::f32::consts::PI * i as f32 / n as f32;
@@ -113,7 +142,7 @@ pub fn make_n_gon(device: &wgpu::Device, n: usize) -> Mesh {
             let r = a.sin() * 0.5 + 0.5;
             let g = a.cos() * 0.5 + 0.5;
             let b = (a * 0.5).sin() * 0.5 + 0.5;
-            let color = Vec4::new(r, g, b, 1.0);
+            let color = color.to_vec();
             let tx = Vec2::new(x * 0.5 + 0.5, y * 0.5 + 0.5);
             FullVertex::new(pos, color, tx)
         })
@@ -130,7 +159,7 @@ pub fn make_n_gon(device: &wgpu::Device, n: usize) -> Mesh {
     mesh_from_vi(device, &vertices, &indices)
 }
 
-fn quad_indices_to_tris(a: u16, b: u16, c: u16, d: u16) -> [u16; 6] {
+pub fn quad_indices_to_tris(a: u16, b: u16, c: u16, d: u16) -> [u16; 6] {
     [a, b, c, a, c, d]
 }
 
@@ -195,51 +224,6 @@ pub fn make_tetrahedron(device: &wgpu::Device) -> Mesh {
         0, 1, 3,
         3, 2, 0,
     ];
-
-    mesh_from_vi(device, &vertices, &indices)
-}
-
-pub fn make_rough_ground_plane(device: &wgpu::Device, center: DVec2, n_quads: u16) -> Mesh {
-    let mut vertices = Vec::new();
-    let mut indices = Vec::new();
-
-    let n_quads_x = n_quads;
-    let n_quads_y = n_quads;
-
-    let world_width = 100.0;
-    let quad_width_x = world_width / n_quads_x as f32;
-    let quad_width_y = world_width / n_quads_y as f32;
-
-    let perlin = Perlin::new(1);
-
-    let eval_height = |x: f32, z: f32| {
-        let y1 = perlin.get([x as f64 / 5.0 + 0.5, 0.5, z as f64 / 5.0 + 0.5]);
-        let y2 = perlin.get([x as f64 + 0.5, 0.5, z as f64 + 0.5]) * 0.4;
-        let y3 = perlin.get([x as f64 / 18.0, 0.5, z as f64 / 18.0 + 0.5]) * 3.0;
-        let y4 = perlin.get([x as f64 / 120.0, 0.5, z as f64 / 120.0 + 0.5]) * 17.0;
-        return y1 + y2 + y3 + y4;
-    };
-
-    for xi in 0..=n_quads_x {
-        for zi in 0..=n_quads_y {
-            let x = xi as f32 * quad_width_x - world_width / 2.0;
-            let z = zi as f32 * quad_width_y - world_width / 2.0;
-            let y = eval_height(center.x as f32 + x, center.y as f32 + z);
-            let position = Vec3::new(x as f32, y as f32, z as f32);
-            let color = Vec4::new(0.2, 0.6, 1.0, 1.0);
-            let tex_coord = Vec2::new(0.0, 0.0);
-            let v = FullVertex::new(position, color, tex_coord);
-            vertices.push(v);
-        }
-    }
-
-    for x in 0..n_quads_x {
-        for y in 0..n_quads_y {
-            let stride = n_quads_y + 1;
-            let b = x + y * (n_quads_y + 1);
-            indices.extend(quad_indices_to_tris(b, b + 1, b + stride + 1, b + stride));
-        }
-    }
 
     mesh_from_vi(device, &vertices, &indices)
 }
