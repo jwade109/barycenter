@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::bezier::{BezierCurve, nearest_point_segment};
 use crate::event_bus::{EventBus, FontSelection, TrainEvent};
-use crate::railcar::RailCar;
+use crate::railcar::{RailCar, get_car_isometry};
 use crate::render_state::RenderState;
 use crate::render_world::RenderWorld;
 use crate::sounds::{SoundKind, SoundManager};
@@ -706,10 +706,32 @@ fn draw_hovered_track(
 fn draw_hovered_car(cmd: &mut RenderCommands, world: &World, sel: &SelectionInfo, view: &Viewport) {
     if let Some(SelectedEntity::Car(car_id)) = sel.selected {
         highlight_consist(cmd, world, car_id, view, Color::BLUE);
+        draw_car_info(cmd, world, car_id, view);
     }
     if let Some(HoveredEntity::Car(car_id)) = sel.hovered {
         highlight_consist(cmd, world, car_id, view, Color::ORANGE);
     }
+}
+
+fn draw_car_info(
+    cmd: &mut RenderCommands,
+    world: &World,
+    car_id: Ent,
+    view: &Viewport,
+) -> Option<()> {
+    let car = world.cars.get(car_id)?;
+    let iso = get_car_isometry(world, car_id)?;
+    let iso = view.w2s_iso(iso).tr();
+
+    let info = format!("{:#?}", car);
+
+    let extent = cmd.text(iso, info).size(23.0).extent();
+
+    cmd.rect(iso - DVec2::Y * extent.y)
+        .dims(extent)
+        .color(Color::BLACK.alpha(0.7));
+
+    Some(())
 }
 
 fn highlight_consist(

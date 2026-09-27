@@ -2,6 +2,7 @@ use crate::{node::*, track::*, world::World};
 use bary_core::prelude::{Ent, Isometry2d, chance, rand, randint};
 use std::collections::BTreeMap;
 
+#[derive(Debug, Clone)]
 pub struct RailCar {
     pub segment: Ent,
     pub pos: f64,
