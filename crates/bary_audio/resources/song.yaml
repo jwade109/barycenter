@@ -1,0 +1,125 @@
+samples:
+  - start_time: 0.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+  - start_time: 1.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+  - start_time: 2.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+  - start_time: 3.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+  - start_time: 4.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+  - start_time: 5.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+  - start_time: 6.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+  - start_time: 7.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+  - start_time: 8.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+  - start_time: 9.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+  - start_time: 10.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+  - start_time: 11.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+  - start_time: 12.5
+    duration: 0.1
+    amplitude: 0.2
+    note: A4
+
+# # ===============================
+
+  - start_time: 0.0
+    duration: 2.0
+    amplitude: 0.4
+    note: E4
+  - start_time: 1.0
+    duration: 2.0
+    amplitude: 0.4
+    note: A4
+  - start_time: 2.0
+    duration: 2.0
+    amplitude: 0.4
+    note: C4
+
+  - start_time: 6.0
+    duration: 2.0
+    amplitude: 0.4
+    note: E4
+  - start_time: 7.0
+    duration: 2.0
+    amplitude: 0.4
+    note: A4
+  - start_time: 8.0
+    duration: 2.0
+    amplitude: 0.4
+    note: C4
+
+# ===========================
+
+  - start_time: 0.0
+    duration: 0.5
+    amplitude: 0.6
+    note: C3
+  - start_time: 0.5
+    duration: 0.5
+    amplitude: 0.6
+    note: A3
+  - start_time: 1.0
+    duration: 0.
+    amplitude: 0.6
+    note: B3
+  - start_time: 1.5
+    duration: 0.5
+    amplitude: 0.6
+    note: A3
+  - start_time: 2.0
+    duration: 2.0
+    amplitude: 0.6
+    note: C3
+
+  - start_time: 6.0
+    duration: 0.5
+    amplitude: 1.0
+    note: C4
+  - start_time: 6.5
+    duration: 0.5
+    amplitude: 1.0
+    note: A4
+  - start_time: 7.0
+    duration: 0.5
+    amplitude: 1.0
+    note: B4
+  - start_time: 7.5
+    duration: 0.5
+    amplitude: 1.0
+    note: C5
+  - start_time: 8.0
+    duration: 2.0
+    amplitude: 1.0
+    note: C4

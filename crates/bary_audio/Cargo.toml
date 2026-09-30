@@ -1,0 +1,12 @@
+[package]
+name = "bary_audio"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+
+[dependencies]
+hound = "3.5.1"
+kira = "0.12.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_yaml = "0.9.34"
+bary_core = { path = "../bary_core" }

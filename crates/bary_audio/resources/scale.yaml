@@ -1,0 +1,21 @@
+samples:
+  - start_time: 0.0
+    duration: 0.5
+    amplitude: 0.5
+    note: A3
+  - start_time: 1.0
+    duration: 0.5
+    amplitude: 0.5
+    note: B3
+  - start_time: 2.0
+    duration: 0.5
+    amplitude: 0.5
+    note: C4
+  - start_time: 3.0
+    duration: 0.5
+    amplitude: 0.5
+    note: D4
+  - start_time: 4.0
+    duration: 0.5
+    amplitude: 0.5
+    note: E4
