@@ -7,6 +7,8 @@ use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
+use crate::application::Application;
+
 fn serialize_table<T: Serialize>(entities: &Components<T>) -> Option<Vec<u8>> {
     bincode::serialize(&entities).ok()
 }

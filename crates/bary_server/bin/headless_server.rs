@@ -1,9 +1,8 @@
 use bary_core::prelude::*;
-use bary_sim::Application;
 use clap::Parser;
 use log::info;
 
-use bary_server::HeadlessServerApp;
+use bary_server::{Application, HeadlessServerApp};
 
 /// Run the test client app
 #[derive(Parser, Debug, Default, Clone)]

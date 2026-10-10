@@ -1,7 +1,7 @@
 mod client;
 mod input_handlers;
-mod world;
+mod input_actions;
 
 pub use client::*;
 pub use input_handlers::*;
-pub use world::*;
+pub use input_actions::*;

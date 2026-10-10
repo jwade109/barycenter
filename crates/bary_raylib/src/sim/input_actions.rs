@@ -2,7 +2,6 @@ use crate::constants::*;
 use crate::sim::*;
 use crate::sounds::*;
 use crate::utils::*;
-use bary_core::prelude::PI;
 use bary_core::prelude::*;
 use bary_input::*;
 use bary_sim::Camera;

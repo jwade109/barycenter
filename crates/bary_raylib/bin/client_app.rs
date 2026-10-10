@@ -4,7 +4,6 @@ use bary_input::InputState;
 use bary_ipc::*;
 use bary_raylib::*;
 use bary_server::*;
-use bary_sim::Application;
 use bary_sim::*;
 use bary_terminal::Terminal;
 use bary_ui::*;
