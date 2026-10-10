@@ -22,23 +22,23 @@ pub fn to_raylib_camera(camera: &Camera, screen_dims: Vec2) -> Camera2D {
     Camera2D {
         offset: glam_to_raylib(screen_dims) / 2.0,
         target: Vector2::new(
-            camera.isometry.translation.x,
-            -camera.isometry.translation.y,
+            camera.isometry.translation.x as f32,
+            -camera.isometry.translation.y as f32,
         ),
-        rotation: camera.isometry.rotation.to_degrees(),
+        rotation: camera.isometry.rotation.to_degrees() as f32,
         zoom: camera.zoom,
     }
 }
 
 fn draw_text(d: &mut RaylibDrawHandle, iso: Isometry2d, text: &str, font_size: f32) {
-    let p = glam_to_raylib_swap_y(iso.translation);
+    let p = glam_to_raylib_swap_y(iso.translation.as_vec2());
     if !text.is_empty() {
         d.draw_text_pro(
             d.get_font_default(),
             &text,
             p,
             Vector2::zero(),
-            -iso.rotation.to_degrees(),
+            -iso.rotation.to_degrees() as f32,
             font_size,
             font_size / 20.0,
             Color::ORANGE,
@@ -65,14 +65,14 @@ fn draw_text_centered_bg(d: &mut RaylibDrawHandle, iso: Isometry2d, text: &str, 
         &text,
         p,
         Vector2::zero(),
-        -iso.rotation.to_degrees(),
+        -iso.rotation.to_degrees() as f32,
         font_size,
         font_size / 20.0,
         Color::WHITE,
     );
 }
 
-fn draw_isometry_axes(d: &mut RaylibDrawHandle, iso: Isometry2d, label: &str, scale: Vec2) {
+fn draw_isometry_axes(d: &mut RaylibDrawHandle, iso: Isometry2d, label: &str, scale: DVec2) {
     let x = iso.translation + iso.local_x() * scale.x;
     let y = iso.translation + iso.local_y() * scale.y;
 
@@ -87,7 +87,7 @@ fn draw_isometry_axes(d: &mut RaylibDrawHandle, iso: Isometry2d, label: &str, sc
     d.draw_line_ex(p, x, 0.1, Color::RED);
     d.draw_line_ex(p, y, 0.1, Color::GREEN);
 
-    draw_text(d, iso, label, scale.max_element());
+    draw_text(d, iso, label, scale.max_element() as f32);
 }
 
 fn draw_origin_and_range_indicators(d: &mut RaylibDrawHandle) {
@@ -228,15 +228,10 @@ fn draw_grid_far_indicators(
         let loc = grid.centroid_isometry();
         let p = glam_to_raylib_swap_y(loc.translation);
         let q = d.get_world_to_screen2D(p, camera);
+        let angle = loc.rotation as f32 - camera.rotation.to_radians();
+        let empty = !grid.computers.is_empty();
 
-        markers.push((
-            *id,
-            q,
-            q,
-            loc.rotation - camera.rotation.to_radians(),
-            grid.name.clone(),
-            !grid.computers.is_empty(),
-        ));
+        markers.push((*id, q, q, angle, grid.name.clone(), empty));
     }
 
     // move the markers apart
@@ -498,7 +493,7 @@ fn draw_excavator(
     };
 
     let ast = world.asteroids.try_get(ast_id)?;
-    let tile_dims = Vec2::splat(TERRAIN_TILE_WIDTH_METERS);
+    let tile_dims = DVec2::splat(TERRAIN_TILE_WIDTH_METERS);
 
     for tile in tiles {
         let o = tile.origin_isometry();
@@ -722,7 +717,7 @@ fn draw_grid_region(
     border: Color,
     fill_pct: f32,
 ) {
-    let bottom_left = pl.bottom_left().to_meters();
+    let bottom_left = pl.bottom_left().to_meters().as_dvec2();
     let dims = pl.grid_aligned_dims().to_meters();
     let mut iso = root;
     iso.translation += iso.local_x() * bottom_left.x + iso.local_y() * bottom_left.y;
@@ -774,9 +769,10 @@ fn draw_stars(
 ) {
     for star in stars.values() {
         let xy = Vec2::new(star.pos.x, star.pos.y);
-        let offset = (xy - camera.isometry.translation) * star.pos.z;
+        let offset = (xy - camera.isometry.translation.as_vec2()) * star.pos.z;
         let offset = offset.with_y(-offset.y);
-        let offset = camera.zoom * rotate(offset, camera.isometry.rotation) + screen_dims / 2.0;
+        let offset =
+            camera.zoom * rotate(offset, camera.isometry.rotation as f32) + screen_dims / 2.0;
         d.draw_pixel(
             offset.x as i32,
             offset.y as i32,
@@ -1094,7 +1090,7 @@ pub fn draw_parts(
 
                     let iso = grid.origin() * part_iso;
                     let pos = glam_to_raylib_swap_y(iso.translation);
-                    let rot = -iso.rotation.to_degrees();
+                    let rot = -iso.rotation.to_degrees() as f32;
                     let scale = 1.0 / 20.0;
                     d.draw_texture_ex(sprite, pos, rot, scale, tint);
                 }
@@ -1128,7 +1124,7 @@ pub fn draw_computer_target_isometry(
             continue;
         };
 
-        draw_isometry_axes(d, pose, &grid.name, Vec2::new(1.0, 0.4));
+        draw_isometry_axes(d, pose, &grid.name, DVec2::new(1.0, 0.4));
     }
 }
 
@@ -1167,7 +1163,7 @@ fn draw_test_isos(d: &mut RaylibDrawHandle) {
     for (color, iso) in test_isos {
         let dims = Vec2::new(10.0, 4.0);
         fill_rectangle(d, iso, dims, color.alpha(0.5));
-        draw_isometry_axes(d, iso, "TST", Vec2::splat(8.0));
+        draw_isometry_axes(d, iso, "TST", DVec2::splat(8.0));
     }
 }
 
@@ -1244,7 +1240,7 @@ fn draw_waypoint_widget(d: &mut RaylibDrawHandle, client: &ClientSpecificInfo) {
         let s = if n_ships == 1 {
             1.0
         } else {
-            i as f32 / (n_ships - 1) as f32
+            i as f64 / (n_ships - 1) as f64
         };
 
         let p = start.lerp(end, s);
@@ -1268,13 +1264,24 @@ fn draw_mouse_world_position(
     draw_circle(d, world_pos, r, Color::WHITE);
 }
 
-pub fn draw_line(d: &mut RaylibDrawHandle, start: Vec2, end: Vec2, color: Color) {
+pub fn draw_line(
+    d: &mut RaylibDrawHandle,
+    start: impl Into<DVec2>,
+    end: impl Into<DVec2>,
+    color: Color,
+) {
     let start = glam_to_raylib_swap_y(start);
     let end = glam_to_raylib_swap_y(end);
     d.draw_line_v(start, end, color);
 }
 
-pub fn draw_line_width(d: &mut RaylibDrawHandle, start: Vec2, end: Vec2, thick: f32, color: Color) {
+pub fn draw_line_width(
+    d: &mut RaylibDrawHandle,
+    start: impl Into<DVec2>,
+    end: impl Into<DVec2>,
+    thick: f32,
+    color: Color,
+) {
     let start = glam_to_raylib_swap_y(start);
     let end = glam_to_raylib_swap_y(end);
     d.draw_line_ex(start, end, thick, color);
@@ -1303,7 +1310,15 @@ fn draw_parts_zoo(parts: &Components<PartPrototype>, d: &mut RaylibDrawHandle) {
     }
 }
 
-fn draw_rectangle(d: &mut RaylibDrawHandle, iso: Isometry2d, dims: Vec2, color: Color, t: f32) {
+fn draw_rectangle(
+    d: &mut RaylibDrawHandle,
+    iso: Isometry2d,
+    dims: impl Into<DVec2>,
+    color: Color,
+    t: impl Into<f64>,
+) {
+    let dims = dims.into();
+    let t = t.into() as f32;
     let xoff = iso.local_x() * dims.x;
     let yoff = iso.local_y() * dims.y;
     let w = glam_to_raylib_swap_y(iso.translation);
@@ -1315,21 +1330,32 @@ fn draw_rectangle(d: &mut RaylibDrawHandle, iso: Isometry2d, dims: Vec2, color: 
     }
 }
 
-pub fn fill_rectangle(d: &mut RaylibDrawHandle, iso: Isometry2d, dims: Vec2, color: Color) {
-    let rec = Rectangle::new(iso.translation.x, -iso.translation.y, dims.x, dims.y);
+pub fn fill_rectangle(
+    d: &mut RaylibDrawHandle,
+    iso: Isometry2d,
+    dims: impl Into<DVec2>,
+    color: Color,
+) {
+    let dims = dims.into().as_vec2();
+    let rec = Rectangle::new(
+        iso.translation.x as f32,
+        -iso.translation.y as f32,
+        dims.x,
+        dims.y,
+    );
     let origin = Vector2::new(0.0, dims.y);
-    let rotation = -iso.rotation.to_degrees();
+    let rotation = -iso.rotation.to_degrees() as f32;
     d.draw_rectangle_pro(rec, origin, rotation, color);
 }
 
-pub fn fill_circle(d: &mut RaylibDrawHandle, p: Vec2, r: f32, color: Color) {
+pub fn fill_circle(d: &mut RaylibDrawHandle, p: impl Into<DVec2>, r: impl Into<f64>, color: Color) {
     let center = glam_to_raylib_swap_y(p);
-    d.draw_circle_v(center, r, color);
+    d.draw_circle_v(center, r.into() as f32, color);
 }
 
-pub fn draw_circle(d: &mut RaylibDrawHandle, p: Vec2, r: f32, color: Color) {
+pub fn draw_circle(d: &mut RaylibDrawHandle, p: impl Into<DVec2>, r: impl Into<f64>, color: Color) {
     let center = glam_to_raylib_swap_y(p);
-    d.draw_circle_lines_v(center, r, color);
+    d.draw_circle_lines_v(center, r.into() as f32, color);
 }
 
 fn draw_selection_info(
@@ -1399,7 +1425,7 @@ fn draw_pipe_sprite(
 ) {
     let half_cell = Vec2::splat(PartCoord::CELL_WIDTH) / 2.0;
     let iso = grid_iso * Isometry2d::from_pos(coord.to_meters());
-    let p = iso.offset(half_cell).translation;
+    let p = iso.offset(half_cell).translation.as_vec2();
     let source_rec = pipe_tile_bounds(idx);
     let w = PartCoord::CELL_WIDTH;
     let dest_rec = Rectangle::new(p.x - w / 2.0, -p.y - w / 2.0, w, w);
@@ -1408,7 +1434,7 @@ fn draw_pipe_sprite(
         source_rec,
         dest_rec,
         Vector2::zero(),
-        -grid_iso.rotation.to_degrees(),
+        -grid_iso.rotation.to_degrees() as f32,
         Color::WHITE.alpha(alpha),
     );
 }
@@ -1567,7 +1593,7 @@ fn draw_thruster_plumes(
         let origin = grid.origin();
 
         let mut iso = part_isometry(origin, part.region);
-        let mut dims = part.region.part_aligned_dims().to_meters();
+        let mut dims = part.region.part_aligned_dims().to_meters().as_dvec2();
         let p = iso.translation + iso.local_y() * dims.y / 2.0;
         dims.x *= 2.0;
         let offset = iso.local_x() * dims.x;
@@ -1627,9 +1653,10 @@ fn draw_lights(
     }
 }
 
-fn draw_light_source(d: &mut RaylibDrawHandle, p: Vec2, r_scale: f32, color: Color) {
+fn draw_light_source(d: &mut RaylibDrawHandle, p: impl Into<DVec2>, r_scale: f64, color: Color) {
+    let p = p.into();
     for r in [1.0f32, 1.5, 3.0] {
-        let r = r_scale * r.powi(2);
+        let r = r_scale as f32 * r.powi(2);
         let a = 0.2 * 1.0 / r;
         let color = color.alpha(a);
         fill_circle(d, p, r, color);
@@ -1704,8 +1731,8 @@ fn draw_terrain_chunk(
         drew_tiles = true;
         let top_left = iso * tile_index.top_left_isometry();
         let p = glam_to_raylib_swap_y(top_left.translation);
-        let rot = -top_left.rotation.to_degrees();
-        let scale = TERRAIN_TILE_WIDTH_METERS;
+        let rot = -top_left.rotation.to_degrees() as f32;
+        let scale = TERRAIN_TILE_WIDTH_METERS as f32;
         let source_rec = get_terrain_tile_rect(tile.material(), tile.variant());
         let dest_rec = Rectangle::new(p.x, p.y, scale, scale);
         let alpha = tile.light_level() as f32 / 10.0;
@@ -1759,9 +1786,9 @@ fn draw_asteroid(
     let mut points = Vec::new();
     for theta in linspace(0.0, PI * 2.0, 200) {
         let r = rock.ast.radius_at(theta);
-        let theta = theta + rock.iso.rotation;
+        let theta = theta + rock.iso.rotation as f32;
         let p = r * rotate(Vec2::X, theta);
-        let p = glam_to_raylib_swap_y(rock.iso.translation + p);
+        let p = glam_to_raylib_swap_y(rock.iso.translation + p.as_dvec2());
         points.push(p);
     }
     d.draw_line_strip(&points, Color::WHITE);
@@ -1775,7 +1802,7 @@ fn draw_asteroid(
         for corner in camera_bb.corners() {
             let w = screen_to_world(&client.camera, corner, client.screen_dims);
             let wrt_asteroid = in_frame(rock.iso, w);
-            let chunk_index = ChunkIndex(vfloor(wrt_asteroid / TERRAIN_CHUNK_WIDTH_METERS));
+            let chunk_index = ChunkIndex(vfloor_f64(wrt_asteroid / TERRAIN_CHUNK_WIDTH_METERS));
 
             if let Some((min, max)) = &mut bounds {
                 min.0.x = min.0.x.min(chunk_index.0.x);
@@ -1818,8 +1845,8 @@ fn draw_asteroid(
         draw_circle(d, rock.iso.translation, rock.ast.max_radius(), Color::GREEN);
 
         let o = rock.iso.translation;
-        let x = o + rock.iso.local_x() * rock.ast.base_radius();
-        let y = o + rock.iso.local_y() * rock.ast.base_radius();
+        let x = o + rock.iso.local_x() * rock.ast.base_radius() as f64;
+        let y = o + rock.iso.local_y() * rock.ast.base_radius() as f64;
 
         draw_line(d, o, x, Color::RED);
         draw_line(d, o, y, Color::GREEN);
@@ -1829,7 +1856,7 @@ fn draw_asteroid(
         for (chunk_index, id) in chunks_to_draw {
             let chunk = ok_or_continue!(world.terrain_chunks.try_get(id));
             let iso = rock.iso * chunk_index.origin_isometry();
-            let dims = Vec2::splat(TERRAIN_CHUNK_WIDTH_METERS);
+            let dims = DVec2::splat(TERRAIN_CHUNK_WIDTH_METERS);
             let color = if chunk.visible_count > 0 {
                 Color::RED
             } else {

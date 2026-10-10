@@ -44,7 +44,7 @@ impl PartInstance {
 
     pub fn center_meters(&self) -> Vec2 {
         let iso = self.region.center_isometry();
-        iso.translation
+        iso.translation.as_vec2()
     }
 
     pub fn origin(&self) -> PartCoord {

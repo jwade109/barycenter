@@ -22,29 +22,29 @@ enum ExtensionState {
     UnderExtended,
 }
 
-const LEG_RADIUS: f32 = 2.0;
-const MIN_LEG_LENGTH: f32 = 0.6;
-const MAX_LEG_LENGTH: f32 = 3.0;
+const LEG_RADIUS: f64 = 2.0;
+const MIN_LEG_LENGTH: f64 = 0.6;
+const MAX_LEG_LENGTH: f64 = 3.0;
 
 struct Leg {
-    min_length: f32,
-    max_length: f32,
-    desired_angle: f32,
-    foot_position: Vec2,
-    target_foot_position: Vec2,
+    min_length: f64,
+    max_length: f64,
+    desired_angle: f64,
+    foot_position: DVec2,
+    target_foot_position: DVec2,
     state: LegState,
 }
 
 impl Leg {
-    fn desired_length(&self) -> f32 {
+    fn desired_length(&self) -> f64 {
         (self.max_length + self.min_length) / 2.0
     }
 
-    fn desired_offset(&self, spider_angle: f32) -> Vec2 {
-        rotate(Vec2::X, self.desired_angle + spider_angle) * self.desired_length()
+    fn desired_offset(&self, spider_angle: f64) -> DVec2 {
+        rotate_f64(DVec2::X, self.desired_angle + spider_angle) * self.desired_length()
     }
 
-    fn desired_foot_pos(&self, spider: Isometry2d) -> Vec2 {
+    fn desired_foot_pos(&self, spider: Isometry2d) -> DVec2 {
         self.desired_offset(spider.rotation) + spider.translation
     }
 
@@ -56,7 +56,7 @@ impl Leg {
             || self.extension_state(spider.translation) != ExtensionState::Nominal
     }
 
-    fn update(&mut self, spider: Isometry2d, dt: f32) {
+    fn update(&mut self, spider: Isometry2d, dt: f64) {
         if self.state == LegState::Travelling {
             let max_speed = 65.0;
             let max_delta = max_speed * dt;
@@ -83,7 +83,7 @@ impl Leg {
         self.state = LegState::Travelling;
     }
 
-    fn extension_state(&self, spider: Vec2) -> ExtensionState {
+    fn extension_state(&self, spider: DVec2) -> ExtensionState {
         let l = spider.distance(self.foot_position);
         if l < self.min_length {
             ExtensionState::UnderExtended
@@ -104,17 +104,17 @@ struct Spider {
 }
 
 fn make_legs(n: usize) -> Vec<Leg> {
-    let angle_offset = bary_core::prelude::PI / n as f32;
+    let angle_offset = bary_core::prelude::PI_64 / n as f64;
 
     (0..n)
         .map(|i| {
-            let a = angle_offset + i as f32 / n as f32 * 2.0 * bary_core::prelude::PI;
+            let a = angle_offset + i as f64 / n as f64 * 2.0 * bary_core::prelude::PI_64;
             Leg {
                 desired_angle: a,
                 min_length: MIN_LEG_LENGTH,
                 max_length: MAX_LEG_LENGTH,
-                foot_position: Vec2::ZERO,
-                target_foot_position: rotate(Vec2::X, a) * 2.0,
+                foot_position: DVec2::ZERO,
+                target_foot_position: rotate_f64(DVec2::X, a) * 2.0,
                 state: LegState::Travelling,
             }
         })
@@ -122,7 +122,7 @@ fn make_legs(n: usize) -> Vec<Leg> {
 }
 
 impl Spider {
-    fn new(angle: f32, n_legs: usize) -> Self {
+    fn new(angle: f64, n_legs: usize) -> Self {
         Self {
             pose: Isometry2d::from_xya(0.0, 0.0, angle),
             vel: Isometry2d::ZERO,
@@ -170,7 +170,7 @@ impl Spider {
 }
 
 struct World {
-    time: f32,
+    time: f64,
     spiders: Vec<Spider>,
     camera: Camera,
 }
@@ -237,7 +237,7 @@ fn draw_world(handle: &mut RaylibDrawHandle, world: &World) {
     }
 }
 
-fn update_spider(spider: &mut Spider, dt: f32) {
+fn update_spider(spider: &mut Spider, dt: f64) {
     let mut dv = Vec2::ZERO;
 
     let n_moving = spider
@@ -268,14 +268,14 @@ fn update_spider(spider: &mut Spider, dt: f32) {
     spider.pose.rotation += spider.vel.rotation * dt;
 }
 
-fn update_world(world: &mut World, dt: f32) {
+fn update_world(world: &mut World, dt: f64) {
     world.time += dt;
 
     for spider in &mut world.spiders {
         update_spider(spider, dt);
     }
 
-    let vel = Vec2::new(world.time.cos(), world.time.sin()) * 10.0;
+    let vel = DVec2::new(world.time.cos(), world.time.sin()) * 10.0;
 
     world.spiders[1].vel.translation = vel;
 
@@ -308,7 +308,7 @@ fn process_input(world: &mut World, input: &InputState) {
 
     let speed = 16.0;
 
-    let dir = Vec2::new(x_pull as f32, y_pull as f32).normalize_or_zero();
+    let dir = DVec2::new(x_pull as f64, y_pull as f64).normalize_or_zero();
 
     let vel = dir * speed;
 
@@ -349,7 +349,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut world = make_world();
 
     while !handle.window_should_close() {
-        let dt = handle.get_frame_time();
+        let dt = handle.get_frame_time() as f64;
 
         while let Some(event) = input_queue.pop() {
             input.process_rdev_event(&event, handle.is_window_focused());

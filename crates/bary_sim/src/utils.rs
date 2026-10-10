@@ -50,18 +50,18 @@ pub fn spawn_empty_grid(world: &mut World, name: impl Into<String>) -> Ent {
 pub fn get_grid_physical_props(
     grid: &VehicleGrid,
     parts: &Components<Part>,
-) -> BaryResult<(Mass, Vec2)> {
+) -> BaryResult<(Mass, DVec2)> {
     let mut total_mass = Mass::ZERO;
     for part_id in &grid.parts {
         let part = parts.try_get(*part_id)?;
         total_mass += part.mass;
     }
-    let mut com = Vec2::ZERO;
+    let mut com = DVec2::ZERO;
     for part_id in &grid.parts {
         let part = parts.try_get(*part_id)?;
         let center = part.region.center_isometry();
         let mass_portion = part.mass.to_kg_f64() / total_mass.to_kg_f64();
-        com += center.translation * mass_portion as f32;
+        com += center.translation * mass_portion;
     }
     Ok((total_mass, com))
 }
@@ -104,7 +104,7 @@ pub fn update_grid_physical_props(
 
     info!("Delta COM: {} - {} = {}", com, old_com, delta);
 
-    grid.particle_location.translation += rotate(delta, grid.particle_location.rotation);
+    grid.particle_location.translation += rotate_f64(delta, grid.particle_location.rotation);
     grid.parts_mass = mass;
     grid.center_of_mass = com;
 
@@ -207,7 +207,7 @@ pub fn get_grid_physical_props_by_id(
     grid_id: Ent,
     grids: &Components<VehicleGrid>,
     parts: &Components<Part>,
-) -> BaryResult<(Mass, Vec2)> {
+) -> BaryResult<(Mass, DVec2)> {
     let grid = grids.try_get(grid_id)?;
     get_grid_physical_props(grid, parts)
 }
@@ -736,7 +736,7 @@ pub fn sum_part_masses(
         let proto = prototypes.try_get(part.prototype)?;
         sum += proto.mass;
         let center = part.region.center_isometry().translation;
-        com += center.as_dvec2();
+        com += center;
     }
     if !sum.is_zero() {
         com /= sum.to_kg_f64();
@@ -1254,11 +1254,11 @@ pub fn can_insert_part_c(
 
 pub fn get_closest_grid(
     grids: &Components<VehicleGrid>,
-    test_pos: Vec2,
-    dist_limit: impl Into<Option<f32>>,
-) -> Option<(Ent, Vec2)> {
-    let mut best: Option<(Ent, Vec2, f32)> = None;
-    let dist_limit = dist_limit.into().unwrap_or(std::f32::INFINITY);
+    test_pos: DVec2,
+    dist_limit: impl Into<Option<f64>>,
+) -> Option<(Ent, DVec2)> {
+    let mut best: Option<(Ent, DVec2, f64)> = None;
+    let dist_limit = dist_limit.into().unwrap_or(std::f64::INFINITY);
     for (e, grid) in grids.iter() {
         let in_frame = express_in_frame(grid.centroid_isometry(), test_pos);
         let dist = in_frame.length_squared();
@@ -1592,7 +1592,7 @@ mod tests {
         let props_b = get_grid_physical_props_by_id(next_id, &world.grids, &world.parts).unwrap();
 
         assert_eq!(props_a.0, Mass::grams(12339000));
-        assert_eq!(props_a.1, Vec2::new(2.4357123, 1.2572942));
+        assert_eq!(props_a.1, DVec2::new(2.4357123, 1.2572942));
         assert_eq!(props_a, props_b);
 
         let grid_a = world.grids.try_get(grid_id).unwrap();

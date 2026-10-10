@@ -32,8 +32,8 @@ struct SimEpoch {
     ticks: u64,
     pose: Isometry2d,
     vel: Isometry2d,
-    target_position: Option<Vec2>,
-    target_attitude: Option<f32>,
+    target_position: Option<DVec2>,
+    target_attitude: Option<f64>,
     acc_updates: u64,
     thrusters_firing: u32,
 }
@@ -74,7 +74,7 @@ fn run_simulation(
         let mut pose = grid_pose(&world.grids, grid_id).unwrap();
         let vel = grid_vel(&world.grids, grid_id).unwrap();
 
-        pose.rotation = Angle::radians(pose.rotation).as_rad();
+        pose.rotation = Angle::radians(pose.rotation).as_rad_f64();
 
         let thrusters = get_thruster_levels(grid_id, &world.grids, &world.thrusters).unwrap();
 
@@ -85,7 +85,7 @@ fn run_simulation(
             pose,
             vel,
             target_position: cpu.current_waypoint().map(|e| e.translation),
-            target_attitude: cpu.current_angle().map(|e| e.as_rad()),
+            target_attitude: cpu.current_angle().map(|e| e.as_rad_f64()),
             acc_updates: world.grid_acceleration_updates,
             thrusters_firing,
         };
@@ -125,9 +125,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             epoch.vel.translation.x,
             epoch.vel.translation.y,
             epoch.vel.rotation,
-            epoch.target_position.map(|t| t.x).unwrap_or(std::f32::NAN),
-            epoch.target_position.map(|t| t.y).unwrap_or(std::f32::NAN),
-            epoch.target_attitude.unwrap_or(std::f32::NAN),
+            epoch.target_position.map(|t| t.x).unwrap_or(std::f64::NAN),
+            epoch.target_position.map(|t| t.y).unwrap_or(std::f64::NAN),
+            epoch.target_attitude.unwrap_or(std::f64::NAN),
             epoch.acc_updates,
             epoch.thrusters_firing,
         )?;

@@ -225,7 +225,7 @@ pub fn update_switch_node(world: &mut World, node_id: Ent) -> Option<()> {
         let track = world.segments.get(*track_id)?;
         let term = track.get_terminus(node_id)?;
         let iso = track.eval_at(term, 0.0);
-        let nearby = track.eval_at(term, 1.0).translation.as_dvec2();
+        let nearby = track.eval_at(term, 1.0).tr();
         let angle = wrap_0_2pi_f64(iso.rotation as f64).to_degrees();
         let angle = angle % 180.0;
 

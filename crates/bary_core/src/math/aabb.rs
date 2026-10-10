@@ -13,8 +13,13 @@ impl AABB {
         span: Vec2::splat(1.0),
     };
 
-    pub fn new(center: Vec2, span: Vec2) -> Self {
-        Self { center, span }
+    pub fn new(center: impl Into<DVec2>, span: impl Into<DVec2>) -> Self {
+        let center = center.into();
+        let span = span.into();
+        Self {
+            center: center.as_vec2(),
+            span: span.as_vec2(),
+        }
     }
 
     pub fn unit() -> Self {

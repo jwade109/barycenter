@@ -33,13 +33,13 @@ pub fn spawn_asteroid(world: &mut World, ast: Asteroid, iso: Isometry2d) -> Ent 
                     let index = LocalTileIndex(I8Vec2::new(j as i8, k as i8));
                     let iso = chunk_index.origin_isometry() * index.center_isometry();
 
-                    let Some(material) = ast.material_at(iso.translation) else {
+                    let Some(material) = ast.material_at(iso.translation.as_vec2()) else {
                         continue;
                     };
 
                     let is_edge = !index.bb().corners().iter().all(|c| {
                         let c = chunk_index.origin_isometry() * Isometry2d::from_pos(*c);
-                        ast.contains(c.translation)
+                        ast.contains(c.translation.as_vec2())
                     });
 
                     let mut tile = TerrainTile::new(parent, material);
@@ -183,7 +183,7 @@ pub fn mine_terrain_tile(
 
     let iso = rock.iso * t.center_isometry();
 
-    let dust = DustParticle::new(iso.translation, world.ticks);
+    let dust = DustParticle::new(iso.translation.as_vec2(), world.ticks);
     world.particles.push(Particle::Dust(dust));
 
     Ok(tile.material())

@@ -227,34 +227,40 @@ pub fn mass_after_maneuver(ve: f64, m0: f64, dv: f64) -> f64 {
     m0 / (dv / ve).exp()
 }
 
-pub fn get_yaw(transform: Isometry2d) -> f32 {
+pub fn get_yaw(transform: Isometry2d) -> f64 {
     transform.rotation
 }
 
 // TODO duplicate
-pub fn in_frame(transform: Isometry2d, pos: Vec2) -> Vec2 {
+pub fn in_frame(transform: Isometry2d, pos: impl Into<DVec2>) -> DVec2 {
+    let pos = pos.into();
     let offset = pos - transform.translation;
     let yaw = get_yaw(transform);
-    rotate(offset, -yaw)
+    rotate_f64(offset, -yaw)
 }
 
 // TODO duplicate
-pub fn express_in_frame(frame: Isometry2d, point: Vec2) -> Vec2 {
+pub fn express_in_frame(frame: Isometry2d, point: impl Into<DVec2>) -> DVec2 {
+    let point = point.into();
     let delta = point - frame.translation;
     let x = frame.local_x().dot(delta);
     let y = frame.local_y().dot(delta);
     (x, y).into()
 }
 
-pub fn low_pass(actual: f32, target: f32, rate: f32) -> f32 {
+pub fn low_pass_f32(actual: f32, target: f32, rate: f32) -> f32 {
+    actual + (target - actual) * rate
+}
+
+pub fn low_pass_f64(actual: f64, target: f64, rate: f64) -> f64 {
     actual + (target - actual) * rate
 }
 
 pub fn body_frame_wrench(
     thrust: f32,
-    center_of_thrust: Vec2,
+    center_of_thrust: DVec2,
     rotation: Rotation,
-    com: Vec2,
+    com: DVec2,
 ) -> Isometry2d {
     let u = rotation.to_dir();
     let lever_arm = center_of_thrust - com;
@@ -310,6 +316,6 @@ mod tests {
 
         assert_eq!(in_frame, in_frame_2);
 
-        assert_eq!(in_frame, Vec2::new(15.879754, 4.2992296));
+        assert_eq!(in_frame, DVec2::new(15.879754, 4.2992296));
     }
 }

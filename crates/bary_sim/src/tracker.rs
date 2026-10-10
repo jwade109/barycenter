@@ -4,23 +4,23 @@ use std::collections::VecDeque;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Tracker {
-    origin: VecDeque<Vec2>,
-    center_of_mass: VecDeque<Vec2>,
-    centroid: VecDeque<Vec2>,
+    origin: VecDeque<DVec2>,
+    center_of_mass: VecDeque<DVec2>,
+    centroid: VecDeque<DVec2>,
 }
 
 impl Tracker {
     pub const MAX_LEN: usize = 500;
 
-    pub fn series(&self) -> [&VecDeque<Vec2>; 3] {
+    pub fn series(&self) -> [&VecDeque<DVec2>; 3] {
         [&self.origin, &self.center_of_mass, &self.centroid]
     }
 
-    pub fn center_of_mass(&self) -> &VecDeque<Vec2> {
+    pub fn center_of_mass(&self) -> &VecDeque<DVec2> {
         &self.center_of_mass
     }
 
-    fn enqueue(hist: &mut VecDeque<Vec2>, pose: Isometry2d) {
+    fn enqueue(hist: &mut VecDeque<DVec2>, pose: Isometry2d) {
         hist.push_back(pose.translation);
         if hist.len() > Self::MAX_LEN {
             hist.pop_front();

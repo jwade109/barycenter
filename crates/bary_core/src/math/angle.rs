@@ -9,12 +9,16 @@ impl Angle {
         Self::radians(a.to_radians())
     }
 
-    pub fn radians(a: f32) -> Self {
-        Self(wrap_pi_npi(a))
+    pub fn radians(a: impl Into<f64>) -> Self {
+        Self(wrap_pi_npi(a.into() as f32))
     }
 
     pub fn as_rad(&self) -> f32 {
         self.0
+    }
+
+    pub fn as_rad_f64(&self) -> f64 {
+        self.0 as f64
     }
 
     pub fn as_deg(&self) -> f32 {

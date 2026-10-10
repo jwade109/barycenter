@@ -9,7 +9,7 @@ use crate::GlobalTileIndex;
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum WorldDelta {
     ClearAll,
-    Ping(Vec2),
+    Ping(DVec2),
     SpawnShipAt(String, BlueprintId, Isometry2d),
     FastForwardTo(u64),
     SetWaypoint {

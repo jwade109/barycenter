@@ -28,13 +28,13 @@ fn camera_moves_with_wasd(
     lock_rotation: &mut bool,
     sounds: &mut SoundEffects,
 ) {
-    let angular_speed = 2.5f32.to_radians();
-    let speed = 40.0 / target.zoom;
+    let angular_speed = 2.5f64.to_radians();
+    let speed = 40.0 / target.zoom as f64;
 
     let old_follow = *follow;
 
-    let right = rotate(Vec2::X, target.isometry.rotation);
-    let up = rotate(right, PI / 2.0);
+    let right = rotate_f64(DVec2::X, target.isometry.rotation);
+    let up = rotate_f64(right, PI_64 / 2.0);
 
     if input.is_key_pressed(Key::ControlLeft) {
         return;
@@ -72,29 +72,29 @@ fn camera_moves_with_wasd(
 
 fn editor_actual_offset_smooth_animation(target: Vec2, actual: &mut Vec2) {
     let rate_translation = 0.2;
-    actual.x = low_pass(actual.x, target.x, rate_translation);
-    actual.y = low_pass(actual.y, target.y, rate_translation);
+    actual.x = low_pass_f32(actual.x, target.x, rate_translation);
+    actual.y = low_pass_f32(actual.y, target.y, rate_translation);
 }
 
 pub fn animate_camera_towards_target(target: &Camera, actual: &mut Camera) {
     let rate_translation = 0.2;
     let rate_rotation = 0.2;
-    actual.isometry.translation.x = low_pass(
+    actual.isometry.translation.x = low_pass_f64(
         actual.isometry.translation.x,
         target.isometry.translation.x,
         rate_translation,
     );
-    actual.isometry.translation.y = low_pass(
+    actual.isometry.translation.y = low_pass_f64(
         actual.isometry.translation.y,
         target.isometry.translation.y,
         rate_translation,
     );
-    actual.isometry.rotation = low_pass(
+    actual.isometry.rotation = low_pass_f64(
         actual.isometry.rotation,
         target.isometry.rotation,
         rate_rotation,
     );
-    actual.zoom = low_pass(actual.zoom, target.zoom, rate_translation);
+    actual.zoom = low_pass_f32(actual.zoom, target.zoom, rate_translation as f32);
 }
 
 fn update_actual_hover_part_info(client: &mut ClientSpecificInfo, grids: &Components<VehicleGrid>) {
@@ -108,7 +108,7 @@ fn update_actual_hover_part_info(client: &mut ClientSpecificInfo, grids: &Compon
         let (grid_id, offset) = some_or_return!(get_closest_grid(grids, world_pos, None));
         let dist = offset.length();
         let grid = ok_or_return!(grids.try_get(grid_id));
-        if 2.0 * grid.bounding_radius() < dist {
+        if 2.0 * (grid.bounding_radius() as f64) < dist {
             return;
         }
         let origin = grid.origin();
@@ -291,13 +291,13 @@ fn update_terrain_selection_info(client: &mut ClientSpecificInfo, asteroids: &Co
 
     for (rock_id, rock) in asteroids.iter() {
         let d = world_pos.distance(rock.iso.translation);
-        if d > rock.ast.max_radius() {
+        if d > rock.ast.max_radius() as f64 {
             continue;
         }
 
         let rock_local = in_frame(rock.iso, world_pos);
 
-        let tile = GlobalTileIndex(vfloor(rock_local / TERRAIN_TILE_WIDTH_METERS));
+        let tile = GlobalTileIndex(vfloor_f64(rock_local / TERRAIN_TILE_WIDTH_METERS));
 
         let info = TerrainSelectionInfo {
             asteroid: *rock_id,

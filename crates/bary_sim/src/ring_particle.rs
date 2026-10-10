@@ -19,13 +19,13 @@ impl Particle {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PingParticle {
-    pos: Vec2,
+    pos: DVec2,
     start_tick: u64,
     duration: u64,
 }
 
 impl PingParticle {
-    pub fn new(pos: Vec2, start_tick: u64) -> Self {
+    pub fn new(pos: DVec2, start_tick: u64) -> Self {
         Self {
             pos,
             start_tick,
@@ -37,7 +37,7 @@ impl PingParticle {
         self.start_tick
     }
 
-    pub fn pos(&self) -> Vec2 {
+    pub fn pos(&self) -> DVec2 {
         self.pos
     }
 

@@ -23,8 +23,8 @@ pub fn drive_ship_on_enter(client: &mut ClientSpecificInfo, world: &World) -> Op
 
 pub fn command_selected_ships_to_waypoint(
     client: &mut ClientSpecificInfo,
-    p: Vec2,
-    q: Vec2,
+    p: DVec2,
+    q: DVec2,
 ) -> Vec<WorldDelta> {
     let mut deltas = Vec::new();
 
@@ -38,11 +38,11 @@ pub fn command_selected_ships_to_waypoint(
         let s = if n_ships == 1 {
             1.0
         } else {
-            i as f32 / (n_ships - 1) as f32
+            i as f64 / (n_ships - 1) as f64
         };
 
         let waypont = p.lerp(q, s);
-        let rotation = Vec2::X.angle_to(q - p);
+        let rotation = DVec2::X.angle_to(q - p);
         let waypoint = Isometry2d::new(waypont, rotation);
 
         let delta = WorldDelta::SetWaypoint {
@@ -107,7 +107,7 @@ pub fn toggle_following_on_key_f(client: &mut ClientSpecificInfo, sounds: &mut S
 pub fn reset_camera_on_ctrl_r(client: &mut ClientSpecificInfo) {
     if client.input.is_key_pressed(Key::ControlLeft) {
         debug!("Reset camera");
-        client.target_camera.isometry.translation = Vec2::ZERO;
+        client.target_camera.isometry.translation = DVec2::ZERO;
         client.target_camera.isometry.rotation = 0.0;
         client.target_camera.zoom = 8.0;
     }
@@ -136,8 +136,8 @@ pub fn enter_ship_editor(
 
     client.viewport = Viewport::Editor(EditorState {
         vehicle: grid_id,
-        target_offset: centroid,
-        actual_offset: centroid,
+        target_offset: centroid.as_vec2(),
+        actual_offset: centroid.as_vec2(),
         camera_rotation: Rotation::East,
         prototype_id: None,
         part_rotation: Rotation::East,

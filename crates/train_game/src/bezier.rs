@@ -113,8 +113,8 @@ impl BezierCurve {
         let ls = self.linestring(0.0, 1.0, 30);
         ls.windows(2)
             .map(|p| {
-                let a = p[0].translation.as_dvec2();
-                let b = p[1].translation.as_dvec2();
+                let a = p[0].tr();
+                let b = p[1].tr();
                 a.distance(b)
             })
             .sum()

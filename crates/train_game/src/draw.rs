@@ -141,7 +141,7 @@ fn draw_bezier(
     let points = bezier
         .linestring(0.0, 1.0, 30)
         .into_iter()
-        .map(|p| view.world_to_screen(p.translation.as_dvec2()))
+        .map(|p| view.world_to_screen(p.tr()))
         .collect();
 
     cmd.linestring(points).thickness(thickness).color(color);
@@ -192,8 +192,8 @@ fn draw_track_junctions(cmd: &mut RenderCommands, world: &World, view: &Viewport
         if node.is_switch() {
             let iso = node.isometry();
 
-            let p = iso.offset(Vec2::X * 2.0).translation.as_dvec2();
-            let q = iso.offset(-Vec2::X * 2.0).translation.as_dvec2();
+            let p = iso.offset(Vec2::X * 2.0).tr();
+            let q = iso.offset(-Vec2::X * 2.0).tr();
 
             let p = view.world_to_screen(p);
             let q = view.world_to_screen(q);
@@ -202,8 +202,8 @@ fn draw_track_junctions(cmd: &mut RenderCommands, world: &World, view: &Viewport
                 .thickness(view.meters(2.0))
                 .color(Color::GRAY);
 
-            let p = iso.offset(Vec2::Y * 3.0).translation.as_dvec2();
-            let q = iso.offset(-Vec2::Y * 3.0).translation.as_dvec2();
+            let p = iso.offset(Vec2::Y * 3.0).tr();
+            let q = iso.offset(-Vec2::Y * 3.0).tr();
 
             let p = view.world_to_screen(p);
             let q = view.world_to_screen(q);
@@ -631,8 +631,8 @@ fn draw_selected_track(
         Terminus::Start => cursor,
         Terminus::End => {
             let mut iso = cursor;
-            iso.rotation += bary_core::prelude::PI;
-            iso.rotation = wrap_0_2pi_f64(iso.rotation as f64) as f32;
+            iso.rotation += bary_core::prelude::PI_64;
+            iso.rotation = wrap_0_2pi_f64(iso.rotation);
             iso
         }
     };
@@ -669,8 +669,8 @@ fn draw_hovered_track(
     let track = world.segments.get(loc.track_id)?;
 
     let color = Color::ORANGE.alpha(0.2);
-    let p = view.world_to_screen(track.center.translation.as_dvec2());
-    let s = view.world_to_screen(track.eval_at(Terminus::Start, 0.0).translation.as_dvec2());
+    let p = view.world_to_screen(track.center.tr());
+    let s = view.world_to_screen(track.eval_at(Terminus::Start, 0.0).tr());
 
     draw_track(cmd, track, world, &view, false, color, 24.0);
     cmd.circle(s).radii(12.0, 20.0).color(Color::FOREST_GREEN);
@@ -688,8 +688,8 @@ fn draw_hovered_track(
         Terminus::Start => cursor,
         Terminus::End => {
             let mut iso = cursor;
-            iso.rotation += bary_core::prelude::PI;
-            iso.rotation = wrap_0_2pi_f64(iso.rotation as f64) as f32;
+            iso.rotation += bary_core::prelude::PI_64;
+            iso.rotation = wrap_0_2pi_f64(iso.rotation);
             iso
         }
     };

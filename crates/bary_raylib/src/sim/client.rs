@@ -39,7 +39,7 @@ pub struct FreeFlying {
     pub lock_rotation: bool,
     pub selection_info: SelectionInfo,
     pub hovered_chunk: Option<TerrainSelectionInfo>,
-    pub waypoint_widget: Option<Vec2>,
+    pub waypoint_widget: Option<DVec2>,
 
     // for docking
     pub offset: PartCoord,

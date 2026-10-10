@@ -38,7 +38,12 @@ impl std::fmt::Display for Instruction {
                 write!(f, "CTRL")
             }
             Instruction::HoldPosition(iso) => {
-                write!(f, "HP pos={:0.2} hdg={:0.2}", iso.translation, iso.rotation.to_degrees())
+                write!(
+                    f,
+                    "HP pos={:0.2} hdg={:0.2}",
+                    iso.translation,
+                    iso.rotation.to_degrees()
+                )
             }
             Instruction::Drift => {
                 write!(f, "DRIFT")

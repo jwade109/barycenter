@@ -170,7 +170,7 @@ pub fn update_world(
         if car.is_front() && world.ticks % 5 == 0 {
             let track = world.segments.get(car.segment).unwrap();
             let iso = track.eval_at(car.origin, car.pos);
-            let mut vel = car.vel * iso.local_x().as_dvec2();
+            let mut vel = car.vel * iso.local_x();
             if car.origin == Terminus::End {
                 vel = rotate_f64(vel, PI_64);
             }
@@ -320,8 +320,8 @@ pub fn process_input(
 
     let dir = DVec2::new(x_pull as f64, y_pull as f64).normalize_or_zero();
 
-    let vel = (dir.x * world.target_camera.isometry.local_x().as_dvec2()
-        + dir.y * world.target_camera.isometry.local_y().as_dvec2())
+    let vel = (dir.x * world.target_camera.isometry.local_x()
+        + dir.y * world.target_camera.isometry.local_y())
         * speed;
 
     let r = input.is_key_pressed(Key::KeyE);
@@ -329,8 +329,8 @@ pub fn process_input(
 
     let angular_vel = (l as u8 as f64 - r as u8 as f64) * 2.0;
 
-    world.target_camera.isometry.translation += (vel * dt).as_vec2() / world.target_camera.zoom;
-    world.target_camera.isometry.rotation += (angular_vel * dt) as f32;
+    world.target_camera.isometry.translation += (vel * dt) / world.target_camera.zoom as f64;
+    world.target_camera.isometry.rotation += (angular_vel * dt);
 
     let view = Viewport::new(world.camera, screen_width);
     let mouse_world = view.screen_to_world(mouse);

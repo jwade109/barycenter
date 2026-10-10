@@ -177,7 +177,7 @@ impl RenderCommands {
 
     pub fn isometry(&mut self, iso: impl Into<Isometry2d>, length: f64) {
         let iso = iso.into();
-        let c = iso.translation.as_dvec2();
+        let c = iso.translation;
         let x = c + rotate_f64(DVec2::X, iso.rotation as f64) * length;
         let y = c + rotate_f64(DVec2::Y, iso.rotation as f64) * length;
 
@@ -228,7 +228,7 @@ impl RenderCommands {
         iso: impl Into<Isometry2d>,
     ) -> RectBuilder<'a> {
         RectBuilder::new(self, iso)
-            .dims(handle.size.as_dvec2())
+            .dims(handle.size)
             .sprite(handle.id)
             .color(Color::WHITE)
     }
@@ -266,13 +266,13 @@ fn generate_text_layout(
     layout_width: Option<f64>,
     z: f64,
 ) -> (Vec<CharCommand>, DVec2) {
-    let right = iso.local_x().as_dvec2();
-    let down = -iso.local_y().as_dvec2();
+    let right = iso.local_x();
+    let down = -iso.local_y();
 
     let mut col_offset = 0;
     let mut row = 0;
 
-    let mut cursor = iso.translation.as_dvec2() + down * font_size;
+    let mut cursor = iso.translation + down * font_size;
 
     let font_size = font_size / font.size as f64;
 
@@ -284,7 +284,7 @@ fn generate_text_layout(
         if ch == '\n' {
             row += 1;
             cursor =
-                iso.translation.as_dvec2() + down * (row + 1) as f64 * font.size as f64 * font_size;
+                iso.translation + down * (row + 1) as f64 * font.size as f64 * font_size;
             col_offset = 0;
             sum_x = 0.0;
             continue;
@@ -324,7 +324,7 @@ fn generate_text_layout(
         if let Some(layout_width) = layout_width {
             if ch == ' ' && sum_x > layout_width {
                 row += 1;
-                cursor = iso.translation.as_dvec2() + down * (row + 1) as f64;
+                cursor = iso.translation + down * (row + 1) as f64;
                 col_offset = 0;
                 sum_x = 0.0;
             }
@@ -540,7 +540,7 @@ impl<'a> RectBuilder<'a> {
         let iso = iso.into();
         Self {
             commands,
-            pos: iso.translation.as_dvec2(),
+            pos: iso.translation,
             dims: DVec2::splat(70.0),
             angle: iso.rotation as f64,
             z: 0.5,
@@ -584,9 +584,9 @@ impl<'a> RectBuilder<'a> {
 impl<'a> Drop for RectBuilder<'a> {
     fn drop(&mut self) {
         let pos = if self.centered {
-            let iso = Isometry2d::ZERO.with_rotation(self.angle as f32);
-            let x = iso.local_x().as_dvec2();
-            let y = iso.local_y().as_dvec2();
+            let iso = Isometry2d::ZERO.with_rotation(self.angle);
+            let x = iso.local_x();
+            let y = iso.local_y();
             let d = self.dims / 2.0;
             let off = x * d.x + y * d.y;
             self.pos - off

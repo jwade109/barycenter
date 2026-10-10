@@ -8,7 +8,7 @@ pub struct VehicleGrid {
     pub name: String,
     pub blueprint: Option<BlueprintId>,
     pub parts_mass: Mass,
-    pub center_of_mass: Vec2,
+    pub center_of_mass: DVec2,
     pub particle_location: Isometry2d,
     pub velocity: Isometry2d,
     pub body_frame_forces: Isometry2d,
@@ -54,7 +54,7 @@ impl VehicleGrid {
             name: name.into(),
             blueprint: bp_id,
             parts_mass: Mass::ZERO,
-            center_of_mass: Vec2::ZERO,
+            center_of_mass: DVec2::ZERO,
             particle_location: Isometry2d::ZERO,
             velocity: Isometry2d::ZERO,
             body_frame_forces: Isometry2d::ZERO,
@@ -73,9 +73,9 @@ impl VehicleGrid {
         self.parts_mass
     }
 
-    pub fn centroid(&self) -> Vec2 {
-        let lower = PartCoord::new(self.vehicle_bounds.0).to_meters();
-        let upper = PartCoord::new(self.vehicle_bounds.1).to_meters();
+    pub fn centroid(&self) -> DVec2 {
+        let lower = PartCoord::new(self.vehicle_bounds.0).to_meters().as_dvec2();
+        let upper = PartCoord::new(self.vehicle_bounds.1).to_meters().as_dvec2();
         (upper + lower) / 2.0
     }
 
@@ -85,12 +85,12 @@ impl VehicleGrid {
         origin.offset(c)
     }
 
-    pub fn linear_acceleration(&self) -> Vec2 {
-        self.body_frame_forces.translation / self.parts_mass.to_kg_f64() as f32
+    pub fn linear_acceleration(&self) -> DVec2 {
+        self.body_frame_forces.translation / self.parts_mass.to_kg_f64()
     }
 
-    pub fn angular_acceleration(&self) -> f32 {
-        let moment_of_inertia = self.parts_mass.to_kg_f64() as f32 * 100.0;
+    pub fn angular_acceleration(&self) -> f64 {
+        let moment_of_inertia = self.parts_mass.to_kg_f64() * 100.0;
         self.body_frame_forces.rotation / moment_of_inertia
     }
 

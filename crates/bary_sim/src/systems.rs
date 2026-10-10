@@ -13,7 +13,7 @@ pub fn sys_propagate_grid_rigid_bodies(grids: &mut Components<VehicleGrid>) {
     for grid in grids.values_mut() {
         let body_frame_accel = grid.linear_acceleration();
         let omega = grid.angular_acceleration();
-        let accel = rotate(body_frame_accel, grid.particle_location.rotation);
+        let accel = rotate_f64(body_frame_accel, grid.particle_location.rotation);
         grid.particle_location.translation += grid.velocity.translation * NOMINAL_DT;
         grid.velocity.translation += accel * NOMINAL_DT;
         grid.particle_location.rotation += grid.velocity.rotation * NOMINAL_DT;
@@ -159,15 +159,15 @@ pub fn get_excavator_tiles(
     for (rock_id, rock) in world.asteroids.iter() {
         let wrt_asteroid = in_frame(rock.iso, part_iso.translation);
 
-        if wrt_asteroid.length() > rock.ast.max_radius() {
+        if wrt_asteroid.length() > rock.ast.max_radius() as f64 {
             continue;
         }
 
         let mut tiles = Vec::new();
 
-        let gc = GlobalTileIndex(vfloor(wrt_asteroid / TERRAIN_TILE_WIDTH_METERS));
+        let gc = GlobalTileIndex(vfloor_f64(wrt_asteroid / TERRAIN_TILE_WIDTH_METERS));
 
-        let ri = 2 * (ex.radius / TERRAIN_TILE_WIDTH_METERS).ceil() as i32;
+        let ri = 2 * (ex.radius as f64 / TERRAIN_TILE_WIDTH_METERS).ceil() as i32;
 
         for x in -ri..ri {
             for y in -ri..ri {
@@ -175,7 +175,7 @@ pub fn get_excavator_tiles(
                 let g = GlobalTileIndex(gc.0 + offset);
                 let c = g.center_isometry();
                 let dist = c.translation.distance(wrt_asteroid);
-                if dist < ex.radius {
+                if dist < ex.radius as f64 {
                     tiles.push(g);
                     //     let o = g.origin_isometry();
                     //     fill_rectangle(d, ast.iso * o, tile_dims, Color::TEAL.alpha(0.5));
@@ -468,7 +468,7 @@ mod tests {
             .blueprint("spacestation")
             .build();
 
-        assert!(get_closest_grid(&world.grids, Vec2::new(100.0, 200.0), None).is_none());
+        assert!(get_closest_grid(&world.grids, DVec2::new(100.0, 200.0), None).is_none());
 
         let bp_id: BlueprintId = "remora".into();
         let expected_id = world.spawner.next();
@@ -476,8 +476,8 @@ mod tests {
         assert_eq!(id, expected_id);
 
         let grid = world.grids.try_get_mut(id).unwrap();
-        grid.particle_location.translation = Vec2::new(40.0, 156.0);
-        grid.particle_location.rotation = 30.0f32.to_radians();
+        grid.particle_location.translation = DVec2::new(40.0, 156.0);
+        grid.particle_location.rotation = 30.0f64.to_radians();
 
         let centroid = grid.centroid_isometry();
 
@@ -485,7 +485,7 @@ mod tests {
             update_world(&mut world);
             let test_pos = centroid.offset(Vec2::new(100.0, 200.0)).translation;
             let e = get_closest_grid(&world.grids, test_pos, None);
-            assert_eq!(e, Some((expected_id, Vec2::new(99.99999, 199.99998))));
+            assert_eq!(e, Some((expected_id, DVec2::new(99.99999, 199.99998))));
         }
 
         assert_world_is_consistent(&world);
@@ -711,7 +711,7 @@ mod tests {
 
         assert_eq!(
             grid.body_frame_forces.translation,
-            Vec2::new(400000.0, 320000.0)
+            DVec2::new(400000.0, 320000.0)
         );
 
         let r1 = set_thruster_state(a_id, &mut world, false);
@@ -730,7 +730,10 @@ mod tests {
 
         let grid = world.grids.try_get(grid_id).unwrap();
 
-        assert_eq!(grid.body_frame_forces.translation, Vec2::new(0.0, 320000.0));
+        assert_eq!(
+            grid.body_frame_forces.translation,
+            DVec2::new(0.0, 320000.0)
+        );
 
         let r1 = set_thruster_state(a_id, &mut world, false);
         let r2 = set_thruster_state(b_id, &mut world, false);
@@ -750,7 +753,7 @@ mod tests {
 
         assert_eq!(
             grid.body_frame_forces.translation,
-            IVec2::new(0, 0).as_vec2()
+            IVec2::new(0, 0).as_dvec2()
         );
     }
 
@@ -764,7 +767,7 @@ mod tests {
         let id = spawn_grid_with_random_name(&mut world, "pollux").unwrap();
         let (_mass, com) = get_grid_physical_props_by_id(id, &world.grids, &world.parts).unwrap();
 
-        assert_eq!(com, Vec2::new(0.001067417, 0.022271877));
+        assert_eq!(com, DVec2::new(0.001067417, 0.022271877));
 
         let cargo_id = get_proto_by_name(&world.prototypes, "cargo").unwrap();
         let cargo_proto = world.prototypes.try_get(cargo_id).unwrap();
@@ -780,7 +783,7 @@ mod tests {
         let (_mass, com) =
             get_grid_physical_props_by_id(grid_id, &world.grids, &world.parts).unwrap();
 
-        assert_eq!(com, Vec2::splat(0.75));
+        assert_eq!(com, DVec2::splat(0.75));
     }
 
     #[test]
@@ -856,8 +859,8 @@ mod tests {
 
         dbg!(grid);
 
-        let expected_com =
-            PartCoord(dims.as_ivec2()).to_meters() / 2.0 + PartCoord(insert_location).to_meters();
+        let expected_com = PartCoord(dims.as_ivec2()).to_meters().as_dvec2() / 2.0
+            + PartCoord(insert_location).to_meters().as_dvec2();
 
         assert_eq!(grid.center_of_mass, expected_com);
         assert_eq!(grid.origin(), (0.0, 0.0, 0.0).into());
@@ -881,14 +884,14 @@ mod tests {
 
         let grid = world.grids.try_get_mut(grid_id).unwrap();
 
-        grid.particle_location.translation = Vec2::ZERO;
+        grid.particle_location.translation = DVec2::ZERO;
 
-        assert_eq!(grid.body_frame_forces.translation, Vec2::new(3500.0, 0.0));
+        assert_eq!(grid.body_frame_forces.translation, DVec2::new(3500.0, 0.0));
         assert_eq!(grid.body_frame_forces.rotation, 0.0);
         assert_eq!(grid.parts_mass, Mass::kilograms(1000));
 
         // body frame acceleration should be 3.5 m/s^2
-        assert_eq!(grid.linear_acceleration(), Vec2::new(3.5, 0.0));
+        assert_eq!(grid.linear_acceleration(), DVec2::new(3.5, 0.0));
         assert_eq!(grid.angular_acceleration(), 0.0);
 
         // run the simulation for 2 seconds at 50 Hz
@@ -901,7 +904,7 @@ mod tests {
         // this is an approximation of the following
         // continuous time kinematic equation:
         // d = 1/2 at^2  --> 0.5 * 3.5 * 2^2 = 7
-        assert_eq!(iso.translation, Vec2::new(6.9299994, 0.0));
+        assert_eq!(iso.translation, DVec2::new(6.9299994, 0.0));
         assert_eq!(iso.rotation, 0.0);
     }
 
@@ -968,9 +971,9 @@ mod tests {
 
         let grid = world.grids.try_get_mut(grid_id).unwrap();
 
-        grid.particle_location.translation = Vec2::ZERO;
+        grid.particle_location.translation = DVec2::ZERO;
 
-        assert_eq!(grid.center_of_mass, Vec2::new(0.5, 0.25));
+        assert_eq!(grid.center_of_mass, DVec2::new(0.5, 0.25));
 
         assert_eq!(grid_pose(&world.grids, grid_id), Some(Isometry2d::ZERO));
 

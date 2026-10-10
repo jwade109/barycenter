@@ -13,7 +13,7 @@ fn make_length_spline(bezier: &BezierCurve) -> Spline<f64, f64> {
     let points: Vec<_> = linspace_f64(0.0, 1.0, 100)
         .into_iter()
         .map(|t| {
-            let p = bezier.eval(t).translation.as_dvec2();
+            let p = bezier.eval(t).tr();
             (t, p)
         })
         .collect();
@@ -99,13 +99,13 @@ impl TrackSegment {
 
         let center = bezier.eval(s_to_t.sample(length / 2.0).unwrap());
 
-        let mut lower = center.translation.as_dvec2();
-        let mut upper = center.translation.as_dvec2();
+        let mut lower = center.tr();
+        let mut upper = center.tr();
 
         let mut chunks = BTreeSet::new();
 
         for t in linspace_f64(0.0, 1.0, 100) {
-            let p = bezier.eval(t).translation.as_dvec2();
+            let p = bezier.eval(t).tr();
             lower.x = lower.x.min(p.x);
             lower.y = lower.y.min(p.y);
             upper.x = upper.x.max(p.x);
