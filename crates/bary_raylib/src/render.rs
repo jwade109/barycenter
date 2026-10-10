@@ -16,6 +16,7 @@ use bary_sim::*;
 use bary_terminal::*;
 use bary_ui::*;
 use early_returns::*;
+use log::info;
 use raylib::prelude::*;
 
 pub fn to_raylib_camera(camera: &Camera, screen_dims: Vec2) -> Camera2D {
@@ -301,6 +302,13 @@ fn draw_grid_far_indicators(
     }
 }
 
+fn draw_planets(d: &mut RaylibDrawHandle, world: &World) {
+    for planet in world.planets.values() {
+        draw_circle(d, planet.iso.tr(), planet.body.radius, Color::WHITE);
+        draw_isometry_axes(d, planet.iso, "Planet", DVec2::splat(10.0));
+    }
+}
+
 pub fn draw_world(
     world: &World,
     client: &ClientSpecificInfo,
@@ -311,10 +319,10 @@ pub fn draw_world(
 
     let raylib_camera = to_raylib_camera(&client.camera, client.screen_dims);
 
-    draw_players(d, &world, &raylib_camera);
-
     // this apparently is incredibly slow; curious
     let mut c = d.begin_mode2D(raylib_camera);
+
+    draw_planets(&mut c, &world);
 
     draw_origin_and_range_indicators(&mut c);
 

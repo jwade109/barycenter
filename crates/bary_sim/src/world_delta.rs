@@ -52,6 +52,10 @@ pub enum WorldDelta {
         radius: f32,
         seed: u32,
     },
+    SpawnPlanet {
+        iso: Isometry2d,
+        radius: f64,
+    },
     Explode(GridLocation),
     ToggleTracking(Ent),
     RemoveTerrainTile {

@@ -8,10 +8,9 @@ use bary_server::{Application, HeadlessServerApp};
 #[derive(Parser, Debug, Default, Clone)]
 #[command(version, about, long_about = None)]
 pub struct Args {
+    savefile: String,
     #[arg(default_value = "5000")]
     server_port: u16,
-    #[arg(default_value = "saves/")]
-    savefile: Option<String>,
 }
 
 fn main() -> BaryResult<()> {

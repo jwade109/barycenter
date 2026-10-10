@@ -27,6 +27,7 @@ pub struct World {
     pub machines: Components<Machine>,
     pub excavators: Components<Excavator>,
     pub stars: Components<Star>,
+    pub planets: Components<Planet>,
     pub pipes: Components<Pipe>,
     pub debug_portals: Components<DebugPortal>,
     pub asteroids: Components<BigRock>,

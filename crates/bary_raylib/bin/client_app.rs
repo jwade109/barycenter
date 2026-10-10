@@ -81,11 +81,10 @@ impl ClientApp {
         terminal.register_commands(world_delta_commands());
         terminal.register_commands(terminal_commands());
 
-        simple_logger::SimpleLogger::new()
+        _ = simple_logger::SimpleLogger::new()
             .with_level(log_level)
             .env()
-            .init()
-            .unwrap();
+            .init();
 
         let (mut handle, thread) = raylib::init()
             .size(1080, 700)
@@ -111,7 +110,7 @@ impl ClientApp {
         let ui_state = UiInteractionState::default();
 
         Ok(ClientApp {
-            state: AppState::Loading(0, 1000, "Hello there!".to_string()),
+            state: AppState::ListSaves,
             username: args.username,
             world,
             client: ClientSpecificInfo::new(),
@@ -460,6 +459,7 @@ impl ClientApp {
     }
 
     fn load_save_file(&mut self, path: String) {
+        info!("Commanding server to load save file");
         self.node.send(MessageKind::LoadSave(path));
     }
 
@@ -628,7 +628,7 @@ struct Args {
     #[arg(long)]
     username: String,
     #[arg(short)]
-    save_file: Option<String>,
+    save_file: String,
     #[arg(short = 'a', default_value = "127.0.0.1:5000")]
     server_addr: String,
     #[arg(short = 'p', default_value = "5000")]
@@ -1021,6 +1021,10 @@ fn server_thread(args: Args) {
     if !args.run_server {
         return;
     }
+
+    _ = simple_logger::init_with_level(Level::Info);
+
+    info!("Starting server in background thread");
 
     let server = match HeadlessServerApp::new(args.save_file, args.server_port, 10) {
         Ok(server) => server,

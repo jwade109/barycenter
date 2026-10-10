@@ -30,6 +30,7 @@ fn get_blob(world: &World, table: TableIdent) -> Option<Blob> {
         TableIdent::Lights => serialize_table(&world.lights),
         TableIdent::Excavators => serialize_table(&world.excavators),
         TableIdent::Players => serialize_table(&world.players),
+        TableIdent::Planets => serialize_table(&world.planets),
     };
     data.map(|data| Blob::new(data, table))
 }
@@ -89,7 +90,7 @@ pub struct HeadlessServerApp {
 }
 
 impl HeadlessServerApp {
-    pub fn new(save_path: Option<String>, port: u16, speed: u32) -> BaryResult<Self> {
+    pub fn new(save_path: String, port: u16, speed: u32) -> BaryResult<Self> {
         let node = ServerNode::new(port);
 
         let world = World::empty();
@@ -107,9 +108,7 @@ impl HeadlessServerApp {
             transactions: HashMap::new(),
         };
 
-        if let Some(path) = save_path {
-            s.world = load_world(path)?;
-        }
+        s.world = load_world(save_path)?;
 
         Ok(s)
     }
@@ -180,7 +179,7 @@ impl HeadlessServerApp {
     }
 
     fn on_accept_message(&mut self, msg: Message) {
-        debug!("Got a command: {:?}", msg);
+        info!("Got a command: {:?}", msg);
         self.send_tlm_ack();
 
         let MessageSource::Client(client_id) = msg.source else {
@@ -262,6 +261,7 @@ impl HeadlessServerApp {
     }
 
     fn on_accept_load_save(&mut self, path: String) {
+        warn!("Trying to load save file: {path}");
         match load_world(&path) {
             Ok(world) => {
                 self.world = world;

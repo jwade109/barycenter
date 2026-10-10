@@ -64,5 +64,6 @@ pub fn apply_blob(world: &mut World, blob: Blob) -> bool {
         TableIdent::Lights => unpack_blob(&mut world.lights, blob.data()),
         TableIdent::Excavators => unpack_blob(&mut world.excavators, blob.data()),
         TableIdent::Players => unpack_blob(&mut world.players, blob.data()),
+        TableIdent::Planets => unpack_blob(&mut world.planets, blob.data()),
     }
 }

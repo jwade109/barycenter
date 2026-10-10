@@ -1,6 +1,7 @@
 use crate::*;
 use bary_core::prelude::*;
 use bary_factory::*;
+use bary_orbital::Body;
 use bary_parts::*;
 use log::*;
 use std::{collections::BTreeMap, path::PathBuf};
@@ -14,6 +15,7 @@ enum WorldBuilderCommand {
     InsertPipe(PartCoord, PartCoord),
     SetRecipe(PartCoord, RecipeListing),
     SpawnAsteroid(Isometry2d, f32, u32),
+    SpawnPlanet(Isometry2d, f64),
     SetAnchored(bool),
     SpawnPlayer(String, Isometry2d),
     EnterPiloting,
@@ -95,6 +97,12 @@ impl WorldBuilder {
 
     pub fn command(mut self, action: WorldDelta) -> Self {
         let cmd = WorldBuilderCommand::ModifyWorld(action);
+        self.commands.push(cmd);
+        self
+    }
+
+    pub fn planet(mut self, p: impl Into<Isometry2d>, r: f64) -> Self {
+        let cmd = WorldBuilderCommand::SpawnPlanet(p.into(), r);
         self.commands.push(cmd);
         self
     }
@@ -249,6 +257,10 @@ impl WorldBuilder {
                         let delta = WorldDelta::PlayerPilotingEnterGrid { player_id, grid_id };
                         _ = apply_delta(&mut world, delta);
                     }
+                }
+                WorldBuilderCommand::SpawnPlanet(iso, radius) => {
+                    let delta = WorldDelta::SpawnPlanet { iso, radius };
+                    _ = apply_delta(&mut world, delta);
                 }
             }
         }
