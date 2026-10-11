@@ -55,6 +55,7 @@ pub enum WorldDelta {
     SpawnPlanet {
         iso: Isometry2d,
         radius: f64,
+        mass: f64,
     },
     Explode(GridLocation),
     ToggleTracking(Ent),

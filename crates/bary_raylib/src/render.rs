@@ -305,7 +305,8 @@ fn draw_grid_far_indicators(
 fn draw_planets(d: &mut RaylibDrawHandle, world: &World) {
     for planet in world.planets.values() {
         draw_circle(d, planet.iso.tr(), planet.body.radius, Color::WHITE);
-        draw_isometry_axes(d, planet.iso, "Planet", DVec2::splat(10.0));
+        let label = format!("{:#?}", planet);
+        draw_isometry_axes(d, planet.iso, &label, DVec2::splat(10.0));
     }
 }
 

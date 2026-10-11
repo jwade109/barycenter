@@ -918,6 +918,7 @@ pub fn update_world(world: &mut World) -> DebugTimers {
         sys_update_grid_acceleration_c(dirty_set, &mut world.grids, &world.thrusters, &world.parts);
         sys_update_computers(&mut world.computers, &world.parts, &world.grids);
         sys_propagate_grid_rigid_bodies(&mut world.grids);
+        sys_propagate_n_body_accel(&mut world.grids, &world.planets);
     }
 
     {

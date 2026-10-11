@@ -1,7 +1,6 @@
 use crate::*;
 use bary_core::prelude::*;
 use bary_factory::*;
-use bary_orbital::Body;
 use bary_parts::*;
 use log::*;
 use std::{collections::BTreeMap, path::PathBuf};
@@ -10,12 +9,17 @@ use std::{collections::BTreeMap, path::PathBuf};
 enum WorldBuilderCommand {
     LoadBlueprint(BlueprintId),
     SpawnShip(BlueprintId, Option<String>, Isometry2d),
+    SetVelocity(Isometry2d),
     ModifyWorld(WorldDelta),
     InsertDebugSource(PartCoord, Item),
     InsertPipe(PartCoord, PartCoord),
     SetRecipe(PartCoord, RecipeListing),
     SpawnAsteroid(Isometry2d, f32, u32),
-    SpawnPlanet(Isometry2d, f64),
+    SpawnPlanet {
+        location: Isometry2d,
+        radius: f64,
+        mass: f64,
+    },
     SetAnchored(bool),
     SpawnPlayer(String, Isometry2d),
     EnterPiloting,
@@ -67,6 +71,12 @@ impl WorldBuilder {
         self
     }
 
+    pub fn set_velocity(mut self, vel: impl Into<Isometry2d>) -> Self {
+        let cmd = WorldBuilderCommand::SetVelocity(vel.into());
+        self.commands.push(cmd);
+        self
+    }
+
     pub fn insert_source(mut self, coord: impl Into<PartCoord>, item: Item) -> Self {
         let cmd = WorldBuilderCommand::InsertDebugSource(coord.into(), item);
         self.commands.push(cmd);
@@ -101,8 +111,12 @@ impl WorldBuilder {
         self
     }
 
-    pub fn planet(mut self, p: impl Into<Isometry2d>, r: f64) -> Self {
-        let cmd = WorldBuilderCommand::SpawnPlanet(p.into(), r);
+    pub fn planet(mut self, p: impl Into<Isometry2d>, mass: f64, r: f64) -> Self {
+        let cmd = WorldBuilderCommand::SpawnPlanet {
+            location: p.into(),
+            radius: r,
+            mass,
+        };
         self.commands.push(cmd);
         self
     }
@@ -190,6 +204,11 @@ impl WorldBuilder {
                         }
                     }
                 }
+                WorldBuilderCommand::SetVelocity(vel) => {
+                    if let Some(id) = self.cursor_grid {
+                        _ = set_grid_vel(&mut world, id, vel);
+                    }
+                }
                 WorldBuilderCommand::ModifyWorld(delta) => {
                     _ = apply_delta(&mut world, delta);
                 }
@@ -258,8 +277,16 @@ impl WorldBuilder {
                         _ = apply_delta(&mut world, delta);
                     }
                 }
-                WorldBuilderCommand::SpawnPlanet(iso, radius) => {
-                    let delta = WorldDelta::SpawnPlanet { iso, radius };
+                WorldBuilderCommand::SpawnPlanet {
+                    location,
+                    mass,
+                    radius,
+                } => {
+                    let delta = WorldDelta::SpawnPlanet {
+                        iso: location,
+                        mass,
+                        radius,
+                    };
                     _ = apply_delta(&mut world, delta);
                 }
             }

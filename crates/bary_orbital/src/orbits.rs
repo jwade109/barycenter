@@ -1,6 +1,9 @@
-use bary_core::prelude::*;
 use crate::{lookup_ta_from_ma, propagator::search_condition};
+use bary_core::prelude::*;
 use serde::{Deserialize, Serialize};
+
+/// Per wikipedia: 6.67430(15)×10−11 m3⋅kg−1⋅s−2[1]
+pub const GRAVITATIONAL_CONSTANT: f64 = 6.67430E-11;
 
 pub fn hyperbolic_range_ta(ecc: f32) -> f32 {
     (-1.0 / ecc).acos()
@@ -128,7 +131,7 @@ impl Body {
     pub const fn with_mass(radius: f64, mass: f64, soi: f64) -> Self {
         Body {
             radius,
-            mu: mass * 12000.0,
+            mu: mass * GRAVITATIONAL_CONSTANT,
             soi,
         }
     }
@@ -144,10 +147,12 @@ impl Body {
     pub fn gravity(&self, p: impl Into<DVec2>) -> DVec2 {
         let p = p.into();
         let rsq = p.length_squared();
-        let rhat = p.normalize_or_zero();
-        if rsq == 0.0 {
+
+        if rsq < self.radius.powi(2) {
             return DVec2::ZERO;
         }
+
+        let rhat = p.normalize_or_zero();
         -self.mu * rhat / rsq
     }
 }

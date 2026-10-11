@@ -1,6 +1,8 @@
+use crate::Planet;
 use crate::*;
 use bary_core::prelude::*;
 use bary_orbital::*;
+use early_returns::some_or_return;
 use std::collections::BTreeSet;
 
 /// Updates ring particles.
@@ -18,6 +20,18 @@ pub fn sys_propagate_grid_rigid_bodies(grids: &mut Components<VehicleGrid>) {
         grid.velocity.translation += accel * NOMINAL_DT;
         grid.particle_location.rotation += grid.velocity.rotation * NOMINAL_DT;
         grid.velocity.rotation += omega * NOMINAL_DT;
+    }
+}
+
+pub fn sys_propagate_n_body_accel(
+    grids: &mut Components<VehicleGrid>,
+    planets: &Components<Planet>,
+) {
+    let planet = some_or_return!(planets.values().next());
+
+    for grid in grids.values_mut() {
+        let accel = planet.gravity(grid.particle_location.tr());
+        grid.velocity.translation += accel * NOMINAL_DT;
     }
 }
 

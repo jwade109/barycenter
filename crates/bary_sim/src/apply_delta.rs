@@ -127,8 +127,8 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             spawn_random_asteroid(world, iso, radius, seed);
             Ok(())
         }
-        WorldDelta::SpawnPlanet { iso, radius } => {
-            spawn_planet(world, iso, radius);
+        WorldDelta::SpawnPlanet { iso, mass, radius } => {
+            spawn_planet(world, iso, mass, radius);
             Ok(())
         }
         WorldDelta::RemoveTerrainTile { asteroid, tile } => {
