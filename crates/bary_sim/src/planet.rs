@@ -36,27 +36,26 @@ mod tests {
 
     #[test]
     fn orbital_math() {
-        const BODY_MASS: f64 = 3E16; // kg
+        const BODY_MASS: f64 = 3E15; // kg
         const SEMI_MAJOR_AXIS: f64 = 1200.0; // meters
 
         const MU: f64 = BODY_MASS * GRAVITATIONAL_CONSTANT;
 
-        assert_eq!(MU, 2002289.9999999998);
+        assert_eq!(MU, 200228.99999999997);
 
         let orbital_period = 2.0 * PI_64 * (SEMI_MAJOR_AXIS.powi(3) / MU).sqrt(); // seconds
 
-        assert_eq!(orbital_period, 184.58153284732376);
+        assert_eq!(orbital_period, 583.6980578027278);
 
         let orbital_velocity = 2.0 * PI_64 * SEMI_MAJOR_AXIS / orbital_period;
 
-        assert_eq!(orbital_velocity, 40.848194574546376);
-
         let accel = MU / SEMI_MAJOR_AXIS.powi(2);
-
-        assert_eq!(accel, 1.3904791666666665);
 
         let accel_two = orbital_velocity.powi(2) / SEMI_MAJOR_AXIS;
 
-        assert_eq!(accel_two, 1.3904791666666667);
+        assert_eq!(
+            (orbital_velocity, accel, accel_two),
+            (12.91733331612992, 0.13904791666666666, 0.13904791666666666)
+        );
     }
 }

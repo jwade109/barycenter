@@ -107,7 +107,12 @@ fn update_actual_hover_part_info(client: &mut ClientSpecificInfo, grids: &Compon
         let (grid_id, offset) = some_or_return!(get_closest_grid(grids, world_pos, None));
         let dist = offset.length();
         let grid = ok_or_return!(grids.try_get(grid_id));
-        if 2.0 * (grid.bounding_radius() as f64) < dist {
+
+        let grid_pos = grid.centroid_isometry().tr();
+        let grid_screen = get_world_to_screen(&client.camera, grid_pos, screen_dims);
+        let d_screen = grid_screen.distance(screen_pos);
+
+        if 20.0 * (grid.bounding_radius() as f64) < dist && d_screen > 80.0 {
             return;
         }
         let origin = grid.origin();

@@ -483,7 +483,7 @@ impl ClientApp {
             UiMessage::PartInfoHandle => {
                 self.part_info_origin += delta;
             }
-            _ => (),
+            e => warn!("Unhandled event: {e:?}"),
         }
     }
 
@@ -530,7 +530,7 @@ impl ClientApp {
                     UiMessage::Settings => {
                         self.state = AppState::Settings;
                     }
-                    _ => (),
+                    e => warn!("Unhandled event: {e:?}"),
                 }
             }
         }
