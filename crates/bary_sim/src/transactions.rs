@@ -36,6 +36,10 @@ pub enum TermCmd {
     ClientReqAllBlobs,
     /// get help about the commands on this terminal
     Help,
+    /// get the current working directory
+    Pwd,
+    /// Go to a different directory
+    Cd(String),
     /// toggle terminal debug output
     ToggleDebugMode,
 }

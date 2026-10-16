@@ -1904,6 +1904,8 @@ pub fn draw_terminal<T: std::fmt::Debug>(
     assets: &Assets,
     bg_color: Color,
 ) {
+    let cwd = "/b_/modules/";
+
     if !cmd.is_active() {
         return;
     };
@@ -1924,8 +1926,8 @@ pub fn draw_terminal<T: std::fmt::Debug>(
         .map(|(c, b)| if !*b { *c } else { ' ' })
         .collect();
 
-    let display = format!("bsh > {}", fg);
-    let display_bg = format!("bsh > {}", bg);
+    let display = format!("({}) bsh > {}", cwd, fg);
+    let display_bg = format!("({}) bsh > {}", cwd, bg);
     // let width = d.get_render_width();
     let height = d.get_render_height();
 

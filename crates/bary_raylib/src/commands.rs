@@ -79,12 +79,23 @@ pub fn help_command() -> Command<TermCmd> {
     Command::new("help", vec![], |_| Ok(TermCmd::Help))
 }
 
+pub fn pwd_command() -> Command<TermCmd> {
+    Command::new("pwd", vec![], |_| Ok(TermCmd::Pwd))
+}
+
+pub fn cd_command() -> Command<TermCmd> {
+    Command::new("cd", vec!["dirname"], |args| {
+        let dirname = parse_arg(args, "dirname")?;
+        Ok(TermCmd::Cd(dirname))
+    })
+}
+
 pub fn loglevel_command() -> Command<TermCmd> {
     Command::new("term.debug", vec![], |_| Ok(TermCmd::ToggleDebugMode))
 }
 
 pub fn terminal_commands() -> Vec<Command<TermCmd>> {
-    vec![help_command(), loglevel_command()]
+    vec![help_command(), loglevel_command(), cd_command()]
 }
 
 pub fn server_console_commands() -> Vec<Command<TermCmd>> {
