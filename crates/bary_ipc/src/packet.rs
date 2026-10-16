@@ -41,7 +41,7 @@ impl Packet {
         Self { payload }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, PacketParseError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), PacketParseError> {
         use PacketParseError::*;
 
         let prefix = get_u16(bytes, 0)?;
@@ -57,10 +57,7 @@ impl Packet {
             return Err(BadSuffix(suffix));
         }
 
-        let payload = bytes
-            .get(6..6 + payload_length)
-            .ok_or(UnexpectedEof)?
-            .to_vec();
+        let payload = bytes.get(6..6 + payload_length).ok_or(UnexpectedEof)?;
 
         let calc_cksm = calculate_checksum(&payload);
 
@@ -71,7 +68,9 @@ impl Packet {
             });
         }
 
-        Ok(Self::new(payload))
+        let n_consumed = 8 + payload.len();
+
+        Ok((Self::new(payload.to_vec()), n_consumed))
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -104,7 +103,7 @@ impl Packet {
 impl TryFrom<&[u8]> for Packet {
     type Error = PacketParseError;
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        Packet::from_bytes(value)
+        Packet::from_bytes(value).map(|p| p.0)
     }
 }
 
@@ -132,13 +131,14 @@ mod tests {
     #[test]
     fn random_packets() {
         for _ in 0..1000 {
-            let len = randint(10, 200);
+            let len = randint(10, 200) as usize;
             let payload = (0..len).map(|_| randint(0, 255) as u8).collect();
             let packet = Packet::new(payload);
             let bytes = packet.to_bytes();
             println!("{bytes:02x?}");
-            let parsed = Packet::from_bytes(&bytes).unwrap();
+            let (parsed, n) = Packet::from_bytes(&bytes).unwrap();
             assert_eq!(packet, parsed);
+            assert_eq!(n, len);
         }
     }
 }

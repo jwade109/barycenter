@@ -13,3 +13,9 @@ log = "0.4.31"
 renet = "2.0.0"
 renet_netcode = "2.0.0"
 serde = { version = "1.0.228", features = ["derive"] }
+clap = { version = "4.6.1", features = ["derive"] }
+anyhow = "1.0.104"
+
+[[bin]]
+name = "framer_test"
+path = "bin/framer_test.rs"
