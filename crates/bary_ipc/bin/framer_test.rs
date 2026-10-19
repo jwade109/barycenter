@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bary_ipc::{Framer, Packet};
 use clap::Parser;
-use log::*;
+use serde::{Deserialize, Serialize};
 use std::{
     fs::OpenOptions,
     io::Write,
@@ -16,12 +16,37 @@ struct Args {
     remote_addr: String,
 }
 
-fn socket_thread(socket: UdpSocket, responses: Sender<Packet>, requests: Receiver<String>) {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct Message {
+    username: String,
+    message: String,
+}
+
+impl Message {
+    fn new(username: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            username: username.into(),
+            message: message.into(),
+        }
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        let s = serde_json::to_string(self).unwrap();
+        s.as_bytes().to_vec()
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        let s = String::from_utf8_lossy(bytes).to_string();
+        serde_json::from_str(&s).ok()
+    }
+}
+
+fn socket_thread(socket: UdpSocket, responses: Sender<Packet>, requests: Receiver<Message>) {
     let mut buf = [0; 4096];
     let mut framer = Framer::new();
     loop {
         for req in requests.try_iter() {
-            let payload = req.as_bytes();
+            let payload = req.to_bytes();
             let packet = Packet::new(payload.to_vec());
             let bytes = packet.to_bytes();
             if let Err(e) = socket.send(&bytes) {
@@ -44,15 +69,8 @@ fn socket_thread(socket: UdpSocket, responses: Sender<Packet>, requests: Receive
 fn receiver_thread(responses: Receiver<Packet>) -> Result<()> {
     loop {
         for resp in responses.try_iter() {
-            let message = String::from_utf8_lossy(resp.payload()).to_string();
-            println!("Got message: {message}");
-            let mut file = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(true)
-                .append(true)
-                .open("foo.txt")?;
-            file.write(&resp.to_bytes())?;
+            let message = Message::from_bytes(resp.payload());
+            println!("Got message: {message:?}");
         }
 
         std::thread::sleep(Duration::from_millis(10));
@@ -71,15 +89,16 @@ fn main() -> Result<()> {
     std::thread::spawn(|| socket_thread(socket, responses_sender, requests_receiver));
     std::thread::spawn(|| receiver_thread(responses_receiver));
 
-    let mut input = String::new();
-
     loop {
+        let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
 
         let s = input.trim().to_string();
 
-        println!("Got: {}", s);
+        let message = Message::new("username", s);
 
-        requests_sender.send(s)?;
+        println!("Got: {:?}", message);
+
+        requests_sender.send(message)?;
     }
 }

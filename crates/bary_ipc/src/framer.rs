@@ -21,7 +21,7 @@ impl Framer {
                 Ok(packet)
             }
             Err(UnexpectedEof) => Err(false),
-            Err(e) => {
+            Err(_) => {
                 self.data.drain(..1);
                 Err(true)
             }
