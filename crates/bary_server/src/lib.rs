@@ -1,5 +1,5 @@
 mod application;
-mod headless_server;
+mod server;
 
 pub use application::*;
-pub use headless_server::*;
+pub use server::*;

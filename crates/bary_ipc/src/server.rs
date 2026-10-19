@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::net::*;
 use std::time::{Instant, SystemTime};
 
+#[derive(Debug, Clone, Copy)]
 pub struct ClientInfo {
     pub rx_count: usize,
     pub tx_count: usize,

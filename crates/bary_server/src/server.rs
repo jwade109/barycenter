@@ -5,6 +5,7 @@ use log::*;
 use log::{debug, info, warn};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use crate::application::Application;
@@ -76,8 +77,9 @@ pub fn sync_frame_from_world(world: &World) -> SyncFrame {
     }
 }
 
-pub struct HeadlessServerApp {
+pub struct BaryServer {
     world: World,
+    save_file: Option<PathBuf>,
     client_telemetry: HashMap<ClientId, ClientTelemetry>,
     usernames: HashMap<ClientId, String>,
     tick_rate: u32,
@@ -89,14 +91,15 @@ pub struct HeadlessServerApp {
     transactions: HashMap<ClientId, PaginatedTransaction>,
 }
 
-impl HeadlessServerApp {
-    pub fn new(save_path: String, port: u16, speed: u32) -> BaryResult<Self> {
+impl BaryServer {
+    pub fn new(port: u16, speed: u32) -> BaryResult<Self> {
         let node = ServerNode::new(port);
 
         let world = World::empty();
 
-        let mut s = Self {
+        Ok(Self {
             world,
+            save_file: None,
             client_telemetry: HashMap::new(),
             usernames: HashMap::new(),
             tick_rate: speed,
@@ -106,11 +109,27 @@ impl HeadlessServerApp {
             md5_sync_timer: WallTimer::hz(2),
             queued_deltas: Vec::new(),
             transactions: HashMap::new(),
-        };
+        })
+    }
 
-        s.world = load_world(save_path)?;
+    pub fn ticks(&self) -> u64 {
+        self.world.ticks
+    }
 
-        Ok(s)
+    pub fn save_file(&self) -> Option<&Path> {
+        self.save_file.as_ref().map(|p| p.as_path())
+    }
+
+    pub fn world(&self) -> &World {
+        &self.world
+    }
+
+    pub fn clients(&self) -> impl Iterator<Item = (&ClientId, &ClientInfo)> {
+        self.node.client_info()
+    }
+
+    pub fn client_telemetry(&self) -> &HashMap<ClientId, ClientTelemetry> {
+        &self.client_telemetry
     }
 
     pub fn get_statistics(&self) -> ServerStatistics {
@@ -149,7 +168,7 @@ impl HeadlessServerApp {
     }
 
     fn process_transactions(&mut self) {
-        let dur = Duration::from_millis(80);
+        let dur = Duration::from_millis(2);
         let now = Instant::now();
         for (client, tr) in &mut self.transactions {
             let next_send = tr.last_sent + dur;
@@ -216,7 +235,7 @@ impl HeadlessServerApp {
                 self.on_accept_world_delta(client_id, delta);
             }
             MessageKind::LoadSave(path) => {
-                self.on_accept_load_save(path);
+                self.load_world(path);
             }
             MessageKind::BeginAsyncWorldDownload => self.begin_async_world_download(client_id),
             _ => self.on_unsupported_message(),
@@ -260,12 +279,14 @@ impl HeadlessServerApp {
         self.node.broadcast(MessageKind::Unsupported);
     }
 
-    fn on_accept_load_save(&mut self, path: String) {
-        warn!("Trying to load save file: {path}");
-        match load_world(&path) {
+    pub fn load_world(&mut self, path: impl AsRef<Path>) {
+        let path = path.as_ref();
+        warn!("Trying to load save file: {}", path.display());
+        match load_world(path) {
             Ok(world) => {
                 self.world = world;
-                info!("Loaded {path}");
+                self.save_file = Some(path.to_path_buf());
+                info!("Loaded {}", path.display());
                 self.node.broadcast(MessageKind::HaveNewSave);
             }
             Err(e) => {
@@ -357,7 +378,7 @@ impl HeadlessServerApp {
     }
 }
 
-impl Application for HeadlessServerApp {
+impl Application for BaryServer {
     fn update(&mut self) {
         if !self.update_timer.tick() {
             return;

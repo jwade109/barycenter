@@ -1026,13 +1026,15 @@ fn server_thread(args: Args) {
 
     info!("Starting server in background thread");
 
-    let server = match HeadlessServerApp::new(args.save_file, args.server_port, 10) {
+    let mut server = match BaryServer::new(args.server_port, 10) {
         Ok(server) => server,
         Err(e) => {
             error!("Failed to start server: {e:?}");
             return;
         }
     };
+
+    server.load_world(args.save_file);
 
     server.spin_forever();
 }
@@ -1042,7 +1044,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server_args = args.clone();
 
-    let _join = std::thread::spawn(move || server_thread(server_args));
+    std::thread::spawn(move || server_thread(server_args));
 
     info!("{:?}", args);
 
