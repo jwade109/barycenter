@@ -10,8 +10,10 @@ use std::{
 
 use crate::Blob;
 
+#[deprecated]
 pub type MessageQueue<T> = Arc<SegQueue<T>>;
 
+#[deprecated]
 pub fn new_message_queue<T>() -> MessageQueue<T> {
     Arc::new(SegQueue::new())
 }

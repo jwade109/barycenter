@@ -7,10 +7,9 @@ mod imgui;
 mod new_ui;
 mod render;
 mod sim;
+mod sound_handler;
 mod sounds;
 mod utils;
-
-mod task;
 
 pub use assets::*;
 pub use async_world_download::*;
@@ -21,5 +20,6 @@ pub use imgui::*;
 pub use new_ui::*;
 pub use render::*;
 pub use sim::*;
+pub use sound_handler::*;
 pub use sounds::*;
 pub use utils::*;

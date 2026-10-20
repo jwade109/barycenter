@@ -8,8 +8,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use crate::application::Application;
-
 fn serialize_table<T: Serialize>(entities: &Components<T>) -> Option<Vec<u8>> {
     bincode::serialize(&entities).ok()
 }
@@ -38,7 +36,6 @@ fn get_blob(world: &World, table: TableIdent) -> Option<Blob> {
 
 struct PaginatedTransaction {
     blobs: BTreeMap<TableIdent, Blob>,
-    offset: usize,
     next_blob: Option<TableIdent>,
     last_sent: Instant,
 }
@@ -55,7 +52,6 @@ impl PaginatedTransaction {
         Self {
             blobs,
             next_blob: all.first().cloned(),
-            offset: 0,
             last_sent: Instant::now(),
         }
     }
@@ -85,7 +81,6 @@ pub struct BaryServer {
     tick_rate: u32,
     node: ServerNode,
     update_timer: WallTimer,
-    print_timer: WallTimer,
     md5_sync_timer: WallTimer,
     queued_deltas: Vec<WorldDelta>,
     transactions: HashMap<ClientId, PaginatedTransaction>,
@@ -105,7 +100,6 @@ impl BaryServer {
             tick_rate: speed,
             node,
             update_timer: WallTimer::hz(TICKS_PER_SECOND as u32),
-            print_timer: WallTimer::hz(1),
             md5_sync_timer: WallTimer::hz(2),
             queued_deltas: Vec::new(),
             transactions: HashMap::new(),
@@ -376,10 +370,8 @@ impl BaryServer {
                 .broadcast(MessageKind::PlayerDisconnected(username));
         }
     }
-}
 
-impl Application for BaryServer {
-    fn update(&mut self) {
+    pub fn update(&mut self) {
         if !self.update_timer.tick() {
             return;
         }
@@ -409,28 +401,5 @@ impl Application for BaryServer {
         self.send_driver_packet();
         self.send_tlm_server_info();
         self.process_transactions();
-    }
-
-    fn draw(&mut self) {
-        if !self.print_timer.tick() {
-            return;
-        }
-
-        debug!("Running da server.");
-        debug!("Ticks:  {}", self.world.ticks);
-        debug!(
-            "Update: {:0.2} / {:0.2} Hz",
-            self.update_timer.actual_rate(),
-            self.update_timer.nominal_rate()
-        );
-        debug!(
-            "Print:  {:0.2} / {:0.2} Hz",
-            self.print_timer.actual_rate(),
-            self.print_timer.nominal_rate()
-        );
-    }
-
-    fn should_exit(&self) -> bool {
-        false
     }
 }

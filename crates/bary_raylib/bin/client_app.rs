@@ -1,6 +1,6 @@
 use bary_core::prelude::*;
 use bary_factory::*;
-use bary_input::InputState;
+use bary_input::{InputHandler, InputState};
 use bary_ipc::*;
 use bary_raylib::*;
 use bary_server::*;
@@ -11,7 +11,6 @@ use clap::Parser;
 use early_returns::*;
 use log::*;
 use raylib::prelude::*;
-use std::thread::JoinHandle;
 use std::time::Duration;
 
 enum AppState {
@@ -25,17 +24,12 @@ enum AppState {
 
 pub struct ClientApp {
     state: AppState,
+    input: InputHandler,
 
     username: String,
 
     client: ClientSpecificInfo,
     world: World,
-
-    #[allow(unused)]
-    debug: DebugInfo,
-
-    _input_thread: JoinHandle<()>,
-    input_queue: MessageQueue<rdev::Event>,
 
     terminal: Terminal<TermCmd>,
 
@@ -64,13 +58,7 @@ pub struct ClientApp {
 
 impl ClientApp {
     fn new(args: Args, log_level: log::LevelFilter) -> Result<Self, Box<dyn std::error::Error>> {
-        let input_queue = new_message_queue();
-        let thread_copy = input_queue.clone();
-        let _input_thread = std::thread::spawn(|| {
-            if let Err(error) = rdev::listen(move |e| thread_copy.push(e)) {
-                println!("Error: {:?}", error)
-            }
-        });
+        let input = InputHandler::new();
 
         let world = World::empty();
 
@@ -114,9 +102,7 @@ impl ClientApp {
             username: args.username,
             world,
             client: ClientSpecificInfo::new(),
-            debug: DebugInfo::default(),
-            _input_thread,
-            input_queue,
+            input,
             terminal,
             handle,
             thread,
@@ -145,35 +131,6 @@ impl ClientApp {
             ticks: self.world.ticks,
         };
         self.node.send(MessageKind::ClientTelemetry(tlm));
-
-        // let id = self
-        //     .world
-        //     .players
-        //     .iter()
-        //     .find_map(|(id, player)| (player.name == self.username).then(|| *id));
-
-        // if let Some(id) = id {
-        //     self.client.player_id = Some(id);
-        //     let delta = WorldDelta::SetPlayerPosition(id, self.client.camera.isometry);
-        //     self.request_server_delta(delta);
-
-        //     let world_pos = if let Some(screen_pos) = self.client.mouse_screen_position {
-        //         Some(screen_to_world(
-        //             &self.client.camera,
-        //             screen_pos,
-        //             self.client.screen_dims,
-        //         ))
-        //     } else {
-        //         None
-        //     };
-
-        //     let delta = WorldDelta::SetPlayerCursorPosition(id, world_pos);
-        //     self.request_server_delta(delta);
-        // } else {
-        //     warn!("Client with username {} isn't in the world", self.username);
-        //     let delta = WorldDelta::SpawnPlayer(self.username.clone(), Isometry2d::ZERO);
-        //     self.request_server_delta(delta);
-        // }
     }
 
     fn update_loading(&mut self) {
@@ -255,11 +212,9 @@ impl ClientApp {
             self.handle.get_screen_height() as f32,
         );
 
-        // HANDLE MESSAGES FROM NETWORK NODE
-
-        while let Some(e) = self.input_queue.pop() {
+        for event in self.input.get_events() {
             let focused = self.handle.is_window_focused();
-            self.client.input.process_rdev_event(&e, focused);
+            self.client.input.process_rdev_event(&event, focused);
         }
 
         match &self.state {
@@ -595,30 +550,6 @@ impl ClientApp {
             _ => self.terminal.log_error(format!("Unsupported: {:?}", cmd)),
         }
     }
-}
-
-fn handle_sounds<'a>(
-    sounds: &SoundEffects,
-    audio: &'a RaylibAudio,
-    active_sounds: &mut Vec<Sound<'a>>,
-) {
-    for sound in sounds {
-        let path = sound.to_path();
-        let sound = match audio.new_sound(path) {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Failed to load sound: {}", e);
-                continue;
-            }
-        };
-
-        sound.set_volume(0.4);
-        sound.play();
-
-        active_sounds.push(sound);
-    }
-
-    active_sounds.retain(|s| s.is_playing());
 }
 
 /// Run the test client app
@@ -1036,7 +967,10 @@ fn server_thread(args: Args) {
 
     server.load_world(args.save_file);
 
-    server.spin_forever();
+    loop {
+        server.update();
+        std::thread::sleep(Duration::from_millis(5));
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -1048,10 +982,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("{:?}", args);
 
-    let mut main_app = ClientApp::new(args, log::LevelFilter::Info)?;
+    let sounds = SoundHandler::new();
 
-    let audio = raylib::audio::RaylibAudio::init_audio_device()?;
-    let mut active_sounds = Vec::new();
+    let mut main_app = ClientApp::new(args, log::LevelFilter::Info)?;
 
     while !main_app.handle.window_should_close() && !main_app.should_exit {
         if !main_app.update_timer.tick() {
@@ -1065,15 +998,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let font = main_app.assets.ui_font();
 
         let ui = make_gui(font, &main_app);
-
-        if main_app
-            .client
-            .input
-            .just_pressed_debounced(rdev::Key::KeyP)
-        {
-            println!("{}", ui);
-            println!("{:?}", main_app.ui_state);
-        }
 
         let scrp = main_app.client.mouse_screen_position;
 
@@ -1127,9 +1051,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             });
 
-        handle_sounds(&main_app.sounds, &audio, &mut active_sounds);
-
-        main_app.sounds.clear();
+        sounds.play_sounds(main_app.sounds.drain(..).collect());
 
         if main_app.client.input.just_pressed(rdev::Key::KeyC)
             && main_app.client.input.is_key_pressed(rdev::Key::ControlLeft)

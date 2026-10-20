@@ -44,10 +44,6 @@ path = "bin/client_app.rs"
 name = "steam"
 path = "bin/steam.rs"
 
-[[bin]]
-name = "spider_player"
-path = "bin/spider_player.rs"
-
 [dev-dependencies]
 criterion = "0.5.1"
 

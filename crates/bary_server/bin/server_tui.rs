@@ -1,15 +1,15 @@
 use bary_core::prelude::{distance_str_v, velocity_str_v};
-use bary_server::{Application, BaryServer};
+use bary_server::BaryServer;
 use bary_sim::{World, apparent_datetime};
 use clap::Parser;
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
-use ratatui::crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind};
+use ratatui::crossterm::event::{KeyCode, *};
 use ratatui::layout::{Constraint, Margin, Rect};
 use ratatui::layout::{Direction, Layout};
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::widgets::canvas::{Canvas, Circle};
-use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget};
+use ratatui::widgets::{Block, Paragraph, Widget};
 use ratatui::{Frame, Terminal};
 use std::time::Duration;
 
@@ -79,7 +79,7 @@ fn server_loop(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     app: &mut BaryServer,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    app.spin_once();
+    app.update();
 
     let mut debug_lines = Vec::new();
 
@@ -126,8 +126,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             loop {
                 server_loop(frames, terminal, &mut app)?;
 
-                if event::poll(Duration::from_millis(2))? {
-                    let event = event::read()?.as_key_event();
+                if poll(Duration::from_millis(2))? {
+                    let event = read()?.as_key_event();
                     if let Some(event) = event {
                         if event.code == KeyCode::Char('q') {
                             break Ok(());

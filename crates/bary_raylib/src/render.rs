@@ -426,64 +426,6 @@ pub fn draw_world(
     // draw_test_isos(&mut d)
 }
 
-fn draw_player_piloting(
-    d: &mut RaylibDrawHandle,
-    world: &World,
-    camera: &Camera2D,
-    name: &str,
-    grid_id: Ent,
-) -> BaryResult<()> {
-    let grid = world.grids.try_get(grid_id)?;
-    let radius = grid.bounding_radius() * camera.zoom * 1.3;
-    let p = glam_to_raylib_swap_y(grid.particle_location.translation);
-    let q = d.get_world_to_screen2D(p, camera);
-
-    let font_size = 18;
-
-    let x = q.x as i32;
-    let y = q.y as i32;
-
-    let radius = radius as i32;
-    let w = radius;
-    let h = radius;
-
-    d.draw_circle_lines(x, y, radius as f32, Color::RED);
-
-    let rec = Rectangle::new((x - w / 2) as f32, (y - h / 2) as f32, w as f32, h as f32);
-    d.draw_rectangle_lines_ex(rec, 4.0, Color::RED);
-
-    let x = x + w / 2 + 6;
-    let y = y + h / 2;
-
-    d.draw_text(&name, x, y, font_size, Color::RED);
-
-    Ok(())
-}
-
-fn draw_players(d: &mut RaylibDrawHandle, world: &World, camera: &Camera2D) {
-    for player in world.players.values() {
-        match &player.state {
-            PlayerState::Flying(iso) => {
-                let p = glam_to_raylib_swap_y(iso.translation);
-                let q = d.get_world_to_screen2D(p, camera);
-                let x = q.x as i32;
-                let y = q.y as i32;
-                d.draw_circle(x, y, 3.0, Color::TEAL);
-                d.draw_text(&player.name, x + 2, y + 6, 18, Color::TEAL);
-            }
-            PlayerState::PilotingGrid(grid_id, _ctrl) => {
-                _ = draw_player_piloting(d, world, camera, &player.name, *grid_id);
-            }
-        }
-
-        if let Some(pos) = player.cursor_world_position {
-            let p = glam_to_raylib_swap_y(pos);
-            let q = d.get_world_to_screen2D(p, camera);
-            d.draw_circle_lines_v(q, 8.0, Color::TEAL);
-        }
-    }
-}
-
 fn draw_excavator(
     d: &mut RaylibDrawHandle,
     part_id: Ent,
