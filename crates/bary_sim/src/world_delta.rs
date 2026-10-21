@@ -76,7 +76,6 @@ pub enum WorldDelta {
         grid_id: Ent,
         ast_id: Ent,
     },
-    SetAnchored(Ent, bool),
     SpawnPlayer(String, Isometry2d),
     PlayerPilotingEnterGrid {
         player_id: Ent,

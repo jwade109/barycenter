@@ -24,9 +24,6 @@ pub struct VehicleGrid {
 
     // TODO this is not tested in any way.
     pub occupancy: BTreeMap<(i32, i32), PartOccupancy>,
-
-    /// whether this vehicle is anchored to an asteroid
-    pub is_anchored: bool,
 }
 
 impl VehicleGrid {
@@ -65,7 +62,6 @@ impl VehicleGrid {
             pipes: BTreeSet::new(),
             vehicle_bounds: (IVec2::ZERO, IVec2::ZERO),
             occupancy: BTreeMap::new(),
-            is_anchored: false,
         }
     }
 

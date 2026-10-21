@@ -54,10 +54,6 @@ pub fn sys_update_thrusters(
             continue;
         }
 
-        if grid.is_anchored {
-            continue;
-        }
-
         let Some(cpu_id) = grid.computers.first() else {
             continue;
         };
@@ -92,27 +88,23 @@ pub fn sys_update_thrusters(
             let center_of_thrust = isometry.translation;
             let rotation = part.region.rot();
             let wrench = body_frame_wrench(
-                thruster.thrust,
+                thruster.thrust(),
                 center_of_thrust,
                 rotation,
                 grid.center_of_mass,
             );
 
-            let old_val = thruster.is_on;
-
-            if thruster.is_rcs {
+            let changed = if thruster.is_rcs() {
                 let can_torque = wrench.rotation.abs() > 0.5 && ctrl.attitude.abs() > 0.5;
                 let is_torque =
                     can_torque && wrench.rotation.signum() as f64 == ctrl.attitude.signum();
                 let is_linear = tac.throttle > 0.0 && tac.use_rcs;
-                thruster.is_on = is_linear || is_torque;
+                thruster.set_state(is_linear || is_torque, Some(*cpu_id))
             } else {
-                thruster.is_on = !tac.use_rcs && tac.throttle > 0.0;
-            }
+                thruster.set_state(!tac.use_rcs && tac.throttle > 0.0, Some(*cpu_id))
+            };
 
-            thruster_changed |= old_val != thruster.is_on;
-
-            thruster.last_controlled_by = Some(*cpu_id);
+            thruster_changed |= changed;
         }
 
         if thruster_changed {
@@ -315,7 +307,7 @@ pub fn set_all_thrusters(grid_id: Ent, new_state: bool, world: &mut World) -> Ba
     let grid = world.grids.try_get(grid_id)?;
     for thruster_id in &grid.thrusters {
         let thruster = world.thrusters.try_get_mut(*thruster_id)?;
-        thruster.is_on = new_state;
+        thruster.set_state(new_state, None);
     }
     update_single_grid_acceleration(
         grid_id,

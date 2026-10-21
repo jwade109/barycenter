@@ -20,7 +20,6 @@ enum WorldBuilderCommand {
         radius: f64,
         mass: f64,
     },
-    SetAnchored(bool),
     SpawnPlayer(String, Isometry2d),
     EnterPiloting,
 }
@@ -123,12 +122,6 @@ impl WorldBuilder {
 
     pub fn asteroid(mut self, p: impl Into<Isometry2d>, r: f32, seed: u32) -> Self {
         let cmd = WorldBuilderCommand::SpawnAsteroid(p.into(), r, seed);
-        self.commands.push(cmd);
-        self
-    }
-
-    pub fn anchored(mut self, anchored: bool) -> Self {
-        let cmd = WorldBuilderCommand::SetAnchored(anchored);
         self.commands.push(cmd);
         self
     }
@@ -253,12 +246,6 @@ impl WorldBuilder {
                         seed,
                     };
                     _ = apply_delta(&mut world, delta);
-                }
-                WorldBuilderCommand::SetAnchored(anchored) => {
-                    if let Some(grid_id) = self.cursor_grid {
-                        let delta = WorldDelta::SetAnchored(grid_id, anchored);
-                        _ = apply_delta(&mut world, delta);
-                    }
                 }
                 WorldBuilderCommand::SpawnPlayer(name, iso) => {
                     let player = Player {

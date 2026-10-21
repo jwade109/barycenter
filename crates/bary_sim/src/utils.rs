@@ -72,7 +72,7 @@ pub fn get_grid_physical_props(
 pub fn set_thruster_state(thruster_id: Ent, world: &mut World, new_state: bool) -> BaryResult<Ent> {
     let part = world.parts.try_get(thruster_id)?;
     let thruster = world.thrusters.try_get_mut(thruster_id)?;
-    thruster.is_on = new_state;
+    thruster.set_state(new_state, None);
     Ok(part.grid_id)
 }
 
@@ -137,7 +137,7 @@ pub fn get_thruster_levels(
     let mut results = Vec::new();
     for thruster_id in &grid.thrusters {
         let thruster = thrusters.try_get(*thruster_id)?;
-        results.push((*thruster_id, thruster.is_on));
+        results.push((*thruster_id, thruster.is_on()));
     }
     Ok(results)
 }
@@ -153,14 +153,10 @@ pub fn update_single_grid_acceleration(
     let grid = grids.try_get_mut(grid_id)?;
     grid.body_frame_forces = Isometry2d::ZERO;
 
-    if grid.is_anchored {
-        return Ok(());
-    }
-
     for thruster_id in &grid.thrusters {
         let thruster = thrusters.try_get(*thruster_id)?;
 
-        if !thruster.is_on {
+        if !thruster.is_on() {
             continue;
         }
 
@@ -169,7 +165,7 @@ pub fn update_single_grid_acceleration(
         let center_of_thrust = part.region.center_isometry().translation;
         let rotation = part.region.rot();
         let wrench = body_frame_wrench(
-            thruster.thrust,
+            thruster.thrust(),
             center_of_thrust,
             rotation,
             grid.center_of_mass,
@@ -281,14 +277,8 @@ pub fn insert_part(
         let machine = data.clone().into_machine();
         world.machines.spawn(part_id, machine);
     }
-    if let Some(data) = &proto.thruster_data {
-        let thruster = Thruster {
-            is_on: false,
-            is_rcs: data.is_rcs,
-            // TODO(gross)
-            thrust: data.thrust as f32,
-            last_controlled_by: None,
-        };
+    if let Some(proto) = &proto.thruster_data {
+        let thruster = Thruster::from_proto(proto);
         world.thrusters.spawn(part_id, thruster);
         grid.thrusters.insert(part_id);
     }
@@ -542,21 +532,6 @@ pub fn toggle_tracking(world: &mut World, grid_id: Ent) -> BaryResult<bool> {
         true
     };
     Ok(tracking)
-}
-
-pub fn set_grid_anchored(world: &mut World, grid_id: Ent, anchored: bool) -> BaryResult<()> {
-    let grid = world.grids.try_get_mut(grid_id)?;
-    grid.is_anchored = anchored;
-    grid.velocity = Isometry2d::ZERO;
-
-    if anchored {
-        set_all_thrusters(grid_id, false, world)?;
-        set_primary_computer_state(grid_id, false, world)?;
-    } else {
-        set_primary_computer_state(grid_id, true, world)?;
-    }
-
-    Ok(())
 }
 
 pub fn grid_set_waypoint_to_asteroid_center(
@@ -1259,7 +1234,7 @@ pub fn get_closest_grid(
     dist_limit: impl Into<Option<f64>>,
 ) -> Option<(Ent, DVec2)> {
     let mut best: Option<(Ent, DVec2, f64)> = None;
-    let dist_limit = dist_limit.into().unwrap_or(std::f64::INFINITY);
+    let dist_limit = dist_limit.into().unwrap_or(f64::INFINITY);
     for (e, grid) in grids.iter() {
         let in_frame = express_in_frame(grid.centroid_isometry(), test_pos);
         let dist = in_frame.length_squared();
@@ -1324,7 +1299,7 @@ pub fn get_sum_linear_forces(
     for part_id in &grid.thrusters {
         let thruster = thrusters.try_get(*part_id)?;
         let part = parts.try_get(*part_id)?;
-        let thrust = rotate(Vec2::X, part.region.rot().to_angle() as f32) * thruster.thrust;
+        let thrust = rotate(Vec2::X, part.region.rot().to_angle() as f32) * thruster.thrust();
         sum += thrust;
     }
     Ok(sum)

@@ -848,8 +848,8 @@ fn make_part_info_gui(ui: &UiBuilder, app: &ClientApp, tree: &mut Tree<UiMessage
         if let Ok(thruster) = app.world.thrusters.try_get(part_id) {
             let s = format!("{:#?}", thruster);
             children.push(ui.button(
-                UiMessage::SetThrusterState(part_id, !thruster.is_on),
-                if thruster.is_on {
+                UiMessage::SetThrusterState(part_id, !thruster.is_on()),
+                if thruster.is_on() {
                     "Turn Off"
                 } else {
                     "Turn On"

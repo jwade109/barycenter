@@ -16,7 +16,6 @@ use bary_sim::*;
 use bary_terminal::*;
 use bary_ui::*;
 use early_returns::*;
-use log::info;
 use raylib::prelude::*;
 
 pub fn to_raylib_camera(camera: &Camera, screen_dims: Vec2) -> Camera2D {
@@ -809,13 +808,13 @@ pub fn draw_thruster_classification(
             let thruster = ok_or_continue!(thrusters.try_get(*thruster_id));
             let part_iso = part.region.center_isometry();
             let wrench = body_frame_wrench(
-                thruster.thrust,
+                thruster.thrust(),
                 part_iso.translation,
                 part.region.rot(),
                 grid.center_of_mass,
             );
 
-            let color = if !thruster.is_rcs {
+            let color = if !thruster.is_rcs() {
                 Color::TEAL
             } else {
                 if wrench.rotation > 0.0 {
@@ -1529,7 +1528,7 @@ fn draw_thruster_plumes(
     }
 
     for (e, t) in thrusters.iter() {
-        if !t.is_on {
+        if !t.is_on() {
             continue;
         }
 

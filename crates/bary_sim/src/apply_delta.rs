@@ -151,10 +151,6 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             grid_set_waypoint_to_asteroid_center(world, grid_id, ast_id)?;
             Ok(())
         }
-        WorldDelta::SetAnchored(grid_id, anchored) => {
-            set_grid_anchored(world, grid_id, anchored)?;
-            Ok(())
-        }
         WorldDelta::PlayerPilotingEnterGrid { player_id, grid_id } => {
             set_player_piloting_grid(world, player_id, grid_id)?;
             Ok(())

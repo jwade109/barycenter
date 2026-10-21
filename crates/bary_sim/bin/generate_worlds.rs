@@ -60,7 +60,6 @@ fn scenario_b() -> BaryResult<()> {
         .blueprint("miner")
         .spawn(("pollux", 2), "", (0.0, 0.0, 0.0))
         .spawn("remora", "", (50.0, 50.0, 0.0))
-        .anchored(true)
         .spawn("miner", "", (-20.0, 20.0, 4.0))
         .asteroid((-80.0, 30.0, 0.1), 50.0, 391)
         .build();
