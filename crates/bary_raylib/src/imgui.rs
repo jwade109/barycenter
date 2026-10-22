@@ -189,7 +189,7 @@ pub fn imgui_all_parts_in_layer(
     sounds: &mut SoundEffects,
 ) {
     let hovered_proto = get_hovered_prototype(client, world);
-    let editor = some_or_return!(client.viewport.editor_mut());
+    let editor = some_or_return!(client.scene_graph.editor_mut());
     let layer = some_or_return!(editor.layer);
     let mouse_pos = client.mouse_screen_position.unwrap_or(Vec2::NAN);
 
@@ -253,7 +253,7 @@ pub fn imgui_editor_layer_indicator(
     client: &mut ClientSpecificInfo,
     sounds: &mut SoundEffects,
 ) {
-    let editor = some_or_return!(client.viewport.editor_mut());
+    let editor = some_or_return!(client.scene_graph.editor_mut());
     let mouse_pos = client.mouse_screen_position.unwrap_or(Vec2::NAN);
 
     let boxes = [

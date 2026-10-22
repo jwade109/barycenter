@@ -100,7 +100,7 @@ fn update_actual_hover_part_info(client: &mut ClientSpecificInfo, grids: &Compon
     let mouse_screen_position = client.mouse_screen_position;
     let screen_dims = client.screen_dims;
 
-    if let Some(free) = client.viewport.free_mut() {
+    if let Some(free) = client.scene_graph.free_mut() {
         free.selection_info.hovered = None;
         let screen_pos = some_or_return!(mouse_screen_position);
         let world_pos = screen_to_world(&client.camera, screen_pos, screen_dims);
@@ -118,7 +118,7 @@ fn update_actual_hover_part_info(client: &mut ClientSpecificInfo, grids: &Compon
         let origin = grid.origin();
         let coord = PartCoord::from_meters_floored(in_frame(origin, world_pos));
         free.selection_info.hovered = Some(GridLocation::new(grid_id, coord));
-    } else if let Some(editor) = client.viewport.editor_mut() {
+    } else if let Some(editor) = client.scene_graph.editor_mut() {
         editor.hovered = None;
         let grid = ok_or_return!(grids.try_get(editor.vehicle));
         let screen_pos = some_or_return!(mouse_screen_position);
@@ -158,7 +158,7 @@ fn set_target_camera_if_following(
 }
 
 fn select_hovered_grid_loc_on_click(client: &mut ClientSpecificInfo, sounds: &mut SoundEffects) {
-    let free = some_or_return!(client.viewport.free_mut());
+    let free = some_or_return!(client.scene_graph.free_mut());
     let old_grid = free.selection_info.first_selected_grid();
 
     let Some(hovered) = free.selection_info.hovered else {
@@ -180,7 +180,7 @@ fn select_hovered_grid_loc_on_click(client: &mut ClientSpecificInfo, sounds: &mu
 }
 
 fn editor_on_release_left_click(client: &mut ClientSpecificInfo) -> Option<WorldDelta> {
-    let e = client.viewport.editor_mut()?;
+    let e = client.scene_graph.editor_mut()?;
 
     let src = e.select_start?;
     let dst = e.hovered?;
@@ -201,7 +201,7 @@ fn editor_on_release_left_click(client: &mut ClientSpecificInfo) -> Option<World
 }
 
 fn editor_on_left_click(world: &World, client: &mut ClientSpecificInfo) -> Option<WorldDelta> {
-    let e = client.viewport.editor_mut()?;
+    let e = client.scene_graph.editor_mut()?;
     let coord = e.hovered?;
 
     e.select_start = None;
@@ -277,7 +277,7 @@ pub fn process_event(
 }
 
 fn update_terrain_selection_info(client: &mut ClientSpecificInfo, asteroids: &Components<BigRock>) {
-    let free = some_or_return!(client.viewport.free_mut());
+    let free = some_or_return!(client.scene_graph.free_mut());
     free.hovered_chunk = None;
 
     let screen_pos = some_or_return!(client.mouse_screen_position);
@@ -303,13 +303,13 @@ fn update_terrain_selection_info(client: &mut ClientSpecificInfo, asteroids: &Co
 }
 
 fn toggle_tracking_for_selected_grid(client: &ClientSpecificInfo) -> Option<WorldDelta> {
-    let free = client.viewport.free()?;
+    let free = client.scene_graph.free()?;
     let grid_id = free.selection_info.first_selected_grid()?;
     Some(WorldDelta::ToggleTracking(grid_id))
 }
 
 fn explode_at_mouseover(client: &ClientSpecificInfo) -> Option<WorldDelta> {
-    let free = client.viewport.free()?;
+    let free = client.scene_graph.free()?;
     let loc = free.selection_info.hovered?;
     Some(WorldDelta::Explode(loc))
 }
@@ -321,7 +321,7 @@ fn ping_on_alt_left_click(client: &ClientSpecificInfo) -> Option<WorldDelta> {
 }
 
 fn destroy_top_layer_part_at_mouseover(client: &ClientSpecificInfo) -> Option<WorldDelta> {
-    let editor = client.viewport.editor()?;
+    let editor = client.scene_graph.editor()?;
     let loc = client.hovered_grid_loc()?;
     Some(WorldDelta::DestroyPartAt {
         loc,
@@ -343,7 +343,7 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
 
     if client.input.just_pressed_debounced(Button::Right) {
         if let Some(mouse_pos) = client.mouse_screen_position {
-            if let Some(free) = client.viewport.free_mut() {
+            if let Some(free) = client.scene_graph.free_mut() {
                 let world_pos = screen_to_world(&client.camera, mouse_pos, client.screen_dims);
                 free.waypoint_widget = Some(world_pos);
             }
@@ -385,7 +385,7 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
     }
 
     if client.input.just_released(Button::Right) {
-        if let Some(free) = client.viewport.free() {
+        if let Some(free) = client.scene_graph.free() {
             if let Some(p) = free.waypoint_widget {
                 if let Some(mouse_pos) = client.mouse_screen_position {
                     let q = screen_to_world(&client.camera, mouse_pos, client.screen_dims);
@@ -396,7 +396,7 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
             }
         }
 
-        if let Some(free) = client.viewport.free_mut() {
+        if let Some(free) = client.scene_graph.free_mut() {
             free.waypoint_widget = None;
         }
     }
@@ -410,7 +410,7 @@ fn zoom_in_on_key_v(client: &mut ClientSpecificInfo) {
     }
 
     let grid_id = some_or_return!(client.focused_grid_id());
-    let free = some_or_return!(client.viewport.free_mut());
+    let free = some_or_return!(client.scene_graph.free_mut());
     if client.target_camera.zoom < ZOOM_NEAR_VEHICLE {
         client.target_camera.zoom = ZOOM_NEAR_VEHICLE;
     } else {
@@ -424,7 +424,7 @@ fn do_terrain_tile_under_mouse(
     world: &World,
     client: &mut ClientSpecificInfo,
 ) -> Option<WorldDelta> {
-    let free = client.viewport.free()?;
+    let free = client.scene_graph.free()?;
     let tile_info = free.hovered_chunk?;
 
     let asteroid = tile_info.asteroid;
@@ -469,8 +469,8 @@ pub fn post_simulation_update(
         }
     }
 
-    match &mut client.viewport {
-        Viewport::Free(fly) => {
+    match &mut client.scene_graph {
+        SceneGraph::Free(fly) => {
             set_target_camera_if_following(
                 fly.follow_vehicle,
                 fly.lock_rotation,
@@ -491,7 +491,7 @@ pub fn post_simulation_update(
                 camera_zooms_with_plus_minus(&client.input, &mut client.target_camera);
             }
         }
-        Viewport::Editor(editor) => {
+        SceneGraph::Editor(editor) => {
             if !is_terminal_focused {
                 camera_zooms_with_plus_minus(&client.input, &mut client.target_camera);
             }

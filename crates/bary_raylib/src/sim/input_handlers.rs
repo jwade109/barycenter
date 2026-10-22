@@ -10,7 +10,7 @@ use log::*;
 
 pub fn drive_ship_on_enter(client: &mut ClientSpecificInfo, world: &World) -> Option<WorldDelta> {
     let player_id = client.player_id?;
-    let free = client.viewport.free()?;
+    let free = client.scene_graph.free()?;
     let grid_id = free.selection_info.first_selected_grid()?;
     let player = world.players.try_get(player_id).ok()?;
 
@@ -28,7 +28,7 @@ pub fn command_selected_ships_to_waypoint(
 ) -> Vec<WorldDelta> {
     let mut deltas = Vec::new();
 
-    let Some(free) = client.viewport.free() else {
+    let Some(free) = client.scene_graph.free() else {
         return deltas;
     };
 
@@ -61,7 +61,7 @@ pub fn editor_copy_on_control_c(world: &World, client: &mut ClientSpecificInfo) 
         return;
     }
 
-    let editor = some_or_return!(client.viewport.editor());
+    let editor = some_or_return!(client.scene_graph.editor());
     let grid = some_or_return!(world.grids.get(editor.vehicle));
 
     let s = format!("TODO Ctrl-C behavior: {}", grid.name);
@@ -95,10 +95,10 @@ pub fn save_world_and_alert_chat(world: &World, client: &mut ClientSpecificInfo)
 }
 
 pub fn toggle_following_on_key_f(client: &mut ClientSpecificInfo, sounds: &mut SoundEffects) {
-    let free = some_or_return!(client.viewport.free());
+    let free = some_or_return!(client.scene_graph.free());
     let grid_id = some_or_return!(free.selection_info.first_selected_grid());
 
-    if client.viewport.look_at(grid_id) {
+    if client.scene_graph.look_at(grid_id) {
         sounds.push(SoundEffect::Follow);
         debug!("Following {}", grid_id);
     }
@@ -117,7 +117,7 @@ pub fn lock_rotation_on_key_r(client: &mut ClientSpecificInfo) {
     if client.input.is_key_pressed(Key::ControlLeft) {
         return;
     }
-    if let Viewport::Free(fly) = &mut client.viewport {
+    if let SceneGraph::Free(fly) = &mut client.scene_graph {
         debug!("Toggle lock rotation");
         fly.lock_rotation ^= true;
     }
@@ -128,13 +128,13 @@ pub fn enter_ship_editor(
     client: &mut ClientSpecificInfo,
     sounds: &mut SoundEffects,
 ) {
-    let free = some_or_return!(client.viewport.free());
+    let free = some_or_return!(client.scene_graph.free());
     let grid_id = some_or_return!(free.selection_info.first_selected_grid());
     let grid = ok_or_return!(world.grids.try_get(grid_id));
 
     let centroid = grid.centroid();
 
-    client.viewport = Viewport::Editor(EditorState {
+    client.scene_graph = SceneGraph::Editor(EditorState {
         vehicle: grid_id,
         target_offset: centroid.as_vec2(),
         actual_offset: centroid.as_vec2(),

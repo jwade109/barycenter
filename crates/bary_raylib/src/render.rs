@@ -124,7 +124,7 @@ fn draw_trackers(d: &mut RaylibDrawHandle, trackers: &Components<Tracker>, detai
 }
 
 fn draw_hovered_inventory(d: &mut RaylibDrawHandle, world: &World, client: &ClientSpecificInfo) {
-    let _free = some_or_return!(client.viewport.free());
+    let _free = some_or_return!(client.scene_graph.free());
     let loc = some_or_return!(client.hovered_grid_loc());
     let grid = ok_or_return!(world.grids.try_get(loc.grid_id));
     let occ = some_or_return!(grid.get_parts_at(loc.coord));
@@ -214,7 +214,7 @@ fn draw_grid_far_indicators(
     camera: &Camera2D,
     assets: &Assets,
 ) {
-    let free = some_or_return!(client.viewport.free());
+    let free = some_or_return!(client.scene_graph.free());
 
     if camera.zoom > ZOOM_NEAR_FAR_THRESHOLD {
         return;
@@ -328,15 +328,15 @@ pub fn draw_world(
 
     draw_asteroids(&mut c, world, assets, &client);
 
-    if client.viewport.is_real_view() {
+    if client.scene_graph.is_real_view() {
         draw_computer_target_isometry(&mut c, &world.computers, &world.parts, &world.grids);
     }
 
     draw_excavators(&mut c, world);
 
-    draw_parts(&mut c, world, &raylib_camera, &client.viewport, assets);
+    draw_parts(&mut c, world, &raylib_camera, &client.scene_graph, assets);
 
-    if client.viewport.is_real_view() {
+    if client.scene_graph.is_real_view() {
         draw_selection_info(&mut c, &world.grids, &client);
 
         draw_lights(
@@ -358,7 +358,7 @@ pub fn draw_world(
         );
 
         draw_trackers(&mut c, &world.tracking, client.alt_mode);
-    } else if let Viewport::Editor(e) = &client.viewport {
+    } else if let SceneGraph::Editor(e) = &client.scene_graph {
         draw_grid_lines(&mut c, &world.grids, e);
     }
 
@@ -488,7 +488,7 @@ pub fn draw_selected_part_cursors(
     world: &World,
     client: &ClientSpecificInfo,
 ) {
-    let free = some_or_return!(client.viewport.free());
+    let free = some_or_return!(client.scene_graph.free());
     for loc in &free.selection_info.selected {
         let grid = ok_or_continue!(world.grids.try_get(loc.grid_id));
         let occ = some_or_continue!(grid.get_parts_at(loc.coord));
@@ -522,7 +522,7 @@ pub fn draw_editor_selection_region(
     client: &ClientSpecificInfo,
     world: &World,
 ) {
-    let editor = some_or_return!(client.viewport.editor());
+    let editor = some_or_return!(client.scene_graph.editor());
     let grid = ok_or_return!(world.grids.try_get(editor.vehicle));
     let hovered = some_or_return!(editor.hovered);
     let select_start = some_or_return!(editor.select_start);
@@ -869,7 +869,7 @@ pub fn draw_grid_outlines(d: &mut RaylibDrawHandle, grids: &Components<VehicleGr
 }
 
 pub fn draw_editor_part(d: &mut RaylibDrawHandle, world: &World, client: &ClientSpecificInfo) {
-    let editor = some_or_return!(client.viewport.editor());
+    let editor = some_or_return!(client.scene_graph.editor());
     let proto_id = some_or_return!(editor.prototype_id);
     let coord = some_or_return!(editor.hovered);
     let proto = ok_or_return!(world.prototypes.try_get(proto_id));
@@ -886,7 +886,7 @@ pub fn draw_editor_rename_field(
     assets: &Assets,
 ) {
     let font = assets.ui_font();
-    let editor = some_or_return!(client.viewport.editor());
+    let editor = some_or_return!(client.scene_graph.editor());
     let (field, is_name) = some_or_return!(&editor.vehicle_name_field);
 
     let pos = glam_to_raylib(client.screen_dims / 2.0);
@@ -920,7 +920,7 @@ pub fn draw_editor_rename_field(
 }
 
 pub fn get_hovered_prototype(client: &ClientSpecificInfo, world: &World) -> Option<Ent> {
-    let editor = client.viewport.editor()?;
+    let editor = client.scene_graph.editor()?;
     let layer = editor.layer?;
     let coord = editor.hovered?;
     let grid = world.grids.try_get(editor.vehicle).ok()?;
@@ -981,14 +981,14 @@ pub fn draw_parts(
     d: &mut RaylibDrawHandle,
     world: &World,
     camera: &Camera2D,
-    viewport: &Viewport,
+    scene_graph: &SceneGraph,
     assets: &Assets,
 ) {
     if camera.zoom < 2.0 {
         return;
     }
 
-    let (focus_vehicle, focus_layer) = if let Viewport::Editor(e) = viewport {
+    let (focus_vehicle, focus_layer) = if let SceneGraph::Editor(e) = scene_graph {
         (Some(e.vehicle), e.layer)
     } else {
         (None, None)
@@ -1175,7 +1175,7 @@ fn draw_waypoint_far_indicators(
 }
 
 fn draw_waypoint_widget(d: &mut RaylibDrawHandle, client: &ClientSpecificInfo) {
-    let free = some_or_return!(client.viewport.free());
+    let free = some_or_return!(client.scene_graph.free());
     if free.selection_info.selected.is_empty() {
         return;
     }
@@ -1313,7 +1313,7 @@ fn draw_selection_info(
     grids: &Components<VehicleGrid>,
     client: &ClientSpecificInfo,
 ) {
-    let free = some_or_return!(client.viewport.free());
+    let free = some_or_return!(client.scene_graph.free());
     if let Some(gridloc) = free.selection_info.hovered {
         let grid = ok_or_return!(grids.try_get(gridloc.grid_id));
         let loc = grid.centroid_isometry();

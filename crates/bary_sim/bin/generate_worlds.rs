@@ -43,6 +43,10 @@ fn scenario_a() -> BaryResult<()> {
         // .asteroid((400.0, -2000.0, 0.7), 500.0, 9312)
         .build();
 
+    let fs = virtual_filesystem(&world);
+
+    println!("{}", fs.tree());
+
     save_world("saves/scenario_a", &world, true)
 }
 

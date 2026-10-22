@@ -190,7 +190,7 @@ impl ClientApp {
         if !self.terminal.is_active() {
             process_event(&mut self.world, &mut self.client, &mut self.sounds, on_gui);
 
-            if let Some(editor) = self.client.viewport.editor_mut() {
+            if let Some(editor) = self.client.scene_graph.editor_mut() {
                 let zoom = self.client.camera.zoom;
                 if let Some(delta) = editor.handle_keys(&self.client.input, &self.world, zoom) {
                     self.node.send(MessageKind::RequestDelta(delta));
@@ -382,13 +382,13 @@ impl ClientApp {
     }
 
     fn docking_rotate(&mut self) {
-        if let Some(free) = self.client.viewport.free_mut() {
+        if let Some(free) = self.client.scene_graph.free_mut() {
             free.rotation = free.rotation.next();
         }
     }
 
     fn docking_shift(&mut self, delta: Vec2, is_x: bool) {
-        if let Some(free) = self.client.viewport.free_mut() {
+        if let Some(free) = self.client.scene_graph.free_mut() {
             if is_x {
                 let delta = delta.with_y(0.0) / 4.0;
                 let off = PartCoord(vround(delta));
@@ -756,12 +756,12 @@ fn make_world_ui(ui: &UiBuilder, app: &ClientApp, tree: &mut Tree<UiMessage>) {
         .into_iter(),
     );
 
-    if app.client.selected_grid_loc().is_some() && app.client.viewport.editor().is_none() {
+    if app.client.selected_grid_loc().is_some() && app.client.scene_graph.editor().is_none() {
         let b = ui.button(UiMessage::OpenEditor, "Open Ship Editor");
         root.add_child(b);
     }
 
-    if app.client.viewport.editor().is_some() {
+    if app.client.scene_graph.editor().is_some() {
         root.add_child(ui.button(UiMessage::LeaveEditor, "Leave Ship Editor"));
     }
 

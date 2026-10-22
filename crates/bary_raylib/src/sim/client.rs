@@ -1,4 +1,4 @@
-use crate::editor_state::EditorState;
+use crate::{SceneGraph, editor_state::EditorState};
 use bary_core::prelude::*;
 use bary_input::*;
 use bary_sim::Camera;
@@ -46,59 +46,6 @@ pub struct FreeFlying {
     pub rotation: Rotation,
 }
 
-#[derive(Debug)]
-pub enum Viewport {
-    Editor(EditorState),
-    Free(FreeFlying),
-}
-
-impl Viewport {
-    pub fn look_at(&mut self, id: Ent) -> bool {
-        if let Self::Free(fly) = self {
-            let ret = fly.follow_vehicle != Some(id);
-            fly.follow_vehicle = Some(id);
-            ret
-        } else {
-            false
-        }
-    }
-
-    pub fn is_real_view(&self) -> bool {
-        match self {
-            Self::Free(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn free(&self) -> Option<&FreeFlying> {
-        match self {
-            Self::Free(free) => Some(free),
-            _ => None,
-        }
-    }
-
-    pub fn free_mut(&mut self) -> Option<&mut FreeFlying> {
-        match self {
-            Self::Free(free) => Some(free),
-            _ => None,
-        }
-    }
-
-    pub fn editor(&self) -> Option<&EditorState> {
-        match self {
-            Self::Editor(e) => Some(e),
-            _ => None,
-        }
-    }
-
-    pub fn editor_mut(&mut self) -> Option<&mut EditorState> {
-        match self {
-            Self::Editor(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
 pub struct DockingInterface {
     pub offset: PartCoord,
     pub rotation: Rotation,
@@ -117,7 +64,7 @@ pub struct ClientSpecificInfo {
     pub target_camera: Camera,
     pub mouse_screen_position: Option<Vec2>,
     pub screen_dims: Vec2,
-    pub viewport: Viewport,
+    pub scene_graph: SceneGraph,
     pub input: InputState,
     pub alt_mode: bool,
 }
@@ -140,7 +87,7 @@ impl ClientSpecificInfo {
             },
             mouse_screen_position: None,
             screen_dims: Vec2::new(1500.0, 900.0),
-            viewport: Viewport::Free(FreeFlying {
+            scene_graph: SceneGraph::Free(FreeFlying {
                 follow_vehicle: None,
                 lock_rotation: false,
                 selection_info: SelectionInfo::default(),
@@ -155,11 +102,11 @@ impl ClientSpecificInfo {
     }
 
     pub fn leave_editor(&mut self) -> bool {
-        let Viewport::Editor(editor) = &self.viewport else {
+        let SceneGraph::Editor(editor) = &self.scene_graph else {
             return false;
         };
 
-        self.viewport = Viewport::Free(FreeFlying {
+        self.scene_graph = SceneGraph::Free(FreeFlying {
             follow_vehicle: Some(editor.vehicle),
             lock_rotation: false,
             selection_info: SelectionInfo::selecting(editor.vehicle),
@@ -174,40 +121,40 @@ impl ClientSpecificInfo {
     }
 
     pub fn selected_grid_loc(&self) -> Option<GridLocation> {
-        match &self.viewport {
-            Viewport::Editor(e) => {
+        match &self.scene_graph {
+            SceneGraph::Editor(e) => {
                 let coord = e.select_start?;
                 Some(GridLocation {
                     grid_id: e.vehicle,
                     coord,
                 })
             }
-            Viewport::Free(f) => f.selection_info.selected.first().cloned(),
+            SceneGraph::Free(f) => f.selection_info.selected.first().cloned(),
         }
     }
 
     pub fn hovered_grid_loc(&self) -> Option<GridLocation> {
-        match &self.viewport {
-            Viewport::Editor(e) => {
+        match &self.scene_graph {
+            SceneGraph::Editor(e) => {
                 let coord = e.hovered?;
                 Some(GridLocation {
                     grid_id: e.vehicle,
                     coord,
                 })
             }
-            Viewport::Free(f) => f.selection_info.hovered,
+            SceneGraph::Free(f) => f.selection_info.hovered,
         }
     }
 
     pub fn focused_grid_id(&self) -> Option<Ent> {
-        match &self.viewport {
-            Viewport::Editor(e) => Some(e.vehicle),
-            Viewport::Free(f) => f.selection_info.first_selected_grid(),
+        match &self.scene_graph {
+            SceneGraph::Editor(e) => Some(e.vehicle),
+            SceneGraph::Free(f) => f.selection_info.first_selected_grid(),
         }
     }
 
     pub fn docking_interface(&self) -> Option<DockingInterface> {
-        let free = self.viewport.free()?;
+        let free = self.scene_graph.free()?;
 
         if free.selection_info.selected.len() != 2 {
             return None;

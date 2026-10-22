@@ -31,7 +31,6 @@ pub struct World {
     pub pipes: Components<Pipe>,
     pub debug_portals: Components<DebugPortal>,
     pub asteroids: Components<BigRock>,
-    pub construction: Components<Construction>,
 
     pub terrain_chunks: Components<TerrainChunk>,
     pub terrain_tiles: Components<TerrainTile>,
