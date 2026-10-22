@@ -336,29 +336,29 @@ pub fn draw_world(
 
     draw_parts(&mut c, world, &raylib_camera, &client.scene_graph, assets);
 
-    if client.scene_graph.is_real_view() {
-        draw_selection_info(&mut c, &world.grids, &client);
+    draw_selection_info(&mut c, &world.grids, &client);
 
-        draw_lights(
-            &mut c,
-            &world.grids,
-            &world.parts,
-            &world.computers,
-            &world.lights,
-            world.ticks as u32,
-            &client.camera,
-        );
+    draw_lights(
+        &mut c,
+        &world.grids,
+        &world.parts,
+        &world.computers,
+        &world.lights,
+        world.ticks as u32,
+        &client.camera,
+    );
 
-        draw_thruster_plumes(
-            &mut c,
-            &world.grids,
-            &world.parts,
-            &world.thrusters,
-            &client.camera,
-        );
+    draw_thruster_plumes(
+        &mut c,
+        &world.grids,
+        &world.parts,
+        &world.thrusters,
+        &client.camera,
+    );
 
-        draw_trackers(&mut c, &world.tracking, client.alt_mode);
-    } else if let SceneGraph::Editor(e) = &client.scene_graph {
+    draw_trackers(&mut c, &world.tracking, client.alt_mode);
+
+    if let SceneGraph::Editor(e) = &client.scene_graph {
         draw_grid_lines(&mut c, &world.grids, e);
     }
 

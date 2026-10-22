@@ -2,12 +2,13 @@ use bary_core::prelude::*;
 use bary_input::InputState;
 use bary_ui::Tree;
 
+use crate::SceneNavigation;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UiMessage {
+    Drag(DragHandle),
+    SceneNavigate(SceneNavigation),
     Exit,
-    SaveFile,
-    OpenEditor,
-    LeaveEditor,
     AltMode,
     DebugText,
     SimSpeed(u32),
@@ -18,18 +19,33 @@ pub enum UiMessage {
     LoadSave,
     JoinMultiplayer,
     HostMultiplayer,
-    Settings,
+    WriteSaveToDisk,
     LoadSaveFile(String),
-    GoToMainMenu,
-    DockingHandle,
-    MainMenuHandle,
-    SaveSelectHandle,
-    PartInfoHandle,
     SetMachineState(Ent, bool),
     SetThrusterState(Ent, bool),
     SetComputerOnOff(Ent, bool),
     SetComputerDrift(Ent),
     Salt(usize),
+}
+
+impl From<SceneNavigation> for UiMessage {
+    fn from(value: SceneNavigation) -> Self {
+        Self::SceneNavigate(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DragHandle {
+    MainMenu,
+    SaveSelect,
+    Docking,
+    PartInfo,
+}
+
+impl From<DragHandle> for UiMessage {
+    fn from(value: DragHandle) -> Self {
+        Self::Drag(value)
+    }
 }
 
 #[derive(Debug, Clone, Default)]

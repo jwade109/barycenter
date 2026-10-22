@@ -4,10 +4,10 @@ use bary_parts::BlueprintId;
 use bary_sim::{World, WorldDelta};
 use early_returns::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EditorState {
     pub vehicle: Ent,
-    pub target_offset: Vec2,
+    pub target_coord: PartCoord,
     pub actual_offset: Vec2,
     pub camera_rotation: Rotation,
     pub prototype_id: Option<Ent>,
@@ -19,28 +19,43 @@ pub struct EditorState {
     pub vehicle_name_field: Option<(EditableText, bool)>,
 }
 
-fn editor_offset_moves_with_wasd(input: &InputState, offset: &mut Vec2, zoom: f32) {
-    let speed = 40.0 / zoom;
-
+fn editor_offset_moves_with_wasd(input: &InputState, offset: &mut PartCoord, zoom: f32) {
     if input.is_key_pressed(rdev::Key::ControlLeft) {
         return;
     }
 
-    if input.is_key_pressed(rdev::Key::KeyS) {
-        offset.y -= speed;
+    let speed = 1;
+
+    if input.just_pressed(rdev::Key::KeyS) {
+        offset.0.y -= speed;
     }
-    if input.is_key_pressed(rdev::Key::KeyW) {
-        offset.y += speed;
+    if input.just_pressed(rdev::Key::KeyW) {
+        offset.0.y += speed;
     }
-    if input.is_key_pressed(rdev::Key::KeyD) {
-        offset.x += speed;
+    if input.just_pressed(rdev::Key::KeyD) {
+        offset.0.x += speed;
     }
-    if input.is_key_pressed(rdev::Key::KeyA) {
-        offset.x -= speed;
+    if input.just_pressed(rdev::Key::KeyA) {
+        offset.0.x -= speed;
     }
 }
 
 impl EditorState {
+    pub fn new(grid_id: Ent, offset: Vec2) -> Self {
+        EditorState {
+            vehicle: grid_id,
+            target_coord: PartCoord::ZERO,
+            actual_offset: offset,
+            camera_rotation: Rotation::East,
+            prototype_id: None,
+            part_rotation: Rotation::East,
+            layer: Some(PartLayer::Internal),
+            select_start: None,
+            hovered: None,
+            vehicle_name_field: None,
+        }
+    }
+
     #[must_use]
     pub fn handle_keys(
         &mut self,
@@ -78,7 +93,7 @@ impl EditorState {
                 self.next_layer(true);
             }
 
-            editor_offset_moves_with_wasd(input, &mut self.target_offset, camera_zoom);
+            editor_offset_moves_with_wasd(input, &mut self.target_coord, camera_zoom);
         }
 
         if input.just_pressed_debounced(rdev::Key::KeyN) && self.vehicle_name_field.is_none() {
@@ -143,7 +158,7 @@ impl EditorState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EditableText {
     inner: String,
 }

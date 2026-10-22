@@ -136,7 +136,7 @@ pub fn enter_ship_editor(
 
     client.scene_graph = SceneGraph::Editor(EditorState {
         vehicle: grid_id,
-        target_offset: centroid.as_vec2(),
+        target_coord: PartCoord::ZERO,
         actual_offset: centroid.as_vec2(),
         camera_rotation: Rotation::East,
         prototype_id: None,

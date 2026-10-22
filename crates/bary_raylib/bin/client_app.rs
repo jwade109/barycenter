@@ -1,5 +1,4 @@
 use bary_core::prelude::*;
-use bary_factory::*;
 use bary_input::{InputHandler, InputState};
 use bary_ipc::*;
 use bary_raylib::*;
@@ -13,17 +12,7 @@ use log::*;
 use raylib::prelude::*;
 use std::time::Duration;
 
-enum AppState {
-    Loading(u32, u32, String),
-    MainMenu,
-    ListSaves,
-    InWorld,
-    Kicked,
-    Settings,
-}
-
 pub struct ClientApp {
-    state: AppState,
     input: InputHandler,
 
     username: String,
@@ -98,7 +87,6 @@ impl ClientApp {
         let ui_state = UiInteractionState::default();
 
         Ok(ClientApp {
-            state: AppState::ListSaves,
             username: args.username,
             world,
             client: ClientSpecificInfo::new(),
@@ -134,14 +122,14 @@ impl ClientApp {
     }
 
     fn update_loading(&mut self) {
-        if let AppState::Loading(steps, total, status) = &mut self.state {
+        if let SceneGraph::Loading(steps, total, status) = &mut self.client.scene_graph {
             if chance(0.8) && *steps < *total {
                 *steps += randint(4, 12) as u32;
                 *status = get_random_name();
             }
 
             if *steps >= *total {
-                self.state = AppState::MainMenu;
+                self.client.scene_graph = SceneGraph::MainMenu;
             }
         }
     }
@@ -217,8 +205,8 @@ impl ClientApp {
             self.client.input.process_rdev_event(&event, focused);
         }
 
-        match &self.state {
-            AppState::Loading(_, _, _) => self.update_loading(),
+        match &self.client.scene_graph {
+            SceneGraph::Loading(_, _, _) => self.update_loading(),
             _ => self.update_in_world(),
         }
     }
@@ -259,7 +247,7 @@ impl ClientApp {
                 }
             }
             MessageKind::FinishWorldDownload => {
-                self.state = AppState::InWorld;
+                self.client.scene_graph = SceneGraph::Free(FreeFlying::new());
             }
             MessageKind::SyncFrame(frame) => {
                 debug!("Got frame: {:?}", frame);
@@ -305,7 +293,7 @@ impl ClientApp {
 
     fn on_rcv_kicked(&mut self) {
         self.node.disconnect();
-        self.state = AppState::Kicked;
+        self.client.scene_graph = SceneGraph::Kicked;
         self.world = World::empty();
     }
 
@@ -363,20 +351,6 @@ impl ClientApp {
         self.should_exit = true;
     }
 
-    fn save(&mut self) {
-        save_world_and_alert_chat(&self.world, &mut self.client);
-    }
-
-    fn open_editor(&mut self) {
-        enter_ship_editor(&self.world, &mut self.client, &mut self.sounds)
-    }
-
-    fn leave_editor(&mut self) {
-        if self.client.leave_editor() {
-            self.sounds.push(SoundEffect::LeaveEditor);
-        }
-    }
-
     fn set_sim_speed(&mut self, speed: u32) {
         self.node.send(MessageKind::SetSimSpeed(speed));
     }
@@ -426,18 +400,20 @@ impl ClientApp {
             UiMessage::DockingShiftY => {
                 self.docking_shift(delta, false);
             }
-            UiMessage::DockingHandle => {
-                self.menu_origin += delta;
-            }
-            UiMessage::MainMenuHandle => {
-                self.menu_origin += delta;
-            }
-            UiMessage::SaveSelectHandle => {
-                self.menu_origin += delta;
-            }
-            UiMessage::PartInfoHandle => {
-                self.part_info_origin += delta;
-            }
+            UiMessage::Drag(handle) => match handle {
+                DragHandle::Docking => {
+                    self.menu_origin += delta;
+                }
+                DragHandle::MainMenu => {
+                    self.menu_origin += delta;
+                }
+                DragHandle::PartInfo => {
+                    self.part_info_origin += delta;
+                }
+                DragHandle::SaveSelect => {
+                    self.menu_origin += delta;
+                }
+            },
             e => warn!("Unhandled event: {e:?}"),
         }
     }
@@ -455,19 +431,16 @@ impl ClientApp {
             UiEventKind::Click => {
                 self.sounds.push(SoundEffect::ButtonDown);
                 match c.msg {
+                    UiMessage::SceneNavigate(nav) => {
+                        self.client.scene_graph.handle_navigation(nav);
+                    }
                     UiMessage::Exit => self.exit(),
-                    UiMessage::SaveFile => self.save(),
-                    UiMessage::OpenEditor => self.open_editor(),
-                    UiMessage::LeaveEditor => self.leave_editor(),
                     UiMessage::AltMode => self.client.alt_mode ^= true,
                     UiMessage::DebugText => self.show_debug_text ^= true,
                     UiMessage::SimSpeed(sp) => self.set_sim_speed(sp),
                     UiMessage::DockingRotate => self.docking_rotate(),
                     UiMessage::DockingActivate => self.docking_activate(),
                     UiMessage::LoadSaveFile(path) => self.load_save_file(path),
-                    UiMessage::GoToMainMenu => {
-                        self.state = AppState::MainMenu;
-                    }
                     UiMessage::SetMachineState(machine_id, state) => {
                         let delta = WorldDelta::SetMachineState(machine_id, state);
                         self.request_server_delta(delta);
@@ -477,13 +450,13 @@ impl ClientApp {
                         self.request_server_delta(delta);
                     }
                     UiMessage::LoadSave => {
-                        self.state = AppState::ListSaves;
+                        self.client.scene_graph = SceneGraph::ListSaves;
                     }
                     UiMessage::JoinMultiplayer => {
                         self.request_world_download();
                     }
-                    UiMessage::Settings => {
-                        self.state = AppState::Settings;
+                    UiMessage::WriteSaveToDisk => {
+                        save_world_and_alert_chat(&self.world, &mut self.client);
                     }
                     e => warn!("Unhandled event: {e:?}"),
                 }
@@ -614,57 +587,6 @@ fn generate_assets_ui(assets: &Assets, input: &InputState, width: f32, height: f
     Tree::new().with_layout(root, None)
 }
 
-pub struct UiBuilder<'a> {
-    font: &'a Font,
-    font_size: f32,
-}
-
-impl<'a> UiBuilder<'a> {
-    fn new(font: &'a Font) -> Self {
-        Self {
-            font,
-            font_size: UI_FONT_SIZE as f32,
-        }
-    }
-
-    fn draghandle<T: UiMsg>(&self, msg: impl Into<T>) -> Node<T> {
-        Node::<T>::handle(Size::Grow, 20, msg)
-    }
-
-    fn sep<T: UiMsg>(&self) -> Node<T> {
-        Node::structural(Size::Grow, 2)
-    }
-
-    fn text<T: UiMsg>(&self, s: impl Into<String>) -> Node<T> {
-        let s = s.into();
-        let dims = self.font.measure_text(&s, self.font_size, 0.0);
-        let w = dims.x;
-        let h = dims.y;
-        Node::text(w, h, s)
-    }
-
-    fn button<T: UiMsg>(&self, msg: impl Into<T>, s: impl Into<String>) -> Node<T> {
-        let s = s.into();
-        let dims = self.font.measure_text(&s, self.font_size, 0.0);
-        let w = dims.x + 36.0;
-        let h = dims.y + 18.0;
-        Node::button(s, msg, w, h)
-    }
-
-    fn sprite<T: UiMsg>(&self, s: impl Into<String>, texture: &Texture2D) -> Node<T> {
-        let h = 70;
-        let actual_w = texture.width;
-        let actual_h = texture.height;
-        let scale = actual_h as f32 / h as f32;
-        let w = actual_w as f32 / scale;
-        Node::image(s, w as u32, h)
-    }
-
-    fn progress_bar<T: UiMsg>(&self, val: f32) -> Node<T> {
-        Node::progress_bar(Size::Grow, 11, val)
-    }
-}
-
 fn make_docking_ui(
     builder: &UiBuilder,
     docking: &DockingInterface,
@@ -683,7 +605,7 @@ fn make_docking_ui(
     let docking_ui = Node::column(
         Size::Fit,
         vec![
-            builder.draghandle(UiMessage::DockingHandle),
+            builder.draghandle(DragHandle::Docking),
             builder.text("Docking Control Panel"),
             builder.text("Multiline string\nAnother line\nAnd another!"),
             builder.text(format!("{} <- {}", parent.name, child.name)),
@@ -696,21 +618,6 @@ fn make_docking_ui(
     );
 
     Some(docking_ui)
-}
-
-fn make_main_menu(ui: &UiBuilder) -> Node<UiMessage> {
-    Node::column(
-        Size::Fit,
-        vec![
-            ui.draghandle(UiMessage::MainMenuHandle),
-            ui.button(UiMessage::LoadSave, "Load Single Player"),
-            ui.button(UiMessage::JoinMultiplayer, "Join Server"),
-            // ui.button(UiMessage::JoinMultiplayer, "Join Multiplayer"),
-            // ui.button(UiMessage::HostMultiplayer, "Host Multiplayer"),
-            ui.button(UiMessage::Settings, "Settings"),
-            ui.button(UiMessage::Exit, "Exit to Desktop"),
-        ],
-    )
 }
 
 fn loading_layout(ui: &UiBuilder, steps: u32, total: u32, status: &str) -> Node<UiMessage> {
@@ -727,24 +634,14 @@ fn loading_layout(ui: &UiBuilder, steps: u32, total: u32, status: &str) -> Node<
     )
 }
 
-fn make_savefiles_menu(ui: &UiBuilder, saves: &[String]) -> Node<UiMessage> {
-    let mut buttons = vec![ui.draghandle(UiMessage::SaveSelectHandle)];
-
-    for s in saves {
-        let b = ui.button(UiMessage::LoadSaveFile(s.clone()), s.clone());
-        buttons.push(b);
-    }
-
-    buttons.push(ui.button(UiMessage::GoToMainMenu, "Return to Main Menu"));
-
-    Node::column(Size::Fit, buttons)
-}
-
 fn make_world_ui(ui: &UiBuilder, app: &ClientApp, tree: &mut Tree<UiMessage>) {
     let mut root: Node<UiMessage> = Node::root(Size::Fit, Size::Fit).with_children(
         [
-            ui.button(UiMessage::GoToMainMenu, "Return to Main Menu"),
-            ui.button(UiMessage::SaveFile, "Save Game"),
+            ui.button(
+                UiMessage::SceneNavigate(SceneNavigation::MainMenu),
+                "Return to Main Menu",
+            ),
+            ui.button(UiMessage::WriteSaveToDisk, "Save Game"),
             ui.button(UiMessage::AltMode, "Toggle Alt Mode"),
             ui.button(UiMessage::DebugText, "Toggle Debug Text"),
             ui.button(UiMessage::SimSpeed(0), "Toggle Pause"),
@@ -756,13 +653,17 @@ fn make_world_ui(ui: &UiBuilder, app: &ClientApp, tree: &mut Tree<UiMessage>) {
         .into_iter(),
     );
 
-    if app.client.selected_grid_loc().is_some() && app.client.scene_graph.editor().is_none() {
-        let b = ui.button(UiMessage::OpenEditor, "Open Ship Editor");
+    if let Some(loc) = app.client.selected_grid_loc()
+        && app.client.scene_graph.editor().is_none()
+    {
+        let msg = UiMessage::SceneNavigate(SceneNavigation::Editor(loc.grid_id));
+        let b = ui.button(msg, "Open Ship Editor");
         root.add_child(b);
     }
 
     if app.client.scene_graph.editor().is_some() {
-        root.add_child(ui.button(UiMessage::LeaveEditor, "Leave Ship Editor"));
+        let msg = UiMessage::SceneNavigate(SceneNavigation::Free);
+        root.add_child(ui.button(msg, "Leave Ship Editor"));
     }
 
     tree.add_layout(root, None);
@@ -774,169 +675,43 @@ fn make_world_ui(ui: &UiBuilder, app: &ClientApp, tree: &mut Tree<UiMessage>) {
     }
 }
 
-fn slot_info_str(idx: usize, slot: &InvSlot) -> String {
-    if let Some(contents) = slot.contents() {
-        format!(
-            "{}. {:?} ({}) ({:0.1}%) {}",
-            idx + 1,
-            contents.0,
-            contents.1,
-            100.0 * slot.fill_percentage(),
-            slot.mass(),
-        )
-    } else {
-        format!("{}. Empty - can store [{:?}]", idx + 1, slot.filter())
-    }
-}
-
-fn computer_info_str(cpu: &Computer) -> String {
-    let mut lines = vec![
-        format!("On: {}", cpu.on),
-        format!("\nStatus: {:?}", cpu.status),
-        format!("\nTicks: {}", cpu.ticks_this_cycle),
-        format!("\nFired: {}", cpu.fired_this_tick),
-        format!("\nIters: {}", cpu.iters),
-    ];
-
-    for cmd in &cpu.command_queue {
-        let line = format!("\n  - {}", cmd);
-        lines.push(line);
-    }
-
-    lines.into_iter().collect()
-}
-
-fn make_part_info_gui(ui: &UiBuilder, app: &ClientApp, tree: &mut Tree<UiMessage>) {
-    let gridloc = some_or_return!(app.client.selected_grid_loc());
-    let grid = ok_or_return!(app.world.grids.try_get(gridloc.grid_id));
-    let occ = some_or_return!(grid.get_parts_at(gridloc.coord));
-
-    let mut children = Vec::new();
-
-    let s = format!(
-        "At {}-{}: {:?}",
-        gridloc.grid_id,
-        gridloc.coord,
-        occ.to_array()
-    );
-
-    children.push(ui.draghandle(UiMessage::PartInfoHandle));
-    children.push(ui.text(s));
-
-    for (layer, part_id) in occ.iter() {
-        children.push(ui.sep());
-
-        let part = ok_or_continue!(app.world.parts.try_get(part_id));
-        let part_local = part.region.to_local(gridloc.coord);
-        let proto = ok_or_continue!(app.world.prototypes.try_get(part.prototype));
-
-        children.push(ui.text(proto.name.clone()));
-
-        if let Some(texture) = app.assets.part_textures.get(&proto.name) {
-            children.push(ui.sprite(proto.name.clone(), texture));
-        }
-
-        if let Ok(cpu) = app.world.computers.try_get(part_id) {
-            children.push(ui.button(
-                UiMessage::SetComputerOnOff(part_id, !cpu.on),
-                if cpu.on { "Turn Off" } else { "Turn On" },
-            ));
-            children.push(ui.button(UiMessage::SetComputerDrift(part_id), "Set to Drift"));
-            let info = computer_info_str(cpu);
-            children.push(ui.text(info));
-        }
-        if let Ok(thruster) = app.world.thrusters.try_get(part_id) {
-            let s = format!("{:#?}", thruster);
-            children.push(ui.button(
-                UiMessage::SetThrusterState(part_id, !thruster.is_on()),
-                if thruster.is_on() {
-                    "Turn Off"
-                } else {
-                    "Turn On"
-                },
-            ));
-            children.push(ui.text(s));
-        }
-        if let Ok(light) = app.world.lights.try_get(part_id) {
-            let s = format!("{:#?}", light);
-            children.push(ui.text(s));
-        }
-        if let Ok(mac) = app.world.machines.try_get(part_id) {
-            children.push(ui.progress_bar(mac.progress()));
-            children.push(ui.button(
-                UiMessage::SetMachineState(part_id, !mac.enabled),
-                if mac.enabled { "Turn Off" } else { "Turn On" },
-            ));
-        }
-        if let Ok(inv) = app.world.inventories.try_get(part_id) {
-            for (idx, slot) in inv.slots().enumerate() {
-                let line = slot_info_str(idx, slot);
-                children.push(ui.text(line));
-                children.push(ui.progress_bar(slot.fill_percentage()));
-            }
-        }
-
-        if app.client.alt_mode {
-            let mut s = format!("Part ID: {}", part_id);
-            s += &format!("\nPart local coord: {}", part_local);
-
-            s += &format!(
-                "\nRegion: {:?} {} {:?}",
-                layer,
-                part.region.bottom_left(),
-                part.region.rot()
-            );
-
-            s += &format!(
-                "\nPrototype: {} {} {:?}",
-                proto.name,
-                proto.mass,
-                proto.classification()
-            );
-            children.push(ui.text(s));
-        }
-    }
-
-    let node = Node::column(600, children);
-    tree.add_layout(node, app.part_info_origin);
-}
-
 fn make_gui(font: &Font, app: &ClientApp) -> Tree<UiMessage> {
     let builder = UiBuilder::new(font);
 
     let mut tree = Tree::new();
 
-    match &app.state {
-        AppState::Loading(steps, total, status) => {
+    match &app.client.scene_graph {
+        SceneGraph::Loading(steps, total, status) => {
             tree.add_layout(
                 loading_layout(&builder, *steps, *total, status),
                 app.menu_origin,
             );
         }
-        AppState::MainMenu => {
-            tree.add_layout(make_main_menu(&builder), app.menu_origin);
+        SceneGraph::MainMenu => {
+            main_menu_ui(&mut tree, &builder, app.menu_origin);
         }
-        AppState::InWorld => {
+        SceneGraph::Free(..) => {
             make_world_ui(&builder, app, &mut tree);
-            make_part_info_gui(&builder, &app, &mut tree);
+            make_part_info_gui(&builder, &app.world, &app.client, &app.assets, &mut tree);
         }
-        AppState::ListSaves => {
-            let mut saves = list_saves_in_dir("saves/");
-            saves.sort();
-            let saves: Vec<_> = saves
-                .into_iter()
-                .map(|s| s.to_string_lossy().to_string())
-                .collect();
-            tree.add_layout(make_savefiles_menu(&builder, &saves), app.menu_origin);
+        SceneGraph::Editor(..) => {
+            make_world_ui(&builder, app, &mut tree);
         }
-        AppState::Kicked => {
-            tree.add_layout(
-                Node::text(600, 100, "You've been kicked."),
-                Vec2::splat(200.0),
-            );
+        SceneGraph::Part(id) => {
+            make_world_ui(&builder, app, &mut tree);
+            if let Some(node) = part_info_ui(*id, &builder, &app.world, &app.assets) {
+                tree.add_layout(node, Vec2::splat(200.0));
+            }
+            part_focus_ui(&mut tree, &builder);
         }
-        AppState::Settings => {
-            tree.add_layout(Node::text(600, 100, "The settings."), Vec2::splat(200.0));
+        SceneGraph::ListSaves => {
+            list_saves_scene_ui(&mut tree, &builder, app.menu_origin);
+        }
+        SceneGraph::Kicked => {
+            kicked_scene_ui(&mut tree, &builder, app.menu_origin);
+        }
+        SceneGraph::Settings => {
+            settings_scene_ui(&mut tree, &builder, app.menu_origin);
         }
     }
 
@@ -944,6 +719,9 @@ fn make_gui(font: &Font, app: &ClientApp) -> Tree<UiMessage> {
         let node = loading_layout(&builder, dl.steps(), dl.total(), dl.status());
         tree.add_layout(node, Vec2::new(400.0, 200.0));
     }
+
+    let text = Node::text(1000, 20, format!("{:?}", app.client.scene_graph));
+    tree.add_layout(text, Vec2::splat(40.0));
 
     tree
 }
@@ -1012,7 +790,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .draw(&main_app.thread, |mut d: RaylibDrawHandle<'_>| {
                 d.clear_background(Color::BLACK);
 
-                if matches!(main_app.state, AppState::InWorld) {
+                if matches!(
+                    main_app.client.scene_graph,
+                    SceneGraph::Editor(..) | SceneGraph::Free(..) | SceneGraph::Part(..)
+                ) {
                     draw_world(&main_app.world, &main_app.client, &main_app.assets, &mut d);
                 }
 

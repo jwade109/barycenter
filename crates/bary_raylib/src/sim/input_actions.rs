@@ -69,10 +69,11 @@ fn camera_moves_with_wasd(
     }
 }
 
-fn editor_actual_offset_smooth_animation(target: Vec2, actual: &mut Vec2) {
+fn editor_actual_offset_smooth_animation(target: PartCoord, actual: &mut Vec2) {
     let rate_translation = 0.2;
-    actual.x = low_pass_f32(actual.x, target.x, rate_translation);
-    actual.y = low_pass_f32(actual.y, target.y, rate_translation);
+    let t = target.to_meters_center();
+    actual.x = low_pass_f32(actual.x, t.x, rate_translation);
+    actual.y = low_pass_f32(actual.y, t.y, rate_translation);
 }
 
 pub fn animate_camera_towards_target(target: &Camera, actual: &mut Camera) {
@@ -496,7 +497,7 @@ pub fn post_simulation_update(
                 camera_zooms_with_plus_minus(&client.input, &mut client.target_camera);
             }
 
-            editor_actual_offset_smooth_animation(editor.target_offset, &mut editor.actual_offset);
+            editor_actual_offset_smooth_animation(editor.target_coord, &mut editor.actual_offset);
 
             set_cams_to_grid_pose(
                 editor.vehicle,
@@ -506,6 +507,7 @@ pub fn post_simulation_update(
                 &mut client.camera,
             );
         }
+        _ => (),
     }
 
     if client.target_camera.zoom > VIEWPORT_MAX_ZOOM {

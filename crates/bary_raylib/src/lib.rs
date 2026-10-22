@@ -9,6 +9,7 @@ mod render;
 mod sim;
 mod sound_handler;
 mod sounds;
+mod scene_ui;
 mod utils;
 
 pub use assets::*;
@@ -22,4 +23,5 @@ pub use render::*;
 pub use sim::*;
 pub use sound_handler::*;
 pub use sounds::*;
+pub use scene_ui::*;
 pub use utils::*;

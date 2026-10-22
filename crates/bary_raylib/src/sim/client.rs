@@ -1,4 +1,4 @@
-use crate::{SceneGraph, editor_state::EditorState};
+use crate::SceneGraph;
 use bary_core::prelude::*;
 use bary_input::*;
 use bary_sim::Camera;
@@ -46,6 +46,20 @@ pub struct FreeFlying {
     pub rotation: Rotation,
 }
 
+impl FreeFlying {
+    pub fn new() -> Self {
+        Self {
+            follow_vehicle: None,
+            lock_rotation: false,
+            selection_info: SelectionInfo::default(),
+            waypoint_widget: None,
+            hovered_chunk: None,
+            offset: PartCoord::ZERO,
+            rotation: Rotation::East,
+        }
+    }
+}
+
 pub struct DockingInterface {
     pub offset: PartCoord,
     pub rotation: Rotation,
@@ -87,15 +101,7 @@ impl ClientSpecificInfo {
             },
             mouse_screen_position: None,
             screen_dims: Vec2::new(1500.0, 900.0),
-            scene_graph: SceneGraph::Free(FreeFlying {
-                follow_vehicle: None,
-                lock_rotation: false,
-                selection_info: SelectionInfo::default(),
-                waypoint_widget: None,
-                hovered_chunk: None,
-                offset: PartCoord::ZERO,
-                rotation: Rotation::East,
-            }),
+            scene_graph: SceneGraph::MainMenu,
             input: InputState::default(),
             alt_mode: false,
         }
@@ -130,6 +136,7 @@ impl ClientSpecificInfo {
                 })
             }
             SceneGraph::Free(f) => f.selection_info.selected.first().cloned(),
+            _ => None,
         }
     }
 
@@ -143,6 +150,7 @@ impl ClientSpecificInfo {
                 })
             }
             SceneGraph::Free(f) => f.selection_info.hovered,
+            _ => None,
         }
     }
 
@@ -150,6 +158,7 @@ impl ClientSpecificInfo {
         match &self.scene_graph {
             SceneGraph::Editor(e) => Some(e.vehicle),
             SceneGraph::Free(f) => f.selection_info.first_selected_grid(),
+            _ => None,
         }
     }
 
