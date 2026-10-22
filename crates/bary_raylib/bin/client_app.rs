@@ -458,6 +458,13 @@ impl ClientApp {
                     UiMessage::WriteSaveToDisk => {
                         save_world_and_alert_chat(&self.world, &mut self.client);
                     }
+                    UiMessage::SetComputerDrift(_id) => {
+                        warn!("UNHANDLED DRIFT COMMAND");
+                    }
+                    UiMessage::SetComputerOnOff(id, state) => {
+                        // TODO make a WorldDelta for this
+                        _ = set_cpu_state(&mut self.world.computers, id, state);
+                    }
                     e => warn!("Unhandled event: {e:?}"),
                 }
             }
@@ -699,7 +706,7 @@ fn make_gui(font: &Font, app: &ClientApp) -> Tree<UiMessage> {
         }
         SceneGraph::Part(id) => {
             make_world_ui(&builder, app, &mut tree);
-            if let Some(node) = part_info_ui(*id, &builder, &app.world, &app.assets) {
+            if let Some(node) = part_info_modal(*id, &builder, &app.world, &app.assets) {
                 tree.add_layout(node, Vec2::splat(200.0));
             }
             part_focus_ui(&mut tree, &builder);

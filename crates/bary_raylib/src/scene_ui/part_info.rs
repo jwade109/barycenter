@@ -5,7 +5,7 @@ use bary_sim::*;
 use bary_ui::*;
 use early_returns::*;
 
-pub fn part_info_ui(
+pub fn part_info_modal(
     part_id: Ent,
     ui: &UiBuilder,
     world: &World,
@@ -94,7 +94,7 @@ pub fn make_part_info_gui(
             SceneNavigation::Part(part_id),
             format!("Go to Part {}", part_id),
         ));
-        if let Some(node) = part_info_ui(part_id, ui, world, assets) {
+        if let Some(node) = part_info_modal(part_id, ui, world, assets) {
             children.push(node);
         }
     }

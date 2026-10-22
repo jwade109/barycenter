@@ -574,6 +574,16 @@ pub fn set_primary_computer_waypoint_c(
     Ok(primary_cpu_id)
 }
 
+pub fn set_cpu_state(
+    computers: &mut Components<Computer>,
+    cpu_id: Ent,
+    new_state: bool,
+) -> BaryResult<()> {
+    let computer = computers.try_get_mut(cpu_id)?;
+    computer.on = new_state;
+    Ok(())
+}
+
 /// Turns the primary computer of the given grid on or off,
 /// returning the entity ID of the computer if it was found.
 /// TODO(testing) test this.
@@ -584,8 +594,7 @@ pub fn set_primary_computer_state_c(
     computers: &mut Components<Computer>,
 ) -> BaryResult<Ent> {
     let primary_cpu_id = get_primary_cpu_id(grid_id, grids)?;
-    let computer = computers.try_get_mut(primary_cpu_id)?;
-    computer.on = new_state;
+    set_cpu_state(computers, primary_cpu_id, new_state)?;
     Ok(primary_cpu_id)
 }
 
