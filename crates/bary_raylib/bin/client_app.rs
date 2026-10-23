@@ -37,8 +37,6 @@ pub struct ClientApp {
 
     sounds: SoundEffects,
 
-    menu_origin: Vec2,
-    part_info_origin: Vec2,
     server_handshake_complete: bool,
 
     async_world_download: Option<AsyncWorldDownload>,
@@ -102,8 +100,6 @@ impl ClientApp {
             should_exit: false,
             show_debug_text: false,
             sounds: SoundEffects::new(),
-            menu_origin: Vec2::new(300.0, 200.0),
-            part_info_origin: Vec2::new(400.0, 350.0),
             server_handshake_complete: false,
             async_world_download: None,
         })
@@ -188,10 +184,6 @@ impl ClientApp {
         for event in self.input.get_events() {
             let focused = self.handle.is_window_focused();
             self.client.input.process_rdev_event(&event, focused);
-        }
-
-        if let SceneGraph::Part(state) = &mut self.client.scene_graph {
-            part_focus_terminal_input(state, &self.client.input);
         }
 
         match &self.client.scene_graph {
@@ -390,20 +382,9 @@ impl ClientApp {
             UiMessage::DockingShiftY => {
                 self.docking_shift(delta, false);
             }
-            UiMessage::Drag(handle) => match handle {
-                DragHandle::Docking => {
-                    self.menu_origin += delta;
-                }
-                DragHandle::MainMenu => {
-                    self.menu_origin += delta;
-                }
-                DragHandle::PartInfo => {
-                    self.part_info_origin += delta;
-                }
-                DragHandle::SaveSelect => {
-                    self.menu_origin += delta;
-                }
-            },
+            UiMessage::Drag(handle) => {
+                self.ui_state.shift_offset(&handle, delta);
+            }
             e => warn!("Unhandled event: {e:?}"),
         }
     }
@@ -584,45 +565,63 @@ fn generate_assets_ui(assets: &Assets, input: &InputState, width: f32, height: f
     Tree::new().with_layout(root, None)
 }
 
-fn make_gui(font: Rc<Font>, app: &ClientApp) -> Tree<UiMessage> {
-    let builder = UiBuilder::new(font);
+fn make_gui(font: Rc<Font>, app: &mut ClientApp, timers: &DebugTimers) -> Tree<UiMessage> {
+    let mut ui = UiBuilder::new(
+        font,
+        app.client.input.clone(),
+        std::mem::take(&mut app.ui_state),
+    );
 
-    let mut tree = Tree::new();
-
-    match &app.client.scene_graph {
+    match &mut app.client.scene_graph {
         SceneGraph::MainMenu => {
-            main_menu_ui(&mut tree, &builder, app.menu_origin);
+            main_menu_ui(&mut ui);
         }
         SceneGraph::Free(free) => {
-            make_free_flying_ui(&builder, free, &app.world, &mut tree);
-            make_part_info_gui(&builder, &app.world, &app.client, &app.assets, &mut tree);
+            make_free_flying_ui(&mut ui, free, &app.world);
+            make_part_info_gui(&mut ui, &app.world, &app.client, &app.assets);
         }
-        SceneGraph::Editor(..) => {
-            make_editor_ui(&builder, &mut tree);
+        SceneGraph::Editor(editor) => {
+            make_editor_ui(&mut ui, editor);
         }
         SceneGraph::Part(state) => {
-            if let Some(node) = part_info_modal(
-                state.part_id,
-                &builder,
-                &app.world,
-                &app.assets,
-                &state.command_prompt,
-            ) {
-                tree.add_layout(node, Vec2::splat(200.0));
-            }
+            part_info_modal(&mut ui, state, &app.world, &app.assets);
         }
         SceneGraph::ListSaves => {
-            list_saves_scene_ui(&mut tree, &builder, app.menu_origin);
+            list_saves_scene_ui(&mut ui);
         }
         SceneGraph::Kicked => {
-            kicked_scene_ui(&mut tree, &builder, app.menu_origin);
+            kicked_scene_ui(&mut ui);
         }
         SceneGraph::Settings => {
-            settings_scene_ui(&mut tree, &builder, app.menu_origin);
+            settings_scene_ui(&mut ui);
         }
     }
 
+    if app.show_debug_text {
+        make_debug_ui(&mut ui, app, timers, app.handle.get_fps());
+    }
+
+    let (tree, state) = ui.take();
+
+    app.ui_state = state;
+
     tree
+}
+
+fn make_debug_ui(ui: &mut UiBuilder, app: &ClientApp, timers: &DebugTimers, fps: u32) {
+    debug_ui(
+        ui,
+        &app.world,
+        &app.client,
+        timers,
+        &app.node,
+        &app.update_timer,
+        &app.server_ping_timer,
+        &app.server_telemetry_timer,
+        &app.username,
+        app.client.player_id,
+        fps,
+    )
 }
 
 fn server_thread(args: Args) {
@@ -674,7 +673,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let font = main_app.assets.ui_font();
 
-        let ui = make_gui(font, &main_app);
+        let timers = DebugTimers::default();
+
+        let ui = make_gui(font, &mut main_app, &timers);
 
         if let Some(c) = main_app.ui_state.update(
             &ui,
@@ -683,8 +684,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ) {
             main_app.on_ui_event(c);
         }
-
-        let timers = DebugTimers::default();
 
         main_app
             .handle
@@ -708,22 +707,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
 
                 draw_mouse_screen_position(&mut d, main_app.client.mouse_screen_position);
-
-                if main_app.show_debug_text {
-                    draw_debug_info(
-                        &main_app.world,
-                        &main_app.client,
-                        &main_app.assets,
-                        &timers,
-                        &main_app.node,
-                        &main_app.update_timer,
-                        &main_app.server_ping_timer,
-                        &main_app.server_telemetry_timer,
-                        &main_app.username,
-                        main_app.client.player_id,
-                        &mut d,
-                    );
-                }
 
                 draw_terminal(
                     &mut d,

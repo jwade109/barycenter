@@ -2000,7 +2000,7 @@ fn draw_node(
             draw_text_centered(d, font, &text, p, font_size, color);
         }
         NodeType::Text(text) => {
-            draw_ui_aabb(d, aabb, Color::new(30, 30, 30, 200), true);
+            // draw_ui_aabb(d, aabb, Color::new(30, 30, 30, 200), true);
             let p = glam_to_raylib(aabb.center);
             draw_text_centered(d, font, &text, p, UI_FONT_SIZE, Color::WHITE);
         }
@@ -2044,133 +2044,59 @@ fn draw_node(
     };
 }
 
-pub fn draw_debug_info(
-    world: &World,
-    client: &ClientSpecificInfo,
-    assets: &Assets,
-    timers: &DebugTimers,
-    node: &ClientNode,
-    update_timer: &WallTimer,
-    ping_timer: &WallTimer,
-    tlm_timer: &WallTimer,
-    username: &str,
-    user_id: Option<Ent>,
-    d: &mut RaylibDrawHandle,
-) {
-    let size = size_in_bytes(world);
-    let mut s = "Barycenter Client".to_string();
+// pub fn draw_debug_info(
+//     world: &World,
+//     client: &ClientSpecificInfo,
+//     assets: &Assets,
+//     timers: &DebugTimers,
+//     node: &ClientNode,
+//     update_timer: &WallTimer,
+//     ping_timer: &WallTimer,
+//     tlm_timer: &WallTimer,
+//     username: &str,
+//     user_id: Option<Ent>,
+//     d: &mut RaylibDrawHandle,
+// ) {
+//     let lines = debug_lines(
+//         world,
+//         client,
+//         timers,
+//         node,
+//         update_timer,
+//         ping_timer,
+//         tlm_timer,
+//         username,
+//         user_id,
+//         d.get_fps(),
+//     );
 
-    let consist = is_world_consistent(world);
-    s += &format!("\nOK: {:?}", consist);
+//     let font_size = 16.0;
 
-    let fmt_time = |d: std::time::Duration, t: std::time::Duration| {
-        let p = d.as_secs_f64() / t.as_secs_f64();
-        format!(
-            "    {:09} ns\n    {:05.04} ms\n    {:3.1}%",
-            d.as_nanos(),
-            d.as_nanos() as f64 / 1000000.0,
-            p * 100.0
-        )
-    };
+//     let s = lines.concat();
 
-    s += &format!(
-        "\nW {}/{} {} {:0.1} {}",
-        timers.ticks,
-        client.tick_rate,
-        world.ticks,
-        apparent_elapsed_time(world.ticks).as_secs_f64(),
-        apparent_datetime(world.ticks).format("%b %d %Y %I:%M:%S %p"),
-    );
+//     let font = assets.ui_font();
+//     let dims = font.measure_text(&s, font_size, 0.0);
+//     let padding = 10;
+//     let pos = Vector2::new(10.0, 60.0);
 
-    s += &format!("\nUsername:  {}", username);
-    if let Some(uid) = user_id {
-        s += &format!("\nUser ID:   {}", uid);
-    }
+//     d.draw_rectangle(
+//         pos.x as i32,
+//         pos.y as i32,
+//         dims.x as i32 + padding * 2,
+//         dims.y as i32 + padding * 2,
+//         Color::new(20, 20, 20, 255).alpha(0.9),
+//     );
 
-    s += &format!("\nFPS:       {}", d.get_fps());
-    s += &format!("\nMemory:    {:0.3} KB", size as f64 / 1000.0);
-    s += &format!("\nZoom:      {:0.3}", client.camera.zoom);
+//     let rec = Rectangle::new(
+//         pos.x,
+//         pos.y,
+//         dims.x + padding as f32 * 2.0,
+//         dims.y + padding as f32 * 2.0,
+//     );
 
-    s += &format!(
-        "\nUpdate:    {:0.2} Hz / {:0.2} Hz ",
-        update_timer.actual_rate(),
-        update_timer.nominal_rate()
-    );
-    s += &format!(
-        "\nPing:      {:0.2} Hz / {:0.2} Hz ",
-        ping_timer.actual_rate(),
-        ping_timer.nominal_rate()
-    );
-    s += &format!(
-        "\nTLM:       {:0.2} Hz / {:0.2} Hz ",
-        tlm_timer.actual_rate(),
-        tlm_timer.nominal_rate()
-    );
+//     d.draw_rectangle_lines_ex(rec, 3.0, Color::new(60, 60, 60, 255).alpha(0.9));
 
-    s += "\n";
+//     let pos = Vector2::new(pos.x + padding as f32, pos.y + padding as f32);
 
-    s += &format!("\nConnected: {}", node.is_connected());
-    s += &format!("\nAddress:   {}", node.server_addr());
-    s += &format!("\nRX:        {}", node.rx_count());
-    s += &format!("\nTX:        {}", node.tx_count());
-    s += &format!("\nErrors:    {}", node.errors());
-
-    s += "\n";
-
-    s += &format!("\nTicks:     {}", world.ticks);
-    s += &format!("\nGrids:     {}", world.grids.len());
-    s += &format!("\nParts:     {}", world.parts.len());
-    s += &format!("\nProtos:    {}", world.prototypes.len());
-    s += &format!("\nBPs:       {}", world.blueprints.len());
-    s += &format!("\nThrusters: {}", world.thrusters.len());
-    s += &format!("\nInvs:      {}", world.inventories.len());
-    s += &format!("\nMachines:  {}", world.machines.len());
-    s += &format!("\nAsteroids: {}", world.asteroids.len());
-    s += &format!("\nChunks:    {}", world.terrain_chunks.len());
-    s += &format!("\nTiles:     {}", world.terrain_tiles.len());
-    s += &format!("\nGAUs:      {}", world.grid_acceleration_updates);
-    s += &format!("\nPlayers:   {}", world.players.len());
-
-    for player in world.players.values() {
-        s += &format!("\n  {} {}", player.name, player.state);
-    }
-
-    s += "\n";
-
-    let total = timers.total();
-
-    s += &format!("\ntotal\n{}", fmt_time(total, total));
-
-    for timer in timers.timers.iter() {
-        let time = fmt_time(*timer.1, total);
-        s += &format!("\n{}\n{}", timer.0, time);
-    }
-
-    let font_size = 16.0;
-
-    let font = assets.ui_font();
-    let dims = font.measure_text(&s, font_size, 0.0);
-    let padding = 10;
-    let pos = Vector2::new(10.0, 60.0);
-
-    d.draw_rectangle(
-        pos.x as i32,
-        pos.y as i32,
-        dims.x as i32 + padding * 2,
-        dims.y as i32 + padding * 2,
-        Color::new(20, 20, 20, 255).alpha(0.9),
-    );
-
-    let rec = Rectangle::new(
-        pos.x,
-        pos.y,
-        dims.x + padding as f32 * 2.0,
-        dims.y + padding as f32 * 2.0,
-    );
-
-    d.draw_rectangle_lines_ex(rec, 3.0, Color::new(60, 60, 60, 255).alpha(0.9));
-
-    let pos = Vector2::new(pos.x + padding as f32, pos.y + padding as f32);
-
-    d.draw_text_ex(font.as_ref(), &s, pos, 16.0, 0.0, Color::ORANGE);
-}
+//     d.draw_text_ex(font.as_ref(), &s, pos, 16.0, 0.0, Color::ORANGE);
+// }

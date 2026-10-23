@@ -3,40 +3,37 @@ use bary_core::prelude::Ent;
 use bary_factory::InvSlot;
 use bary_input::InputState;
 use bary_sim::*;
-use bary_ui::*;
 use log::warn;
 use rdev::EventType;
 
-pub fn part_info_modal(
+pub fn get_part_info_modal(
+    ui: &mut UiBuilder,
     part_id: Ent,
-    ui: &UiBuilder,
     world: &World,
     assets: &Assets,
-    cmd: &str,
-) -> Option<Node<UiMessage>> {
+    cmd: Option<&mut String>,
+) -> Option<()> {
     let part = world.parts.try_get(part_id).ok()?;
     let proto = world.prototypes.try_get(part.prototype).ok()?;
 
-    let mut children = Vec::new();
-
-    children.push(ui.text(proto.name.clone()));
+    (ui.text(proto.name.clone()));
 
     if let Some(texture) = assets.part_textures.get(&proto.name) {
-        children.push(ui.sprite(proto.name.clone(), texture));
+        (ui.sprite(proto.name.clone(), texture));
     }
 
     if let Ok(cpu) = world.computers.try_get(part_id) {
-        children.push(ui.button(
+        (ui.button(
             UiMessage::SetComputerOnOff(part_id, !cpu.on),
             if cpu.on { "Turn Off" } else { "Turn On" },
         ));
-        children.push(ui.button(UiMessage::SetComputerDrift(part_id), "Set to Drift"));
+        (ui.button(UiMessage::SetComputerDrift(part_id), "Set to Drift"));
         let info = computer_info_str(cpu);
-        children.push(ui.text(info));
+        (ui.text(info));
     }
     if let Ok(thruster) = world.thrusters.try_get(part_id) {
         let s = format!("{:#?}", thruster);
-        children.push(ui.button(
+        (ui.button(
             UiMessage::SetThrusterState(part_id, !thruster.is_on()),
             if thruster.is_on() {
                 "Turn Off"
@@ -44,15 +41,15 @@ pub fn part_info_modal(
                 "Turn On"
             },
         ));
-        children.push(ui.text(s));
+        (ui.text(s));
     }
     if let Ok(light) = world.lights.try_get(part_id) {
         let s = format!("{:#?}", light);
-        children.push(ui.text(s));
+        (ui.text(s));
     }
     if let Ok(mac) = world.machines.try_get(part_id) {
-        children.push(ui.progress_bar(mac.progress()));
-        children.push(ui.button(
+        (ui.progress_bar(mac.progress()));
+        (ui.button(
             UiMessage::SetMachineState(part_id, !mac.enabled),
             if mac.enabled { "Turn Off" } else { "Turn On" },
         ));
@@ -60,14 +57,36 @@ pub fn part_info_modal(
     if let Ok(inv) = world.inventories.try_get(part_id) {
         for (idx, slot) in inv.slots().enumerate() {
             let line = slot_info_str(idx, slot);
-            children.push(ui.text(line));
-            children.push(ui.progress_bar(slot.fill_percentage()));
+            (ui.text(line));
+            (ui.progress_bar(slot.fill_percentage()));
         }
     }
 
-    children.push(ui.text(cmd));
+    if let Some(cmd) = cmd {
+        (ui.text(">> Command prompt ====="));
+        (ui.text(cmd.clone()));
+        (ui.text(">> =============="));
+        single_line_string_edit(cmd, ui.input());
+    }
 
-    Some(Node::column(600.0, children))
+    Some(())
+}
+
+pub fn part_info_modal(
+    ui: &mut UiBuilder,
+    state: &mut PartFocusState,
+    world: &World,
+    assets: &Assets,
+) {
+    get_part_info_modal(
+        ui,
+        state.part_id,
+        world,
+        assets,
+        Some(&mut state.command_prompt),
+    );
+
+    ui.end_window();
 }
 
 fn slot_info_str(idx: usize, slot: &InvSlot) -> String {
@@ -108,7 +127,7 @@ pub fn part_focus_terminal_input(state: &mut PartFocusState, input: &InputState)
     }
 }
 
-pub fn single_line_string_edit(s: &mut String, input: &InputState) -> Option<String> {
+fn single_line_string_edit(s: &mut String, input: &InputState) -> Option<String> {
     for event in input.events() {
         if let EventType::KeyPress(k) = event.event_type {
             match k {

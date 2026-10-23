@@ -1,21 +1,10 @@
-use crate::{
-    Scene, UiBuilder,
-    UiMessage::{self, Navigate},
-};
-use bary_core::prelude::Vec2;
-use bary_ui::*;
+use crate::{EditorState, Scene, UiBuilder, UiMessage};
 
-pub fn make_editor_ui(ui: &UiBuilder, tree: &mut Tree<UiMessage>) {
-    tree.add_layout(
-        Node::column(
-            Size::Fit,
-            vec![
-                ui.button(Navigate(Scene::Free), "Editor!"),
-                ui.button(Navigate(Scene::Free), "Editor!"),
-                ui.button(Navigate(Scene::Free), "Editor!"),
-                ui.button(Navigate(Scene::Free), "Editor!"),
-            ],
-        ),
-        Vec2::splat(40.0),
-    );
+pub fn make_editor_ui(ui: &mut UiBuilder, editor: &EditorState) {
+    ui.begin_window("editor_window");
+    ui.text(format!("Editing {}", editor.vehicle));
+    ui.button(UiMessage::Navigate(Scene::Free), "Editor!");
+    ui.button(UiMessage::Navigate(Scene::Free), "Editor!");
+    ui.button(UiMessage::Navigate(Scene::Free), "Editor!");
+    ui.button(UiMessage::Navigate(Scene::Free), "Editor!");
 }

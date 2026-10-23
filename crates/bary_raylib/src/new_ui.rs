@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::Scene;
 use bary_core::prelude::*;
 use bary_input::InputState;
@@ -5,7 +7,7 @@ use bary_ui::Tree;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UiMessage {
-    Drag(DragHandle),
+    Drag(String),
     Navigate(Scene),
     Exit,
     AltMode,
@@ -33,26 +35,25 @@ impl From<Scene> for UiMessage {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DragHandle {
-    MainMenu,
-    SaveSelect,
-    Docking,
-    PartInfo,
-}
-
-impl From<DragHandle> for UiMessage {
-    fn from(value: DragHandle) -> Self {
-        Self::Drag(value)
-    }
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct UiInteractionState {
     is_on_gui: bool,
     screen_pos: Option<Vec2>,
     hot: Option<(UiMessage, Vec2)>,
     active: Option<(UiMessage, Vec2)>,
+    offsets: BTreeMap<String, Vec2>,
+}
+
+impl UiInteractionState {
+    pub fn window_pos(&mut self, salt: impl Into<String>, offset: Vec2) -> Vec2 {
+        *self.offsets.entry(salt.into()).or_insert(offset)
+    }
+
+    pub fn shift_offset(&mut self, salt: &str, delta: Vec2) {
+        if let Some(pos) = self.offsets.get_mut(salt) {
+            *pos += delta;
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

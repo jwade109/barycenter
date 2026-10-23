@@ -1,21 +1,17 @@
 use crate::*;
-use bary_core::prelude::*;
+use bary_core::prelude::{Vec2, distance_str};
 use bary_sim::*;
-use bary_ui::*;
 use early_returns::*;
 
 pub fn make_part_info_gui(
-    ui: &UiBuilder,
+    ui: &mut UiBuilder,
     world: &World,
     client: &ClientSpecificInfo,
     assets: &Assets,
-    tree: &mut Tree<UiMessage>,
 ) {
     let gridloc = some_or_return!(client.selected_grid_loc());
     let grid = ok_or_return!(world.grids.try_get(gridloc.grid_id));
     let occ = some_or_return!(grid.get_parts_at(gridloc.coord));
-
-    let mut children = Vec::new();
 
     let s = format!(
         "At {}-{}: {:?}",
@@ -24,20 +20,70 @@ pub fn make_part_info_gui(
         occ.to_array()
     );
 
-    children.push(ui.draghandle(DragHandle::PartInfo));
-    children.push(ui.text(s));
+    ui.begin_window("part_info_window");
+    ui.text(s);
 
     for (_, part_id) in occ.iter() {
-        children.push(ui.sep());
-        children.push(ui.button(
-            Scene::Part(part_id),
-            format!("Go to Part {}", part_id),
-        ));
-        if let Some(node) = part_info_modal(part_id, ui, world, assets, "") {
-            children.push(node);
+        ui.sep();
+        ui.button(Scene::Part(part_id), format!("Go to Part {}", part_id));
+        get_part_info_modal(ui, part_id, world, assets, None);
+    }
+
+    ui.end_window();
+}
+
+pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World) {
+    ui.begin_window_at(Vec2::splat(40.0));
+    ui.text(format!("{:?}", ui.hot_element()));
+    ui.text(format!("{:?}", ui.active_element()));
+    ui.sep();
+    ui.button(UiMessage::Navigate(Scene::MainMenu), "Return to Main Menu");
+    ui.button(UiMessage::WriteSaveToDisk, "Save Game");
+    ui.button(UiMessage::AltMode, "Toggle Alt Mode");
+    ui.button(UiMessage::DebugText, "Toggle Debug Text");
+    ui.button(UiMessage::SimSpeed(0), "Toggle Pause");
+    ui.button(UiMessage::SimSpeed(1), "Sim 1x");
+    ui.button(UiMessage::SimSpeed(10), "Sim 10x");
+    ui.button(UiMessage::SimSpeed(100), "Sim 100x");
+    ui.button(UiMessage::SimSpeed(1000), "Sim 1000x");
+
+    if let Some(loc) = free.selected_vehicles.first() {
+        if let Some(grid) = world.grids.get(loc.grid_id) {
+            let msg = UiMessage::Navigate(Scene::Editor(loc.grid_id));
+            ui.sep();
+            ui.text(grid.name.clone());
+            ui.button(msg, "Open Ship Editor");
         }
     }
 
-    let node = Node::column(600, children);
-    tree.add_layout(node, Vec2::splat(100.0));
+    ui.end_window();
+
+    if let Some(docking) = free.docking_interface() {
+        make_docking_ui(ui, &docking, world);
+    }
+}
+
+fn make_docking_ui(ui: &mut UiBuilder, docking: &DockingInterface, world: &World) -> Option<()> {
+    let parent = world.grids.try_get(docking.parent.grid_id).ok()?;
+    let child = world.grids.try_get(docking.child.grid_id).ok()?;
+
+    let sep = parent
+        .particle_location
+        .translation
+        .distance(child.particle_location.translation);
+
+    let sep = distance_str(sep as f64);
+
+    ui.begin_window("docking_dialogue");
+    ui.text("Docking Control Panel");
+    ui.text("Multiline string\nAnother line\nAnd another!");
+    ui.text(format!("{} <- {}", parent.name, child.name));
+    ui.text(format!("Separation: {}", sep));
+    ui.button(UiMessage::DockingShiftX, "Offset X");
+    ui.button(UiMessage::DockingShiftY, "Offset Y");
+    ui.button(UiMessage::DockingRotate, "Rotate");
+    ui.button(UiMessage::DockingActivate, "Dock");
+    ui.end_window();
+
+    Some(())
 }
