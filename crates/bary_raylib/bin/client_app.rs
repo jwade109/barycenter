@@ -441,17 +441,13 @@ impl ClientApp {
                     state.prototype_id = Some(id);
                 }
             }
-            UiMessage::ArrestRotation { grid_id } => {
-                let instr = Instruction::HoldAttitude(0.0.into());
-                _ = set_grid_perpetual_instruction(&mut self.world, grid_id, instr);
-            }
-            UiMessage::SetDrifting { grid_id } => {
-                let instr = Instruction::Drift;
-                _ = set_grid_perpetual_instruction(&mut self.world, grid_id, instr);
-            }
             UiMessage::SetComputerDrift(cpu_id) => {
                 let instr = Instruction::Drift;
-                _ = set_cpu_perpetual_instruction(&mut self.world, cpu_id, instr);
+                let ti = TimedInstruction::perp(instr);
+                _ = set_cpu_instruction(&mut self.world, cpu_id, ti);
+            }
+            UiMessage::TimedInstruction { grid_id, ti } => {
+                _ = set_grid_instruction(&mut self.world, grid_id, ti);
             }
             e => warn!("Unhandled click event: {e:?}"),
         }

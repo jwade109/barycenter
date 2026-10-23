@@ -1,4 +1,4 @@
-use crate::math::wrap_pi_npi;
+use crate::math::{Rotation, wrap_pi_npi};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -55,6 +55,12 @@ impl From<f32> for Angle {
 impl From<f64> for Angle {
     fn from(value: f64) -> Self {
         Angle::radians(value)
+    }
+}
+
+impl From<Rotation> for Angle {
+    fn from(value: Rotation) -> Self {
+        value.to_angle().into()
     }
 }
 

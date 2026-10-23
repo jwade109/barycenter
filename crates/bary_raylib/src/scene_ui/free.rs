@@ -1,5 +1,5 @@
 use crate::*;
-use bary_core::prelude::{Vec2, distance_str, velocity_str};
+use bary_core::prelude::{Rotation, Vec2, distance_str, velocity_str};
 use bary_sim::*;
 use early_returns::*;
 
@@ -50,18 +50,49 @@ pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World,
             ui.sep();
             ui.text(grid.name.clone());
             ui.button(msg, "Open Ship Editor");
-            ui.button(
-                UiMessage::ArrestRotation {
-                    grid_id: loc.grid_id,
-                },
-                "Arrest Rotation",
-            );
-            ui.button(
-                UiMessage::SetDrifting {
-                    grid_id: loc.grid_id,
-                },
-                "Set Adrift",
-            );
+
+            ui.sep();
+
+            let make_instr = |instr: Instruction| UiMessage::TimedInstruction {
+                grid_id: loc.grid_id,
+                ti: TimedInstruction::perp(instr),
+            };
+
+            let adrift = make_instr(Instruction::Drift);
+
+            let point_east = make_instr(Instruction::HoldAttitude(Rotation::East.into()));
+            let point_north = make_instr(Instruction::HoldAttitude(Rotation::North.into()));
+            let point_west = make_instr(Instruction::HoldAttitude(Rotation::West.into()));
+            let point_south = make_instr(Instruction::HoldAttitude(Rotation::South.into()));
+
+            ui.sep();
+
+            ui.text("Orientation Commands");
+
+            ui.button(point_east, "point_east");
+            ui.button(point_north, "point_north");
+            ui.button(point_west, "point_west");
+            ui.button(point_south, "point_south");
+
+            let rcs_forward = make_instr(Instruction::rcs_forward());
+            let rcs_backward = make_instr(Instruction::rcs_backward());
+            let rcs_right = make_instr(Instruction::rcs_right());
+            let rcs_left = make_instr(Instruction::rcs_left());
+
+            ui.sep();
+
+            ui.text("RCS Commands");
+
+            ui.button(rcs_forward, "Forward");
+            ui.button(rcs_backward, "Backward");
+            ui.button(rcs_right, "Right");
+            ui.button(rcs_left, "Left");
+
+            ui.sep();
+
+            ui.button(adrift, "Set Adrift");
+
+            ui.sep();
 
             if let Some(cpu_id) = grid.computers.first() {
                 get_part_info_modal(ui, *cpu_id, world, assets, None);

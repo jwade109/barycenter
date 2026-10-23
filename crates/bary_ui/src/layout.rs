@@ -141,9 +141,9 @@ pub struct NodeStyle {
     text_justify: TextJustify,
 }
 
-pub trait UiMsg: std::fmt::Debug + Clone + PartialEq + Eq {}
+pub trait UiMsg: std::fmt::Debug + Clone {}
 
-impl<T: std::fmt::Debug + Clone + PartialEq + Eq> UiMsg for T {}
+impl<T: std::fmt::Debug + Clone> UiMsg for T {}
 
 #[derive(Debug, Clone)]
 pub enum NodeType<T: UiMsg> {

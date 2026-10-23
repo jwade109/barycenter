@@ -3,9 +3,10 @@ use std::collections::BTreeMap;
 use crate::Scene;
 use bary_core::prelude::*;
 use bary_input::InputState;
+use bary_sim::TimedInstruction;
 use bary_ui::{NodePath, Tree};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum UiMessage {
     Drag(String),
     Navigate(Scene),
@@ -29,8 +30,7 @@ pub enum UiMessage {
     Salt(usize),
     EditorSetLayer(PartLayer),
     EditorSetProto(Ent),
-    ArrestRotation { grid_id: Ent },
-    SetDrifting { grid_id: Ent },
+    TimedInstruction { grid_id: Ent, ti: TimedInstruction },
 }
 
 impl From<Scene> for UiMessage {

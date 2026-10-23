@@ -1620,7 +1620,7 @@ fn draw_light_source(d: &mut RaylibDrawHandle, p: impl Into<DVec2>, r_scale: f64
     let p = p.into();
     for r in [1.0f32, 1.5, 3.0] {
         let r = r_scale as f32 * r.powi(2);
-        let a = 0.2 * 1.0 / r;
+        let a = 0.06;
         let color = color.alpha(a);
         fill_circle(d, p, r, color);
     }

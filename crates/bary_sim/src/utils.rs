@@ -602,25 +602,19 @@ pub fn set_grid_as_drifting(world: &mut World, cpu_id: Ent) -> BaryResult<()> {
     Ok(())
 }
 
-pub fn set_cpu_perpetual_instruction(
-    world: &mut World,
-    cpu_id: Ent,
-    instr: Instruction,
-) -> BaryResult<Ent> {
+pub fn set_cpu_instruction(world: &mut World, cpu_id: Ent, ti: TimedInstruction) -> BaryResult<()> {
     let cpu = world.computers.try_get_mut(cpu_id)?;
-    cpu.command_queue.clear();
-    let ti = TimedInstruction::perp(instr);
-    cpu.command_queue.push(ti);
-    Ok(cpu_id)
+    cpu.command_queue = vec![ti];
+    Ok(())
 }
 
-pub fn set_grid_perpetual_instruction(
+pub fn set_grid_instruction(
     world: &mut World,
     grid_id: Ent,
-    instr: Instruction,
-) -> BaryResult<Ent> {
+    ti: TimedInstruction,
+) -> BaryResult<()> {
     let cpu_id = get_primary_cpu_id(grid_id, &world.grids)?;
-    set_cpu_perpetual_instruction(world, cpu_id, instr)
+    set_cpu_instruction(world, cpu_id, ti)
 }
 
 /// Turns the primary computer of the given grid on or off,

@@ -95,6 +95,12 @@ impl TimedInstruction {
     }
 }
 
+impl From<Instruction> for TimedInstruction {
+    fn from(value: Instruction) -> Self {
+        Self::perp(value)
+    }
+}
+
 impl std::fmt::Display for TimedInstruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(ticks) = self.duration {
