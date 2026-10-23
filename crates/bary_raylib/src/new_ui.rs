@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::Scene;
 use bary_core::prelude::*;
 use bary_input::InputState;
-use bary_ui::Tree;
+use bary_ui::{NodePath, Tree};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UiMessage {
@@ -39,12 +39,19 @@ impl From<Scene> for UiMessage {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct UiRef {
+    pub path: NodePath,
+    pub offset: Vec2,
+    pub onclick: Option<UiMessage>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct UiInteractionState {
     is_on_gui: bool,
     screen_pos: Option<Vec2>,
-    hot: Option<(UiMessage, Vec2)>,
-    active: Option<(UiMessage, Vec2)>,
+    hot: Option<UiRef>,
+    active: Option<UiRef>,
     offsets: BTreeMap<String, Vec2>,
 }
 
@@ -69,32 +76,28 @@ pub enum UiEventKind {
 
 #[derive(Debug, Clone)]
 pub struct UiEvent {
-    pub msg: UiMessage,
-    pub pos: Vec2,
+    pub reference: UiRef,
     pub kind: UiEventKind,
 }
 
 impl UiEvent {
-    fn click(msg: UiMessage, pos: Vec2) -> Self {
+    fn click(rf: UiRef) -> Self {
         Self {
-            msg,
-            pos,
+            reference: rf,
             kind: UiEventKind::Click,
         }
     }
 
-    fn release(msg: UiMessage, pos: Vec2) -> Self {
+    fn release(rf: UiRef) -> Self {
         Self {
-            msg,
-            pos,
+            reference: rf,
             kind: UiEventKind::Click,
         }
     }
 
-    fn drag(msg: UiMessage, pos: Vec2, delta: Vec2) -> Self {
+    fn drag(rf: UiRef, delta: Vec2) -> Self {
         Self {
-            msg,
-            pos,
+            reference: rf,
             kind: UiEventKind::Drag(delta),
         }
     }
@@ -105,12 +108,20 @@ impl UiInteractionState {
         self.is_on_gui
     }
 
-    pub fn active(&self) -> Option<&UiMessage> {
-        self.active.as_ref().map(|e| &e.0)
+    pub fn active(&self) -> Option<&UiRef> {
+        self.active.as_ref()
     }
 
-    pub fn hot(&self) -> Option<&UiMessage> {
-        self.hot.as_ref().map(|e| &e.0)
+    pub fn hot(&self) -> Option<&UiRef> {
+        self.hot.as_ref()
+    }
+
+    pub fn active_path(&self) -> Option<&NodePath> {
+        self.active.as_ref().map(|a| &a.path)
+    }
+
+    pub fn hot_path(&self) -> Option<&NodePath> {
+        self.hot.as_ref().map(|a| &a.path)
     }
 
     pub fn update(
@@ -131,14 +142,16 @@ impl UiInteractionState {
 
                 self.is_on_gui |= contains;
 
-                let Some(onclick) = node.on_click() else {
-                    continue;
-                };
+                let path = node.path();
 
                 let relative = p - aabb.lower();
 
                 if contains {
-                    self.hot = Some((onclick.clone(), relative));
+                    self.hot = Some(UiRef {
+                        path: path.clone(),
+                        offset: relative,
+                        onclick: node.on_click().cloned(),
+                    });
 
                     if input.just_pressed(rdev::Button::Left) {
                         self.active = self.hot.clone();
@@ -155,7 +168,7 @@ impl UiInteractionState {
             {
                 if last != cur {
                     let delta = cur - last;
-                    ret = Some(UiEvent::drag(active.0.clone(), active.1, delta));
+                    ret = Some(UiEvent::drag(active.clone(), delta));
                 }
             }
         }
@@ -168,8 +181,8 @@ impl UiInteractionState {
 
         if input.just_released(rdev::Button::Left) {
             if let Some((active, hot)) = self.active.as_ref().zip(self.hot.as_ref()) {
-                if active.0 == hot.0 {
-                    ret = Some(UiEvent::release(active.0.clone(), active.1));
+                if active.path == hot.path {
+                    ret = Some(UiEvent::release(active.clone()));
                 }
             }
             self.active = None;

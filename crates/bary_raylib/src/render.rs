@@ -1989,8 +1989,8 @@ fn draw_node(
     let color = node_color(node);
     let aabb = node.aabb();
 
-    let is_clicked = state.active() == node.on_click();
-    let is_hovered = state.hot() == node.on_click();
+    let is_clicked = state.active_path() == Some(node.path());
+    let is_hovered = state.hot_path() == Some(node.path());
 
     match node.kind() {
         NodeType::Button(text, _msg) => {

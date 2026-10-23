@@ -4,7 +4,7 @@ use bary_sim::World;
 use crate::{EditorState, Scene, UiBuilder, UiMessage};
 
 pub fn make_editor_ui(ui: &mut UiBuilder, editor: &EditorState, world: &World) {
-    ui.begin_window_at(Vec2::new(20.0, 20.0));
+    ui.begin_window_at(Vec2::new(20.0, 20.0), "editor_window");
     ui.text(format!("Editing {}", editor.vehicle));
     ui.button(UiMessage::Navigate(Scene::Free), "Editor!");
     ui.button(UiMessage::Navigate(Scene::Free), "Editor!");

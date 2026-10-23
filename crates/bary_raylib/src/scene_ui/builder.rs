@@ -1,4 +1,4 @@
-use crate::{UI_FONT_SIZE, UiInteractionState, UiMessage};
+use crate::{UI_FONT_SIZE, UiInteractionState, UiMessage, UiRef};
 use bary_core::prelude::Vec2;
 use bary_input::InputState;
 use bary_ui::*;
@@ -27,27 +27,27 @@ impl UiBuilder {
         }
     }
 
-    pub fn hot_element(&self) -> Option<&UiMessage> {
+    pub fn hot_element(&self) -> Option<&UiRef> {
         self.state.hot()
     }
 
-    pub fn active_element(&self) -> Option<&UiMessage> {
+    pub fn active_element(&self) -> Option<&UiRef> {
         self.state.active()
     }
 
-    pub fn begin_window(&mut self, id_salt: impl Into<String>) {
-        let id_salt = id_salt.into();
+    pub fn begin_window(&mut self, id_salt: impl Into<IdSalt>) {
+        let id_salt = id_salt.into().to_string();
         let x = random_range(100.0..700.0);
         let y = random_range(100.0..400.0);
         let offset = self.window_pos(id_salt.clone(), (x, y).into());
-        let node = Node::column(Size::Fit, Vec::new());
+        let node = Node::column(Size::Fit, &id_salt, Vec::new());
         self.active_node = Some((node, offset));
         self.draghandle(id_salt);
     }
 
-    pub fn begin_window_at(&mut self, origin: Vec2) {
+    pub fn begin_window_at(&mut self, origin: Vec2, id_salt: impl Into<IdSalt>) {
         self.end_window();
-        let node = Node::column(Size::Fit, Vec::new());
+        let node = Node::column(Size::Fit, id_salt, Vec::new());
         self.active_node = Some((node, origin));
     }
 
@@ -57,8 +57,8 @@ impl UiBuilder {
         }
     }
 
-    pub fn window_pos(&mut self, salt: impl Into<String>, offset: Vec2) -> Vec2 {
-        self.state.window_pos(salt, offset)
+    pub fn window_pos(&mut self, salt: impl Into<IdSalt>, offset: Vec2) -> Vec2 {
+        self.state.window_pos(salt.into().to_string(), offset)
     }
 
     pub fn input(&self) -> &InputState {
@@ -83,13 +83,14 @@ impl UiBuilder {
     }
 
     pub fn draghandle(&mut self, salt: impl Into<String>) {
-        let msg = UiMessage::Drag(salt.into());
-        let n = Node::handle(Size::Grow, 20, msg);
+        let s = salt.into();
+        let msg = UiMessage::Drag(s.clone());
+        let n = Node::handle(Size::Grow, 20, s, msg);
         self.add_to_active(n);
     }
 
     pub fn sep(&mut self) {
-        self.add_to_active(Node::structural(Size::Grow, 2));
+        self.add_to_active(Node::structural(Size::Grow, 2, "separator"));
     }
 
     pub fn text(&mut self, s: impl Into<String>) {
@@ -105,7 +106,8 @@ impl UiBuilder {
         let dims = self.font.measure_text(&s, self.font_size, 0.0);
         let w = dims.x + 36.0;
         let h = dims.y + 18.0;
-        self.add_to_active(Node::button(s, msg, w, h));
+        let id_salt = format!("button_{}", s.replace(" ", "_"));
+        self.add_to_active(Node::button(s, msg, w, h, id_salt));
     }
 
     pub fn sprite(&mut self, s: impl Into<String>, texture: &Texture2D) {
@@ -118,6 +120,6 @@ impl UiBuilder {
     }
 
     pub fn progress_bar(&mut self, val: f32) {
-        self.add_to_active(Node::progress_bar(Size::Grow, 11, val));
+        self.add_to_active(Node::progress_bar(Size::Grow, 11, val, "progress_bar"));
     }
 }

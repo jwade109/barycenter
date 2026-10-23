@@ -374,90 +374,98 @@ impl ClientApp {
         self.node.send(MessageKind::LoadSave(path));
     }
 
-    pub fn on_drag(&mut self, id: UiMessage, delta: Vec2) {
-        match id {
-            UiMessage::DockingShiftX => {
+    pub fn on_drag(&mut self, id: UiRef, delta: Vec2) {
+        debug!("Drag event: {:?}", id);
+        match id.onclick {
+            Some(UiMessage::DockingShiftX) => {
                 self.docking_shift(delta, true);
             }
-            UiMessage::DockingShiftY => {
+            Some(UiMessage::DockingShiftY) => {
                 self.docking_shift(delta, false);
             }
-            UiMessage::Drag(handle) => {
+            Some(UiMessage::Drag(handle)) => {
                 self.ui_state.shift_offset(&handle, delta);
             }
-            e => warn!("Unhandled drag event: {e:?}"),
+            Some(e) => warn!("Unhandled drag event: {e:?}"),
+            None => (),
+        }
+    }
+
+    pub fn on_click(&mut self, ui: UiRef) {
+        info!("Click event: {:?}", ui);
+        self.sounds.push(SoundEffect::ButtonDown);
+
+        let Some(onclick) = ui.onclick else {
+            return;
+        };
+
+        match onclick {
+            UiMessage::Navigate(nav) => {
+                self.client.scene_graph.handle_navigation(nav);
+            }
+            UiMessage::Exit => self.exit(),
+            UiMessage::AltMode => self.client.alt_mode ^= true,
+            UiMessage::DebugText => self.show_debug_text ^= true,
+            UiMessage::SimSpeed(sp) => self.set_sim_speed(sp),
+            UiMessage::DockingRotate => self.docking_rotate(),
+            UiMessage::DockingActivate => self.docking_activate(),
+            UiMessage::LoadSaveFile(path) => self.load_save_file(path),
+            UiMessage::SetMachineState(machine_id, state) => {
+                let delta = WorldDelta::SetMachineState(machine_id, state);
+                self.request_server_delta(delta);
+            }
+            UiMessage::SetThrusterState(thruster_id, state) => {
+                let delta = WorldDelta::SetThrusterState(thruster_id, state);
+                self.request_server_delta(delta);
+            }
+            UiMessage::LoadSave => {
+                self.client.scene_graph = SceneGraph::ListSaves;
+            }
+            UiMessage::JoinMultiplayer => {
+                self.request_world_download();
+            }
+            UiMessage::WriteSaveToDisk => {
+                save_world_and_alert_chat(&self.world, &mut self.client);
+            }
+            UiMessage::SetComputerOnOff(id, state) => {
+                // TODO make a WorldDelta for this
+                _ = set_cpu_state(&mut self.world.computers, id, state);
+            }
+            UiMessage::EditorSetLayer(layer) => {
+                if let SceneGraph::Editor(state) = &mut self.client.scene_graph {
+                    state.layer = Some(layer);
+                }
+            }
+            UiMessage::EditorSetProto(id) => {
+                if let SceneGraph::Editor(state) = &mut self.client.scene_graph {
+                    state.prototype_id = Some(id);
+                }
+            }
+            UiMessage::ArrestRotation { grid_id } => {
+                let instr = Instruction::HoldAttitude(0.0.into());
+                _ = set_grid_perpetual_instruction(&mut self.world, grid_id, instr);
+            }
+            UiMessage::SetDrifting { grid_id } => {
+                let instr = Instruction::Drift;
+                _ = set_grid_perpetual_instruction(&mut self.world, grid_id, instr);
+            }
+            UiMessage::SetComputerDrift(cpu_id) => {
+                let instr = Instruction::Drift;
+                _ = set_cpu_perpetual_instruction(&mut self.world, cpu_id, instr);
+            }
+            e => warn!("Unhandled click event: {e:?}"),
         }
     }
 
     pub fn on_ui_event(&mut self, c: UiEvent) {
-        debug!("{:?}", c);
-
         match c.kind {
             UiEventKind::Drag(delta) => {
-                self.on_drag(c.msg, delta);
+                self.on_drag(c.reference, delta);
             }
             UiEventKind::Release => {
                 self.sounds.push(SoundEffect::ButtonUp);
             }
-            UiEventKind::Click => {
-                self.sounds.push(SoundEffect::ButtonDown);
-                match c.msg {
-                    UiMessage::Navigate(nav) => {
-                        self.client.scene_graph.handle_navigation(nav);
-                    }
-                    UiMessage::Exit => self.exit(),
-                    UiMessage::AltMode => self.client.alt_mode ^= true,
-                    UiMessage::DebugText => self.show_debug_text ^= true,
-                    UiMessage::SimSpeed(sp) => self.set_sim_speed(sp),
-                    UiMessage::DockingRotate => self.docking_rotate(),
-                    UiMessage::DockingActivate => self.docking_activate(),
-                    UiMessage::LoadSaveFile(path) => self.load_save_file(path),
-                    UiMessage::SetMachineState(machine_id, state) => {
-                        let delta = WorldDelta::SetMachineState(machine_id, state);
-                        self.request_server_delta(delta);
-                    }
-                    UiMessage::SetThrusterState(thruster_id, state) => {
-                        let delta = WorldDelta::SetThrusterState(thruster_id, state);
-                        self.request_server_delta(delta);
-                    }
-                    UiMessage::LoadSave => {
-                        self.client.scene_graph = SceneGraph::ListSaves;
-                    }
-                    UiMessage::JoinMultiplayer => {
-                        self.request_world_download();
-                    }
-                    UiMessage::WriteSaveToDisk => {
-                        save_world_and_alert_chat(&self.world, &mut self.client);
-                    }
-                    UiMessage::SetComputerDrift(cpu_id) => {
-                        // TODO make a WorldDelta for this
-                        _ = set_grid_as_drifting(&mut self.world, cpu_id);
-                    }
-                    UiMessage::SetComputerOnOff(id, state) => {
-                        // TODO make a WorldDelta for this
-                        _ = set_cpu_state(&mut self.world.computers, id, state);
-                    }
-                    UiMessage::EditorSetLayer(layer) => {
-                        if let SceneGraph::Editor(state) = &mut self.client.scene_graph {
-                            state.layer = Some(layer);
-                        }
-                    }
-                    UiMessage::EditorSetProto(id) => {
-                        if let SceneGraph::Editor(state) = &mut self.client.scene_graph {
-                            state.prototype_id = Some(id);
-                        }
-                    }
-                    UiMessage::ArrestRotation { grid_id } => {
-                        let instr = Instruction::HoldAttitude(0.0.into());
-                        _ = set_perpetual_instruction(&mut self.world, grid_id, instr);
-                    }
-                    UiMessage::SetDrifting { grid_id } => {
-                        let instr = Instruction::Drift;
-                        _ = set_perpetual_instruction(&mut self.world, grid_id, instr);
-                    }
-                    e => warn!("Unhandled click event: {e:?}"),
-                }
-            }
+            UiEventKind::Click => self.on_click(c.reference),
         }
     }
 
@@ -540,10 +548,10 @@ struct Args {
 
 #[allow(unused)]
 fn generate_assets_ui(assets: &Assets, input: &InputState, width: f32, height: f32) -> Tree<()> {
-    let mut root = Node::new(width, Size::Fit);
+    let mut root = Node::new(width, Size::Fit, "assets_ui");
 
     for (ctx, mapping) in assets.keybinds.iter() {
-        let mut col = Node::new(Size::Grow, height / 2.0)
+        let mut col = Node::new(Size::Grow, height / 2.0, "column")
             .down()
             .with_padding(4.0)
             .with_child_gap(1.0);

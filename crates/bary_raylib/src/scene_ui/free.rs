@@ -33,7 +33,7 @@ pub fn make_part_info_gui(
 }
 
 pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World, assets: &Assets) {
-    ui.begin_window_at(Vec2::splat(40.0));
+    ui.begin_window_at(Vec2::splat(40.0), "free_flying_window");
     ui.button(UiMessage::Navigate(Scene::MainMenu), "Return to Main Menu");
     ui.button(UiMessage::WriteSaveToDisk, "Save Game");
     ui.button(UiMessage::AltMode, "Toggle Alt Mode");
