@@ -133,6 +133,23 @@ fn update_actual_hover_part_info(client: &mut ClientSpecificInfo, grids: &Compon
     }
 }
 
+fn set_target_camera_if_docking(
+    world: &World,
+    docking: &DockingInterface,
+    target: &mut Camera,
+) -> Option<()> {
+    let grid_a = world.grids.get(docking.parent.grid_id)?;
+    let grid_b = world.grids.get(docking.child.grid_id)?;
+
+    let u = grid_a.centroid_isometry().tr();
+    let v = grid_b.centroid_isometry().tr();
+
+    let c = (u + v) / 2.0;
+
+    target.isometry.translation = c;
+    Some(())
+}
+
 fn set_target_camera_if_following(
     follow: Option<Ent>,
     lock_rotation: bool,
@@ -472,13 +489,17 @@ pub fn post_simulation_update(
 
     match &mut client.scene_graph {
         SceneGraph::Free(fly) => {
-            set_target_camera_if_following(
-                fly.follow_vehicle,
-                fly.lock_rotation,
-                &world.grids,
-                &mut client.target_camera,
-                &mut client.camera,
-            );
+            if let Some(docking) = fly.docking_interface() {
+                set_target_camera_if_docking(world, &docking, &mut client.target_camera);
+            } else {
+                set_target_camera_if_following(
+                    fly.follow_vehicle,
+                    fly.lock_rotation,
+                    &world.grids,
+                    &mut client.target_camera,
+                    &mut client.camera,
+                );
+            }
 
             if !is_terminal_focused {
                 camera_moves_with_wasd(

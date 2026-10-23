@@ -53,6 +53,7 @@ pub enum WorldDelta {
         seed: u32,
     },
     SpawnPlanet {
+        name: String,
         iso: Isometry2d,
         radius: f64,
         mass: f64,

@@ -1,0 +1,16 @@
+- !SpawnPlanet
+    name: Lado
+    location:
+      translation: [0, 0]
+      rotation: 0
+    radius: 100
+    mass: 3000000000000000
+
+- !LoadBlueprint ["pollux", 0]
+- !LoadBlueprint ["pollux", 2]
+
+- !SpawnShip [["pollux", 0], "Bob", { translation: [1000.0, 300.0], rotation: 0 }]
+- !SetVelocity { translation: [0.0, 15.0], rotation: 0 }
+
+- !SpawnShip [["pollux", 2], "Sally", { translation: [1000.0, 285.0], rotation: 0 }]
+- !SetVelocity { translation: [0.0, 15.0], rotation: 0 }

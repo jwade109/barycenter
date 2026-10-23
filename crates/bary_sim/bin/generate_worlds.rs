@@ -5,7 +5,7 @@ use bary_sim::*;
 fn scenario_a() -> BaryResult<()> {
     let world = WorldBuilder::new()
         .assets()
-        .planet(Isometry2d::ZERO, 3E15, 100.0)
+        .planet("Lado", Isometry2d::ZERO, 3E15, 100.0)
         .blueprint(("pollux", 0))
         .blueprint(("pollux", 2))
         .blueprint("bellerophon")
@@ -67,10 +67,20 @@ fn scenario_b() -> BaryResult<()> {
     save_world("saves/scenario_b", &world, true)
 }
 
+fn scenario_c() -> BaryResult<()> {
+    let world = WorldBuilder::new()
+        .assets()
+        .parse_file("scenario_c.yaml")
+        .build();
+
+    save_world("saves/scenario_c", &world, true)
+}
+
 fn main() -> BaryResult<()> {
     simple_logger::init_with_level(log::Level::Trace).unwrap();
 
     scenario_a()?;
     scenario_b()?;
+    scenario_c()?;
     Ok(())
 }

@@ -222,6 +222,17 @@ pub fn set_grid_vel(world: &mut World, grid_id: Ent, vel: Isometry2d) -> BaryRes
     Ok(())
 }
 
+pub fn set_as_orbital_parent(world: &mut World, grid_id: Ent, planet_id: Ent) -> BaryResult<()> {
+    info!(
+        "Setting {} as the orbital parent of grid {}",
+        planet_id, grid_id
+    );
+
+    let grid = world.grids.try_get_mut(grid_id)?;
+    grid.orbital_parent = Some(planet_id);
+    Ok(())
+}
+
 /// Inserts a part into an existing grid.
 pub fn insert_part(
     grid_id: Ent,

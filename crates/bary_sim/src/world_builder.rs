@@ -3,9 +3,10 @@ use bary_core::prelude::*;
 use bary_factory::*;
 use bary_parts::*;
 use log::*;
+use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 enum WorldBuilderCommand {
     LoadBlueprint(BlueprintId),
     SpawnShip(BlueprintId, Option<String>, Isometry2d),
@@ -16,6 +17,7 @@ enum WorldBuilderCommand {
     SetRecipe(PartCoord, RecipeListing),
     SpawnAsteroid(Isometry2d, f32, u32),
     SpawnPlanet {
+        name: String,
         location: Isometry2d,
         radius: f64,
         mass: f64,
@@ -29,6 +31,7 @@ pub struct WorldBuilder {
     commands: Vec<WorldBuilderCommand>,
     cursor_grid: Option<Ent>,
     cursor_player: Option<Ent>,
+    cursor_planet: Option<Ent>,
 }
 
 impl WorldBuilder {
@@ -38,7 +41,15 @@ impl WorldBuilder {
             commands: Vec::new(),
             cursor_grid: None,
             cursor_player: None,
+            cursor_planet: None,
         }
+    }
+
+    pub fn parse_file(mut self, path: &str) -> Self {
+        let s = std::fs::read_to_string(path).unwrap();
+        let commands: Vec<WorldBuilderCommand> = serde_yaml::from_str(&s).unwrap();
+        self.commands.extend(commands);
+        self
     }
 
     pub fn assets(mut self) -> Self {
@@ -110,8 +121,15 @@ impl WorldBuilder {
         self
     }
 
-    pub fn planet(mut self, p: impl Into<Isometry2d>, mass: f64, r: f64) -> Self {
+    pub fn planet(
+        mut self,
+        name: impl Into<String>,
+        p: impl Into<Isometry2d>,
+        mass: f64,
+        r: f64,
+    ) -> Self {
         let cmd = WorldBuilderCommand::SpawnPlanet {
+            name: name.into(),
             location: p.into(),
             radius: r,
             mass,
@@ -161,6 +179,10 @@ impl WorldBuilder {
 
         let commands = self.commands.clone();
 
+        for cmd in &commands {
+            println!("{:?}", cmd);
+        }
+
         for cmd in commands {
             match cmd {
                 WorldBuilderCommand::LoadBlueprint(bpid) => {
@@ -191,6 +213,9 @@ impl WorldBuilder {
                         Ok(id) => {
                             self.cursor_grid = Some(id);
                             _ = set_grid_pose(&mut world, id, iso);
+                            if let Some(planet_id) = self.cursor_planet {
+                                _ = set_as_orbital_parent(&mut world, id, planet_id);
+                            }
                         }
                         Err(e) => {
                             error!("Failed to spawn grid: {e:?}");
@@ -265,16 +290,13 @@ impl WorldBuilder {
                     }
                 }
                 WorldBuilderCommand::SpawnPlanet {
+                    name,
                     location,
                     mass,
                     radius,
                 } => {
-                    let delta = WorldDelta::SpawnPlanet {
-                        iso: location,
-                        mass,
-                        radius,
-                    };
-                    _ = apply_delta(&mut world, delta);
+                    let id = spawn_planet(&mut world, name, location, mass, radius);
+                    self.cursor_planet = Some(id);
                 }
             }
         }

@@ -3,8 +3,9 @@ use bary_core::prelude::{DVec2, Ent, Isometry2d};
 use bary_orbital::Body;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Planet {
+    pub name: String,
     pub iso: Isometry2d,
     pub body: Body,
     pub parent: Option<Ent>,
@@ -16,8 +17,15 @@ impl Planet {
     }
 }
 
-pub fn spawn_planet(world: &mut World, iso: Isometry2d, mass: f64, radius: f64) -> Ent {
+pub fn spawn_planet(
+    world: &mut World,
+    name: String,
+    iso: Isometry2d,
+    mass: f64,
+    radius: f64,
+) -> Ent {
     let planet = Planet {
+        name,
         iso,
         body: Body::with_mass(radius, mass, 1E6),
         parent: None,

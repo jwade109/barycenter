@@ -411,7 +411,7 @@ pub fn draw_world(
 
     draw_waypoint_far_indicators(&world.computers, d, &raylib_camera);
 
-    draw_selected_grid_info(d, &client, &world.grids, client.screen_dims, assets);
+    draw_selected_grid_info(d, &client, &world, client.screen_dims, assets);
 
     draw_editor_rename_field(d, client, assets);
 
@@ -732,15 +732,20 @@ fn draw_stars(
     }
 }
 
+fn get_orbital_parent_name(world: &World, parent: Ent) -> Option<&str> {
+    let planet = world.planets.get(parent)?;
+    Some(&planet.name)
+}
+
 fn draw_selected_grid_info(
     d: &mut RaylibDrawHandle,
     client: &ClientSpecificInfo,
-    grids: &Components<VehicleGrid>,
+    world: &World,
     screen_dims: Vec2,
     assets: &Assets,
 ) {
     let grid_id = some_or_return!(client.focused_grid_id());
-    let grid = ok_or_return!(grids.try_get(grid_id));
+    let grid = ok_or_return!(world.grids.try_get(grid_id));
 
     let font_size = 26;
 
@@ -754,11 +759,18 @@ fn draw_selected_grid_info(
     let vel_label = format!("{:0.2} m/s", grid.velocity.translation);
     let acc_label = format!("{:0.2} m/s^2", grid.linear_acceleration());
 
+    let orbital_label = grid
+        .orbital_parent
+        .and_then(|id| get_orbital_parent_name(world, id))
+        .map(|s| format!("Orbiting {s}"))
+        .unwrap_or_default();
+
     let hx = screen_dims.x / 2.0;
 
     let labels = [
         (title_label, hx, 120.0),
         (parts_label, hx, 160.0),
+        (orbital_label, hx, 200.0),
         (pos_label, hx, screen_dims.y - 50.0),
         (vel_label, hx + 300.0, screen_dims.y - 50.0),
         (acc_label, hx - 300.0, screen_dims.y - 50.0),

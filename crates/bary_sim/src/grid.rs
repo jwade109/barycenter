@@ -24,6 +24,7 @@ pub struct VehicleGrid {
 
     // TODO this is not tested in any way.
     pub occupancy: BTreeMap<(i32, i32), PartOccupancy>,
+    pub orbital_parent: Option<Ent>,
 }
 
 impl VehicleGrid {
@@ -62,6 +63,7 @@ impl VehicleGrid {
             pipes: BTreeSet::new(),
             vehicle_bounds: (IVec2::ZERO, IVec2::ZERO),
             occupancy: BTreeMap::new(),
+            orbital_parent: None,
         }
     }
 
