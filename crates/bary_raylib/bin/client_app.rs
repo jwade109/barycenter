@@ -11,35 +11,31 @@ use log::*;
 use raylib::prelude::*;
 use std::{rc::Rc, time::Duration};
 
+mod backend;
+
+use backend::*;
+
 pub struct ClientApp {
     input: InputHandler,
 
-    username: String,
-
     client: ClientSpecificInfo,
-    world: World,
+
+    backend: MultiplayerBackend,
 
     terminal: Terminal<TermCmd>,
 
     handle: RaylibHandle,
     thread: RaylibThread,
     assets: Assets,
-    node: ClientNode,
     ui_state: UiInteractionState,
 
     update_timer: WallTimer,
-    server_ping_timer: WallTimer,
-    server_telemetry_timer: WallTimer,
 
     should_exit: bool,
 
     show_debug_text: bool,
 
     sounds: SoundEffects,
-
-    server_handshake_complete: bool,
-
-    async_world_download: Option<AsyncWorldDownload>,
 }
 
 impl ClientApp {
@@ -79,76 +75,43 @@ impl ClientApp {
         let node = ClientNode::with_str_addr(&args.server_addr)?;
 
         let update_timer = WallTimer::with_dur(Duration::from_millis(20));
-        let server_ping_timer = WallTimer::with_dur(Duration::from_millis(1000));
-        let server_telemetry_timer = WallTimer::with_dur(Duration::from_millis(100));
         let ui_state = UiInteractionState::default();
 
+        let backend = MultiplayerBackend::new(world, node, args.username);
+
         Ok(ClientApp {
-            username: args.username,
-            world,
+            backend,
             client: ClientSpecificInfo::new(),
             input,
             terminal,
             handle,
             thread,
             assets,
-            node,
             ui_state,
             update_timer,
-            server_ping_timer,
-            server_telemetry_timer,
             should_exit: false,
             show_debug_text: false,
             sounds: SoundEffects::new(),
-            server_handshake_complete: false,
-            async_world_download: None,
         })
     }
 
-    fn request_server_delta(&mut self, delta: WorldDelta) {
-        self.node.send(MessageKind::RequestDelta(delta));
-    }
-
-    fn send_telemetry_to_server(&mut self) {
-        let tlm = ClientTelemetry {
-            ticks: self.world.ticks,
-        };
-        self.node.send(MessageKind::ClientTelemetry(tlm));
-    }
-
     fn update_in_world(&mut self) {
-        let deltas = pre_simulation_update(&self.world, &mut self.client);
+        let deltas = pre_simulation_update(self.backend.world(), &mut self.client);
 
-        for msg in self.node.update() {
+        for msg in self.backend.update() {
             self.on_rcv_server_msg(msg);
         }
 
         let post_deltas = post_simulation_update(
-            &self.world,
+            self.backend.world(),
             &mut self.client,
             &mut self.sounds,
             self.terminal.is_focused(),
         );
 
         for delta in deltas.into_iter().chain(post_deltas) {
-            self.node.send(MessageKind::RequestDelta(delta));
+            self.backend.request_delta(delta);
         }
-
-        // HANDLE INPUTS FROM RDEV LISTENER THREAD
-
-        if self.server_ping_timer.tick() {
-            if self.server_handshake_complete {
-                self.node.send(MessageKind::Ping)
-            }
-        }
-
-        if self.server_telemetry_timer.tick() {
-            if self.server_handshake_complete {
-                self.send_telemetry_to_server();
-            }
-        }
-
-        // HANDLE RDEV EVENTS (DEPRECATED - USE INPUTSTATE)
 
         let cmds = self.terminal.handle_input(&self.client.input);
 
@@ -158,11 +121,16 @@ impl ClientApp {
 
         let on_gui = self.ui_state.is_on_gui();
         if !self.terminal.is_active() {
-            process_event(&mut self.world, &mut self.client, &mut self.sounds, on_gui);
+            process_event(
+                self.backend.world_mut(),
+                &mut self.client,
+                &mut self.sounds,
+                on_gui,
+            );
 
             if let Some(editor) = self.client.scene_graph.editor_mut() {
-                if let Some(delta) = editor.handle_keys(&self.client.input, &self.world) {
-                    self.node.send(MessageKind::RequestDelta(delta));
+                if let Some(delta) = editor.handle_keys(&self.client.input, self.backend.world()) {
+                    self.backend.send(MessageKind::RequestDelta(delta));
                 }
             }
         }
@@ -202,49 +170,13 @@ impl ClientApp {
                 let s = format!("[{id}]: {text}");
                 self.client.chat.log(s);
             }
-            MessageKind::Driver {
-                ticks,
-                deltas,
-                players,
-            } => {
-                self.on_driver_packet(ticks, deltas);
-                self.world.players = players;
-            }
-            MessageKind::BlobResponse(blob) => {
-                self.on_rcv_blob(blob);
-            }
-            MessageKind::MultiBlobResponse(ent, ticks, blobs) => {
-                let delta = ticks as i64 - self.world.ticks as i64;
-                self.terminal.log_warn(format!(
-                    "Delta ticks: {} AKA {:0.3}",
-                    delta,
-                    timedelta_from_delta_ticks(delta).as_seconds_f64()
-                ));
-                self.world.spawner.set_next(ent);
-                self.world.ticks = ticks;
-                for blob in blobs {
-                    self.on_rcv_blob(blob);
-                }
-            }
             MessageKind::FinishWorldDownload => {
                 self.client.scene_graph = SceneGraph::Free(FreeFlying::new());
             }
             MessageKind::SyncFrame(frame) => {
                 debug!("Got frame: {:?}", frame);
-                let our_frame = sync_frame_from_world(&self.world);
+                let our_frame = sync_frame_from_world(self.backend.world());
                 debug!("Our frame: {:?}", our_frame);
-            }
-            MessageKind::HaveNewSave => {
-                self.on_rcv_have_new_save();
-            }
-            MessageKind::Kicked => {
-                self.on_rcv_kicked();
-            }
-            MessageKind::WhoGoesThere => {
-                self.on_rcv_who_goes_there();
-            }
-            MessageKind::TakeYourHatOff => {
-                self.on_rcv_take_your_hat_off();
             }
             MessageKind::PlayerConnected(username) => {
                 self.client.chat.log(format!("{username} just connected."));
@@ -254,75 +186,8 @@ impl ClientApp {
                     .chat
                     .log(format!("{username} just disconnected."));
             }
-            MessageKind::Ack => (),
-            MessageKind::Pong => (),
             MessageKind::ServerStatistics(_) => (),
             _ => error!("Unsupported message from server: {:?}", msg.kind),
-        }
-    }
-
-    fn on_rcv_take_your_hat_off(&mut self) {
-        self.server_handshake_complete = true;
-    }
-
-    fn on_rcv_who_goes_there(&mut self) {
-        self.node.send(MessageKind::Introduction {
-            username: self.username.clone(),
-        });
-    }
-
-    fn on_rcv_kicked(&mut self) {
-        self.node.disconnect();
-        self.client.scene_graph = SceneGraph::Kicked;
-        self.world = World::empty();
-    }
-
-    fn on_rcv_have_new_save(&mut self) {
-        self.node.send(MessageKind::BeginAsyncWorldDownload);
-        self.async_world_download = Some(AsyncWorldDownload::new());
-    }
-
-    fn log_world_delta(&mut self, delta: &WorldDelta) {
-        match delta {
-            WorldDelta::SetPlayerPosition(_, _) => return,
-            WorldDelta::SetPlayerCursorPosition(_, _) => return,
-            _ => {
-                self.client.chat.log(format!("{:?}", delta));
-            }
-        }
-    }
-
-    fn on_driver_packet(&mut self, ticks: u64, deltas: Vec<WorldDelta>) {
-        while self.world.ticks + 1 < ticks {
-            update_world(&mut self.world);
-        }
-
-        for delta in deltas {
-            self.log_world_delta(&delta);
-            if let Err(e) = apply_delta(&mut self.world, delta.clone()) {
-                error!("Failed to apply delta {:?}: {:?}", delta, e);
-            }
-        }
-
-        if self.world.ticks < ticks {
-            update_world(&mut self.world);
-        }
-    }
-
-    fn on_rcv_blob(&mut self, blob: Blob) {
-        if let Some(dl) = &mut self.async_world_download {
-            dl.add_blob(blob);
-
-            if dl.is_complete() {
-                let dl = self
-                    .async_world_download
-                    .take()
-                    .expect("Expected this to be Some(_)");
-
-                self.world = dl.world();
-            }
-        } else {
-            error!("No download underway!");
         }
     }
 
@@ -332,7 +197,7 @@ impl ClientApp {
     }
 
     fn set_sim_speed(&mut self, speed: u32) {
-        self.node.send(MessageKind::SetSimSpeed(speed));
+        self.backend.send(MessageKind::SetSimSpeed(speed));
     }
 
     fn docking_rotate(&mut self) {
@@ -365,13 +230,13 @@ impl ClientApp {
                 docking.offset,
                 docking.rotation,
             );
-            self.node.send(MessageKind::RequestDelta(delta));
+            self.backend.send(MessageKind::RequestDelta(delta));
         }
     }
 
     fn load_save_file(&mut self, path: String) {
         info!("Commanding server to load save file");
-        self.node.send(MessageKind::LoadSave(path));
+        self.backend.send(MessageKind::LoadSave(path));
     }
 
     pub fn on_drag(&mut self, id: UiRef, delta: Vec2) {
@@ -412,24 +277,24 @@ impl ClientApp {
             UiMessage::LoadSaveFile(path) => self.load_save_file(path),
             UiMessage::SetMachineState(machine_id, state) => {
                 let delta = WorldDelta::SetMachineState(machine_id, state);
-                self.request_server_delta(delta);
+                self.backend.request_delta(delta);
             }
             UiMessage::SetThrusterState(thruster_id, state) => {
                 let delta = WorldDelta::SetThrusterState(thruster_id, state);
-                self.request_server_delta(delta);
+                self.backend.request_delta(delta);
             }
             UiMessage::LoadSave => {
                 self.client.scene_graph = SceneGraph::ListSaves;
             }
             UiMessage::JoinMultiplayer => {
-                self.request_world_download();
+                self.backend.request_world_download();
             }
             UiMessage::WriteSaveToDisk => {
-                save_world_and_alert_chat(&self.world, &mut self.client);
+                save_world_and_alert_chat(self.backend.world(), &mut self.client);
             }
             UiMessage::SetComputerOnOff(id, state) => {
                 // TODO make a WorldDelta for this
-                _ = set_cpu_state(&mut self.world.computers, id, state);
+                _ = set_cpu_state(&mut self.backend.world_mut().computers, id, state);
             }
             UiMessage::EditorSetLayer(layer) => {
                 if let SceneGraph::Editor(state) = &mut self.client.scene_graph {
@@ -441,13 +306,9 @@ impl ClientApp {
                     state.prototype_id = Some(id);
                 }
             }
-            UiMessage::SetComputerDrift(cpu_id) => {
-                let instr = Instruction::Drift;
-                let ti = TimedInstruction::perp(instr);
-                _ = set_cpu_instruction(&mut self.world, cpu_id, ti);
-            }
             UiMessage::TimedInstruction { grid_id, ti } => {
-                _ = set_grid_instruction(&mut self.world, grid_id, ti);
+                let delta = WorldDelta::SetGridInstruction(grid_id, ti);
+                self.backend.request_delta(delta);
             }
             e => warn!("Unhandled click event: {e:?}"),
         }
@@ -465,20 +326,15 @@ impl ClientApp {
         }
     }
 
-    fn request_world_download(&mut self) {
-        self.node.send(MessageKind::BeginAsyncWorldDownload);
-        self.async_world_download = Some(AsyncWorldDownload::new());
-    }
-
     pub fn on_terminal_cmd(&mut self, cmd: TermCmd) {
         self.terminal.log_info(format!("{cmd:?}"));
 
         match cmd {
             TermCmd::Say(s) => {
-                self.node.send(MessageKind::ClientSays(s));
+                self.backend.send(MessageKind::ClientSays(s));
             }
             TermCmd::Ping => {
-                self.node.send(MessageKind::Ping);
+                self.backend.send(MessageKind::Ping);
             }
             TermCmd::Clear => {
                 self.terminal.clear();
@@ -487,33 +343,35 @@ impl ClientApp {
                 self.set_sim_speed(speed);
             }
             TermCmd::FindGridByName(name) => {
-                self.node.send(MessageKind::FindGridByName(name));
+                self.backend.send(MessageKind::FindGridByName(name));
             }
             TermCmd::Exit => {
                 self.exit();
             }
             TermCmd::PrintEntityInfo(table) => {
-                self.node.send(MessageKind::PrintEntityInfo(table));
+                self.backend.send(MessageKind::PrintEntityInfo(table));
             }
             TermCmd::ServerConnect => {
-                self.node.reconnect();
+                self.backend.reconnect();
             }
             TermCmd::ServerDisconnect => {
-                self.node.disconnect();
+                self.backend.disconnect();
             }
             TermCmd::RequestServerStatistics => {
-                self.node.send(MessageKind::RequestServerStatistics);
+                self.backend.send(MessageKind::RequestServerStatistics);
             }
             TermCmd::ClientReqBlob(table) => {
-                self.node.send(MessageKind::ClientBlobRequest(table));
+                self.backend.send(MessageKind::ClientBlobRequest(table));
             }
             TermCmd::ClientReqAllBlobs => {
-                self.terminal
-                    .log_warn(format!("Requesting all blobs at tick {}", self.world.ticks));
-                self.request_world_download();
+                self.terminal.log_warn(format!(
+                    "Requesting all blobs at tick {}",
+                    self.backend.world().ticks
+                ));
+                self.backend.request_world_download();
             }
             TermCmd::World(delta) => {
-                self.node.send(MessageKind::RequestDelta(delta));
+                self.backend.send(MessageKind::RequestDelta(delta));
             }
             TermCmd::Help => {
                 self.terminal.print_help_command();
@@ -600,14 +458,14 @@ fn make_gui(font: Rc<Font>, app: &mut ClientApp, timers: &DebugTimers) -> Tree<U
             main_menu_ui(&mut ui);
         }
         SceneGraph::Free(free) => {
-            make_free_flying_ui(&mut ui, free, &app.world, &app.assets);
-            make_part_info_gui(&mut ui, &app.world, &app.client, &app.assets);
+            make_free_flying_ui(&mut ui, free, app.backend.world(), &app.assets);
+            make_part_info_gui(&mut ui, app.backend.world(), &app.client, &app.assets);
         }
         SceneGraph::Editor(editor) => {
-            make_editor_ui(&mut ui, editor, &app.world);
+            make_editor_ui(&mut ui, editor, app.backend.world());
         }
         SceneGraph::Part(state) => {
-            part_info_modal(&mut ui, state, &app.world, &app.assets);
+            part_info_modal(&mut ui, state, app.backend.world(), &app.assets);
         }
         SceneGraph::ListSaves => {
             list_saves_scene_ui(&mut ui);
@@ -634,14 +492,12 @@ fn make_gui(font: Rc<Font>, app: &mut ClientApp, timers: &DebugTimers) -> Tree<U
 fn make_debug_ui(ui: &mut UiBuilder, app: &ClientApp, timers: &DebugTimers, fps: u32) {
     debug_ui(
         ui,
-        &app.world,
+        app.backend.world(),
         &app.client,
         timers,
-        &app.node,
+        app.backend.node(),
         &app.update_timer,
-        &app.server_ping_timer,
-        &app.server_telemetry_timer,
-        &app.username,
+        app.backend.username(),
         app.client.player_id,
         fps,
     )
@@ -719,7 +575,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     main_app.client.scene_graph,
                     SceneGraph::Editor(..) | SceneGraph::Free(..) | SceneGraph::Part(..)
                 ) {
-                    draw_world(&main_app.world, &main_app.client, &main_app.assets, &mut d);
+                    draw_world(
+                        main_app.backend.world(),
+                        &main_app.client,
+                        &main_app.assets,
+                        &mut d,
+                    );
                 }
 
                 draw_ui(&mut d, &main_app.ui_state, &ui, &main_app.assets);

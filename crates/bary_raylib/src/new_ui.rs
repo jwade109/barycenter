@@ -26,7 +26,6 @@ pub enum UiMessage {
     SetMachineState(Ent, bool),
     SetThrusterState(Ent, bool),
     SetComputerOnOff(Ent, bool),
-    SetComputerDrift(Ent),
     Salt(usize),
     EditorSetLayer(PartLayer),
     EditorSetProto(Ent),

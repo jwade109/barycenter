@@ -10,8 +10,6 @@ pub fn debug_lines(
     timers: &DebugTimers,
     node: &ClientNode,
     update_timer: &WallTimer,
-    ping_timer: &WallTimer,
-    tlm_timer: &WallTimer,
     username: &str,
     user_id: Option<Ent>,
     fps: u32,
@@ -57,16 +55,6 @@ pub fn debug_lines(
         "Update:    {:0.2} Hz / {:0.2} Hz ",
         update_timer.actual_rate(),
         update_timer.nominal_rate()
-    ));
-    ui.text(format!(
-        "Ping:      {:0.2} Hz / {:0.2} Hz ",
-        ping_timer.actual_rate(),
-        ping_timer.nominal_rate()
-    ));
-    ui.text(format!(
-        "TLM:       {:0.2} Hz / {:0.2} Hz ",
-        tlm_timer.actual_rate(),
-        tlm_timer.nominal_rate()
     ));
 
     ui.text("");
@@ -123,8 +111,6 @@ pub fn debug_ui(
     timers: &DebugTimers,
     node: &ClientNode,
     update_timer: &WallTimer,
-    ping_timer: &WallTimer,
-    tlm_timer: &WallTimer,
     username: &str,
     user_id: Option<Ent>,
     fps: u32,
@@ -136,8 +122,6 @@ pub fn debug_ui(
         timers,
         node,
         update_timer,
-        ping_timer,
-        tlm_timer,
         username,
         user_id,
         fps,

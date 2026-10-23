@@ -23,13 +23,12 @@ pub fn get_part_info_modal(
     }
 
     if let Ok(cpu) = world.computers.try_get(part_id) {
-        (ui.button(
+        ui.button(
             UiMessage::SetComputerOnOff(part_id, !cpu.on),
             if cpu.on { "Turn Off" } else { "Turn On" },
-        ));
-        (ui.button(UiMessage::SetComputerDrift(part_id), "Set to Drift"));
+        );
         let info = computer_info_str(cpu);
-        (ui.text(info));
+        ui.text(info);
     }
     if let Ok(thruster) = world.thrusters.try_get(part_id) {
         let s = format!("{:#?}", thruster);

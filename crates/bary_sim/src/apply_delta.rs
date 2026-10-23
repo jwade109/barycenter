@@ -127,7 +127,12 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             spawn_random_asteroid(world, iso, radius, seed);
             Ok(())
         }
-        WorldDelta::SpawnPlanet { name, iso, mass, radius } => {
+        WorldDelta::SpawnPlanet {
+            name,
+            iso,
+            mass,
+            radius,
+        } => {
             spawn_planet(world, name, iso, mass, radius);
             Ok(())
         }
@@ -194,6 +199,10 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
                 &world.thrusters,
                 &world.parts,
             )?;
+            Ok(())
+        }
+        WorldDelta::SetGridInstruction(grid_id, ti) => {
+            set_grid_instruction(world, grid_id, ti)?;
             Ok(())
         }
     }
