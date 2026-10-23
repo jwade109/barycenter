@@ -1,5 +1,5 @@
 use crate::{UI_FONT_SIZE, UiInteractionState, UiMessage};
-use bary_core::prelude::{Vec2, randvec};
+use bary_core::prelude::Vec2;
 use bary_input::InputState;
 use bary_ui::*;
 use rand::random_range;
