@@ -1,5 +1,5 @@
 use crate::*;
-use bary_core::prelude::{Vec2, distance_str};
+use bary_core::prelude::{Vec2, distance_str, velocity_str};
 use bary_sim::*;
 use early_returns::*;
 
@@ -67,18 +67,24 @@ fn make_docking_ui(ui: &mut UiBuilder, docking: &DockingInterface, world: &World
     let parent = world.grids.try_get(docking.parent.grid_id).ok()?;
     let child = world.grids.try_get(docking.child.grid_id).ok()?;
 
-    let sep = parent
-        .particle_location
-        .translation
-        .distance(child.particle_location.translation);
+    let u = parent.particle_location.translation;
+    let v = child.particle_location.translation;
 
-    let sep = distance_str(sep as f64);
+    let sep = u.distance(v);
+
+    let u = parent.velocity.translation;
+    let v = child.velocity.translation;
+
+    let vel = u.distance(v);
+
+    let sep = distance_str(sep);
+    let vel = velocity_str(vel);
 
     ui.begin_window("docking_dialogue");
     ui.text("Docking Control Panel");
-    ui.text("Multiline string\nAnother line\nAnd another!");
     ui.text(format!("{} <- {}", parent.name, child.name));
     ui.text(format!("Separation: {}", sep));
+    ui.text(format!("Rel Velocity: {}", vel));
     ui.button(UiMessage::DockingShiftX, "Offset X");
     ui.button(UiMessage::DockingShiftY, "Offset Y");
     ui.button(UiMessage::DockingRotate, "Rotate");

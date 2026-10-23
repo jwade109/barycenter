@@ -8,7 +8,6 @@ use crate::utils::*;
 use bary_core::prelude::PI;
 use bary_core::prelude::*;
 use bary_factory::*;
-use bary_ipc::ClientNode;
 use bary_orbital::TerrainMaterial;
 use bary_parts::*;
 use bary_sim::Camera;
@@ -1913,7 +1912,7 @@ pub fn draw_terminal<T: std::fmt::Debug>(
     }
 }
 
-pub fn draw_gui(
+pub fn draw_ui(
     d: &mut RaylibDrawHandle,
     state: &UiInteractionState,
     gui: &Tree<UiMessage>,
@@ -1983,24 +1982,22 @@ fn draw_node(
 
     match node.kind() {
         NodeType::Button(text, _msg) => {
-            let scale = if is_clicked { 0.95 } else { 1.0 };
-            let color = if is_clicked {
-                color.lerp(Color::BLACK, 0.2)
+            let (color, scale) = if is_clicked {
+                (color.lerp(Color::BLACK, 0.2), 0.92)
             } else if is_hovered {
-                color.lerp(Color::WHITE, 0.3)
+                (color.lerp(Color::WHITE, 0.3), 1.06)
             } else {
-                color
+                (color, 1.0)
             };
             let aabb = aabb.scale_about_center(scale);
-            draw_ui_aabb(d, aabb, Color::new(40, 40, 40, 255), false);
+            draw_ui_aabb(d, aabb, color.lerp(Color::BLACK, 0.6).alpha(0.4), true);
             draw_ui_aabb(d, aabb, color, false);
 
             let p = glam_to_raylib(aabb.center);
             let font_size = (UI_FONT_SIZE as f32 * scale) as i32;
-            draw_text_centered(d, font, &text, p, font_size, color);
+            draw_text_centered(d, font, &text, p, font_size, Color::WHITE);
         }
         NodeType::Text(text) => {
-            // draw_ui_aabb(d, aabb, Color::new(30, 30, 30, 200), true);
             let p = glam_to_raylib(aabb.center);
             draw_text_centered(d, font, &text, p, UI_FONT_SIZE, Color::WHITE);
         }

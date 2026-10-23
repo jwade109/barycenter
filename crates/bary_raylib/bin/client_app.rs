@@ -429,12 +429,23 @@ impl ClientApp {
                     UiMessage::WriteSaveToDisk => {
                         save_world_and_alert_chat(&self.world, &mut self.client);
                     }
-                    UiMessage::SetComputerDrift(_id) => {
-                        warn!("UNHANDLED DRIFT COMMAND");
+                    UiMessage::SetComputerDrift(cpu_id) => {
+                        // TODO make a WorldDelta for this
+                        _ = set_grid_as_drifting(&mut self.world, cpu_id);
                     }
                     UiMessage::SetComputerOnOff(id, state) => {
                         // TODO make a WorldDelta for this
                         _ = set_cpu_state(&mut self.world.computers, id, state);
+                    }
+                    UiMessage::EditorSetLayer(layer) => {
+                        if let SceneGraph::Editor(state) = &mut self.client.scene_graph {
+                            state.layer = Some(layer);
+                        }
+                    }
+                    UiMessage::EditorSetProto(id) => {
+                        if let SceneGraph::Editor(state) = &mut self.client.scene_graph {
+                            state.prototype_id = Some(id);
+                        }
                     }
                     e => warn!("Unhandled event: {e:?}"),
                 }
@@ -581,7 +592,7 @@ fn make_gui(font: Rc<Font>, app: &mut ClientApp, timers: &DebugTimers) -> Tree<U
             make_part_info_gui(&mut ui, &app.world, &app.client, &app.assets);
         }
         SceneGraph::Editor(editor) => {
-            make_editor_ui(&mut ui, editor);
+            make_editor_ui(&mut ui, editor, &app.world);
         }
         SceneGraph::Part(state) => {
             part_info_modal(&mut ui, state, &app.world, &app.assets);
@@ -697,14 +708,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     draw_world(&main_app.world, &main_app.client, &main_app.assets, &mut d);
                 }
 
-                draw_gui(&mut d, &main_app.ui_state, &ui, &main_app.assets);
-
-                lame_old_imgui_entrypoint(
-                    &mut d,
-                    &mut main_app.client,
-                    &main_app.world,
-                    &mut main_app.sounds,
-                );
+                draw_ui(&mut d, &main_app.ui_state, &ui, &main_app.assets);
 
                 draw_mouse_screen_position(&mut d, main_app.client.mouse_screen_position);
 
@@ -716,7 +720,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             });
 
-        sounds.play_sounds(main_app.sounds.drain(..).collect());
+        sounds.play_sounds(std::mem::take(&mut main_app.sounds));
 
         if main_app.client.input.just_pressed(rdev::Key::KeyC)
             && main_app.client.input.is_key_pressed(rdev::Key::ControlLeft)

@@ -584,6 +584,13 @@ pub fn set_cpu_state(
     Ok(())
 }
 
+pub fn set_grid_as_drifting(world: &mut World, cpu_id: Ent) -> BaryResult<()> {
+    let part = world.parts.try_get(cpu_id)?;
+    set_cpu_state(&mut world.computers, cpu_id, false)?;
+    set_all_thrusters(part.grid_id, false, world)?;
+    Ok(())
+}
+
 /// Turns the primary computer of the given grid on or off,
 /// returning the entity ID of the computer if it was found.
 /// TODO(testing) test this.

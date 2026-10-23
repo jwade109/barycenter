@@ -27,6 +27,8 @@ pub enum UiMessage {
     SetComputerOnOff(Ent, bool),
     SetComputerDrift(Ent),
     Salt(usize),
+    EditorSetLayer(PartLayer),
+    EditorSetProto(Ent),
 }
 
 impl From<Scene> for UiMessage {

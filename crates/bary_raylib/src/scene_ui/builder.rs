@@ -1,7 +1,8 @@
 use crate::{UI_FONT_SIZE, UiInteractionState, UiMessage};
-use bary_core::prelude::Vec2;
+use bary_core::prelude::{Vec2, randvec};
 use bary_input::InputState;
 use bary_ui::*;
+use rand::random_range;
 use raylib::prelude::*;
 use std::rc::Rc;
 
@@ -36,7 +37,9 @@ impl UiBuilder {
 
     pub fn begin_window(&mut self, id_salt: impl Into<String>) {
         let id_salt = id_salt.into();
-        let offset = self.window_pos(id_salt.clone(), Vec2::splat(400.0));
+        let x = random_range(100.0..700.0);
+        let y = random_range(100.0..400.0);
+        let offset = self.window_pos(id_salt.clone(), (x, y).into());
         let node = Node::column(Size::Fit, Vec::new());
         self.active_node = Some((node, offset));
         self.draghandle(id_salt);
