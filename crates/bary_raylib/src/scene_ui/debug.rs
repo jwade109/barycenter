@@ -4,6 +4,7 @@ use bary_ipc::ClientNode;
 use bary_sim::*;
 
 pub fn debug_lines(
+    ui: &mut UiBuilder,
     world: &World,
     client: &ClientSpecificInfo,
     timers: &DebugTimers,
@@ -14,15 +15,15 @@ pub fn debug_lines(
     username: &str,
     user_id: Option<Ent>,
     fps: u32,
-) -> Vec<String> {
+) {
+    ui.begin_window("debug_ui");
+
     let size = size_in_bytes(world);
 
-    let mut ret = Vec::new();
-
-    ret.push("Barycenter Client".to_string());
+    ui.text("Barycenter Client".to_string());
 
     let consist = is_world_consistent(world);
-    ret.push(format!("OK: {:?}", consist));
+    ui.text(format!("OK: {:?}", consist));
 
     let fmt_time = |d: std::time::Duration, t: std::time::Duration| {
         let p = d.as_secs_f64() / t.as_secs_f64();
@@ -34,7 +35,7 @@ pub fn debug_lines(
         )
     };
 
-    ret.push(format!(
+    ui.text(format!(
         " {}/{} {} {:0.1} {}",
         timers.ticks,
         client.tick_rate,
@@ -43,71 +44,76 @@ pub fn debug_lines(
         apparent_datetime(world.ticks).format("%b %d %Y %I:%M:%S %p"),
     ));
 
-    ret.push(format!("Username:  {}", username));
+    ui.text(format!("Username:  {}", username));
     if let Some(uid) = user_id {
-        ret.push(format!("User ID:   {}", uid));
+        ui.text(format!("User ID:   {}", uid));
     }
 
-    ret.push(format!("FPS:       {}", fps));
-    ret.push(format!("Memory:    {:0.3} KB", size as f64 / 1000.0));
-    ret.push(format!("Zoom:      {:0.3}", client.camera.zoom));
+    ui.text(format!("FPS:       {}", fps));
+    ui.text(format!("Memory:    {:0.3} KB", size as f64 / 1000.0));
+    ui.text(format!("Zoom:      {:0.3}", client.camera.zoom));
 
-    ret.push(format!(
+    ui.text(format!(
         "Update:    {:0.2} Hz / {:0.2} Hz ",
         update_timer.actual_rate(),
         update_timer.nominal_rate()
     ));
-    ret.push(format!(
+    ui.text(format!(
         "Ping:      {:0.2} Hz / {:0.2} Hz ",
         ping_timer.actual_rate(),
         ping_timer.nominal_rate()
     ));
-    ret.push(format!(
+    ui.text(format!(
         "TLM:       {:0.2} Hz / {:0.2} Hz ",
         tlm_timer.actual_rate(),
         tlm_timer.nominal_rate()
     ));
 
-    ret.push("".into());
+    ui.text("");
 
-    ret.push(format!("Connected: {}", node.is_connected()));
-    ret.push(format!("Address:   {}", node.server_addr()));
-    ret.push(format!("RX:        {}", node.rx_count()));
-    ret.push(format!("TX:        {}", node.tx_count()));
-    ret.push(format!("Errors:    {}", node.errors()));
+    ui.text(format!("Connected: {}", node.is_connected()));
+    ui.text(format!("Address:   {}", node.server_addr()));
+    ui.text(format!("RX:        {}", node.rx_count()));
+    ui.text(format!("TX:        {}", node.tx_count()));
+    ui.text(format!("Errors:    {}", node.errors()));
 
-    ret.push("".into());
+    ui.text("");
 
-    ret.push(format!("Ticks:     {}", world.ticks));
-    ret.push(format!("Grids:     {}", world.grids.len()));
-    ret.push(format!("Parts:     {}", world.parts.len()));
-    ret.push(format!("Protos:    {}", world.prototypes.len()));
-    ret.push(format!("BPs:       {}", world.blueprints.len()));
-    ret.push(format!("Thrusters: {}", world.thrusters.len()));
-    ret.push(format!("Invs:      {}", world.inventories.len()));
-    ret.push(format!("Machines:  {}", world.machines.len()));
-    ret.push(format!("Asteroids: {}", world.asteroids.len()));
-    ret.push(format!("Chunks:    {}", world.terrain_chunks.len()));
-    ret.push(format!("Tiles:     {}", world.terrain_tiles.len()));
-    ret.push(format!("GAUs:      {}", world.grid_acceleration_updates));
-    ret.push(format!("Players:   {}", world.players.len()));
+    ui.text(format!("Ticks:     {}", world.ticks));
+    ui.text(format!("Grids:     {}", world.grids.len()));
+    ui.text(format!("Parts:     {}", world.parts.len()));
+    ui.text(format!("Protos:    {}", world.prototypes.len()));
+    ui.text(format!("BPs:       {}", world.blueprints.len()));
+    ui.text(format!("Thrusters: {}", world.thrusters.len()));
+    ui.text(format!("Invs:      {}", world.inventories.len()));
+    ui.text(format!("Machines:  {}", world.machines.len()));
+    ui.text(format!("Asteroids: {}", world.asteroids.len()));
+    ui.text(format!("Chunks:    {}", world.terrain_chunks.len()));
+    ui.text(format!("Tiles:     {}", world.terrain_tiles.len()));
+    ui.text(format!("GAUs:      {}", world.grid_acceleration_updates));
+    ui.text(format!("Players:   {}", world.players.len()));
+
+    ui.sep();
+    ui.text(format!("{:?}", ui.hot_element()));
+    ui.text(format!("{:?}", ui.active_element()));
+    ui.sep();
 
     for player in world.players.values() {
-        ret.push(format!("  {} {}", player.name, player.state));
+        ui.text(format!("  {} {}", player.name, player.state));
     }
 
-    ret.push("".into());
+    ui.text("");
 
     let total = timers.total();
 
-    ret.push(format!("total{}", fmt_time(total, total)));
+    ui.text(format!("total{}", fmt_time(total, total)));
 
     for timer in timers.timers.iter() {
         let time = fmt_time(*timer.1, total);
-        ret.push(format!("{}{}", timer.0, time));
+        ui.text(format!("{}{}", timer.0, time));
     }
 
-    ret
+    ui.end_window();
 }
 
 pub fn debug_ui(
@@ -123,10 +129,8 @@ pub fn debug_ui(
     user_id: Option<Ent>,
     fps: u32,
 ) {
-    // let old_font_size = ui.font_size;
-    // ui.font_size = 9.0;
-    ui.begin_window("debug_ui");
-    for line in debug_lines(
+    debug_lines(
+        ui,
         world,
         client,
         timers,
@@ -137,10 +141,5 @@ pub fn debug_ui(
         username,
         user_id,
         fps,
-    ) {
-        ui.text(line);
-    }
-
-    ui.end_window();
-    // ui.font_size = old_font_size;
+    );
 }

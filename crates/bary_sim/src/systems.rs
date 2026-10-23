@@ -31,7 +31,8 @@ pub fn sys_propagate_n_body_accel(
     for grid in grids.values_mut() {
         let planet_id = some_or_continue!(grid.orbital_parent);
         let planet = some_or_continue!(planets.get(planet_id));
-        let accel = planet.gravity(grid.particle_location.tr());
+        let v = grid.particle_location.translation - planet.iso.translation;
+        let accel = planet.gravity(v);
         grid.velocity.translation += accel * NOMINAL_DT;
     }
 }

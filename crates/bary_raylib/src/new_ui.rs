@@ -29,6 +29,8 @@ pub enum UiMessage {
     Salt(usize),
     EditorSetLayer(PartLayer),
     EditorSetProto(Ent),
+    ArrestRotation { grid_id: Ent },
+    SetDrifting { grid_id: Ent },
 }
 
 impl From<Scene> for UiMessage {

@@ -2,7 +2,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 fn rdev_worker_thread(sender: Sender<rdev::Event>) {
     if let Err(error) = rdev::listen(move |e| {
-        sender.send(e).expect("Expected sender to be connected");
+        _ = sender.send(e);
     }) {
         println!("Error: {:?}", error)
     }

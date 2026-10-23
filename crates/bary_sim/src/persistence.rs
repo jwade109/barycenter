@@ -1,4 +1,4 @@
-use crate::World;
+use crate::{World, WorldBuilder};
 use bary_core::prelude::*;
 use log::*;
 use serde::{Deserialize, Serialize};
@@ -97,9 +97,17 @@ fn save<T: Serialize>(val: &T, dir: &Path, name: &str) -> BaryResult<()> {
     Ok(())
 }
 
+pub fn load_yaml_scenario(path: impl AsRef<Path>) -> BaryResult<World> {
+    Ok(WorldBuilder::new().assets().parse_file(path).build())
+}
+
 pub fn load_world(dir: impl AsRef<Path>) -> BaryResult<World> {
     let dir = dir.as_ref();
     info!("Loading world from {}", dir.display());
+
+    if dir.extension().map(|s| s.to_string_lossy().to_string()) == Some("yaml".to_string()) {
+        return load_yaml_scenario(dir);
+    }
 
     let mut world = World::empty();
 

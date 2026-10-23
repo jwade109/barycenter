@@ -46,6 +46,18 @@ impl std::ops::Sub for Angle {
     }
 }
 
+impl From<f32> for Angle {
+    fn from(value: f32) -> Self {
+        Angle::radians(value)
+    }
+}
+
+impl From<f64> for Angle {
+    fn from(value: f64) -> Self {
+        Angle::radians(value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -4,7 +4,7 @@ use bary_factory::*;
 use bary_parts::*;
 use log::*;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{collections::BTreeMap, path::{Path, PathBuf}};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 enum WorldBuilderCommand {
@@ -45,7 +45,7 @@ impl WorldBuilder {
         }
     }
 
-    pub fn parse_file(mut self, path: &str) -> Self {
+    pub fn parse_file(mut self, path: impl AsRef<Path>) -> Self {
         let s = std::fs::read_to_string(path).unwrap();
         let commands: Vec<WorldBuilderCommand> = serde_yaml::from_str(&s).unwrap();
         self.commands.extend(commands);

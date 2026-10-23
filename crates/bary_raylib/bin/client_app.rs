@@ -385,7 +385,7 @@ impl ClientApp {
             UiMessage::Drag(handle) => {
                 self.ui_state.shift_offset(&handle, delta);
             }
-            e => warn!("Unhandled event: {e:?}"),
+            e => warn!("Unhandled drag event: {e:?}"),
         }
     }
 
@@ -447,7 +447,15 @@ impl ClientApp {
                             state.prototype_id = Some(id);
                         }
                     }
-                    e => warn!("Unhandled event: {e:?}"),
+                    UiMessage::ArrestRotation { grid_id } => {
+                        let instr = Instruction::HoldAttitude(0.0.into());
+                        _ = set_perpetual_instruction(&mut self.world, grid_id, instr);
+                    }
+                    UiMessage::SetDrifting { grid_id } => {
+                        let instr = Instruction::Drift;
+                        _ = set_perpetual_instruction(&mut self.world, grid_id, instr);
+                    }
+                    e => warn!("Unhandled click event: {e:?}"),
                 }
             }
         }
@@ -588,7 +596,7 @@ fn make_gui(font: Rc<Font>, app: &mut ClientApp, timers: &DebugTimers) -> Tree<U
             main_menu_ui(&mut ui);
         }
         SceneGraph::Free(free) => {
-            make_free_flying_ui(&mut ui, free, &app.world);
+            make_free_flying_ui(&mut ui, free, &app.world, &app.assets);
             make_part_info_gui(&mut ui, &app.world, &app.client, &app.assets);
         }
         SceneGraph::Editor(editor) => {
@@ -665,7 +673,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server_args = args.clone();
 
-    std::thread::spawn(move || server_thread(server_args));
+    _ = std::thread::Builder::new()
+        .name("server_background_thread".into())
+        .spawn(|| server_thread(server_args))?;
 
     info!("{:?}", args);
 

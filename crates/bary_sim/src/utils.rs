@@ -602,6 +602,19 @@ pub fn set_grid_as_drifting(world: &mut World, cpu_id: Ent) -> BaryResult<()> {
     Ok(())
 }
 
+pub fn set_perpetual_instruction(
+    world: &mut World,
+    grid_id: Ent,
+    instr: Instruction,
+) -> BaryResult<Ent> {
+    let cpu_id = get_primary_cpu_id(grid_id, &world.grids)?;
+    let cpu = world.computers.try_get_mut(cpu_id)?;
+    cpu.command_queue.clear();
+    let ti = TimedInstruction::perp(instr);
+    cpu.command_queue.push(ti);
+    Ok(cpu_id)
+}
+
 /// Turns the primary computer of the given grid on or off,
 /// returning the entity ID of the computer if it was found.
 /// TODO(testing) test this.

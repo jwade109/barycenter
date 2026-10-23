@@ -32,11 +32,8 @@ pub fn make_part_info_gui(
     ui.end_window();
 }
 
-pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World) {
+pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World, assets: &Assets) {
     ui.begin_window_at(Vec2::splat(40.0));
-    ui.text(format!("{:?}", ui.hot_element()));
-    ui.text(format!("{:?}", ui.active_element()));
-    ui.sep();
     ui.button(UiMessage::Navigate(Scene::MainMenu), "Return to Main Menu");
     ui.button(UiMessage::WriteSaveToDisk, "Save Game");
     ui.button(UiMessage::AltMode, "Toggle Alt Mode");
@@ -53,6 +50,22 @@ pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World)
             ui.sep();
             ui.text(grid.name.clone());
             ui.button(msg, "Open Ship Editor");
+            ui.button(
+                UiMessage::ArrestRotation {
+                    grid_id: loc.grid_id,
+                },
+                "Arrest Rotation",
+            );
+            ui.button(
+                UiMessage::SetDrifting {
+                    grid_id: loc.grid_id,
+                },
+                "Set Adrift",
+            );
+
+            if let Some(cpu_id) = grid.computers.first() {
+                get_part_info_modal(ui, *cpu_id, world, assets, None);
+            }
         }
     }
 
