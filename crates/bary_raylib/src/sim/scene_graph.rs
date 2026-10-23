@@ -2,7 +2,7 @@ use crate::{EditorState, FreeFlying};
 use bary_core::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SceneNavigation {
+pub enum Scene {
     MainMenu,
     ListSaves,
     Kicked,
@@ -29,7 +29,6 @@ impl PartFocusState {
 
 #[derive(Debug)]
 pub enum SceneGraph {
-    Loading(u32, u32, String),
     MainMenu,
     ListSaves,
     Kicked,
@@ -40,15 +39,22 @@ pub enum SceneGraph {
 }
 
 impl SceneGraph {
-    pub fn handle_navigation(&mut self, nav: SceneNavigation) {
-        *self = match nav {
-            SceneNavigation::ListSaves => Self::ListSaves,
-            SceneNavigation::Editor(id) => Self::Editor(EditorState::new(id, Vec2::ZERO)),
-            SceneNavigation::Free => Self::Free(FreeFlying::new()),
-            SceneNavigation::MainMenu => Self::MainMenu,
-            SceneNavigation::Kicked => Self::Kicked,
-            SceneNavigation::Settings => Self::Settings,
-            SceneNavigation::Part(id) => Self::Part(PartFocusState::new(id)),
+    pub fn handle_navigation(&mut self, nav: Scene) {
+        *self = match (&self, nav) {
+            (_, Scene::ListSaves) => Self::ListSaves,
+            (_, Scene::Editor(id)) => Self::Editor(EditorState::new(id, Vec2::ZERO)),
+            (Self::Editor(state), Scene::Free) => {
+                let free = FreeFlying {
+                    follow_vehicle: Some(state.vehicle),
+                    ..FreeFlying::new()
+                };
+                Self::Free(free)
+            }
+            (_, Scene::Free) => Self::Free(FreeFlying::new()),
+            (_, Scene::MainMenu) => Self::MainMenu,
+            (_, Scene::Kicked) => Self::Kicked,
+            (_, Scene::Settings) => Self::Settings,
+            (_, Scene::Part(id)) => Self::Part(PartFocusState::new(id)),
         }
     }
 

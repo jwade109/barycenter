@@ -30,7 +30,7 @@ pub fn make_part_info_gui(
     for (_, part_id) in occ.iter() {
         children.push(ui.sep());
         children.push(ui.button(
-            SceneNavigation::Part(part_id),
+            Scene::Part(part_id),
             format!("Go to Part {}", part_id),
         ));
         if let Some(node) = part_info_modal(part_id, ui, world, assets, "") {

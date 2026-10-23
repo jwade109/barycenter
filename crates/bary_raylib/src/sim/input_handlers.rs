@@ -11,7 +11,7 @@ use log::*;
 pub fn drive_ship_on_enter(client: &mut ClientSpecificInfo, world: &World) -> Option<WorldDelta> {
     let player_id = client.player_id?;
     let free = client.scene_graph.free()?;
-    let grid_id = free.selection_info.first_selected_grid()?;
+    let grid_id = free.selected_vehicles.first().map(|s| s.grid_id)?;
     let player = world.players.try_get(player_id).ok()?;
 
     if player.is_driving() {
@@ -32,9 +32,9 @@ pub fn command_selected_ships_to_waypoint(
         return deltas;
     };
 
-    let n_ships = free.selection_info.selected.len();
+    let n_ships = free.selected_vehicles.len();
 
-    for (i, loc) in free.selection_info.selected.iter().enumerate() {
+    for (i, loc) in free.selected_vehicles.iter().enumerate() {
         let s = if n_ships == 1 {
             1.0
         } else {
@@ -96,7 +96,7 @@ pub fn save_world_and_alert_chat(world: &World, client: &mut ClientSpecificInfo)
 
 pub fn toggle_following_on_key_f(client: &mut ClientSpecificInfo, sounds: &mut SoundEffects) {
     let free = some_or_return!(client.scene_graph.free());
-    let grid_id = some_or_return!(free.selection_info.first_selected_grid());
+    let grid_id = some_or_return!(free.selected_vehicles.first().map(|s| s.grid_id));
 
     if client.scene_graph.look_at(grid_id) {
         sounds.push(SoundEffect::Follow);
@@ -129,7 +129,7 @@ pub fn enter_ship_editor(
     sounds: &mut SoundEffects,
 ) {
     let free = some_or_return!(client.scene_graph.free());
-    let grid_id = some_or_return!(free.selection_info.first_selected_grid());
+    let grid_id = some_or_return!(free.selected_vehicles.first().map(|s| s.grid_id));
     let grid = ok_or_return!(world.grids.try_get(grid_id));
 
     let centroid = grid.centroid();

@@ -1,14 +1,15 @@
 use crate::UI_FONT_SIZE;
 use bary_ui::*;
 use raylib::prelude::*;
+use std::rc::Rc;
 
-pub struct UiBuilder<'a> {
-    font: &'a Font,
+pub struct UiBuilder {
+    font: Rc<Font>,
     font_size: f32,
 }
 
-impl<'a> UiBuilder<'a> {
-    pub fn new(font: &'a Font) -> Self {
+impl UiBuilder {
+    pub fn new(font: Rc<Font>) -> Self {
         Self {
             font,
             font_size: UI_FONT_SIZE as f32,

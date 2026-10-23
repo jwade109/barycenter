@@ -7,10 +7,9 @@ use bary_sim::*;
 use bary_terminal::Terminal;
 use bary_ui::*;
 use clap::Parser;
-use early_returns::*;
 use log::*;
 use raylib::prelude::*;
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
 pub struct ClientApp {
     input: InputHandler,
@@ -121,19 +120,6 @@ impl ClientApp {
         self.node.send(MessageKind::ClientTelemetry(tlm));
     }
 
-    fn update_loading(&mut self) {
-        if let SceneGraph::Loading(steps, total, status) = &mut self.client.scene_graph {
-            if chance(0.8) && *steps < *total {
-                *steps += randint(4, 12) as u32;
-                *status = get_random_name();
-            }
-
-            if *steps >= *total {
-                self.client.scene_graph = SceneGraph::MainMenu;
-            }
-        }
-    }
-
     fn update_in_world(&mut self) {
         let deltas = pre_simulation_update(&self.world, &mut self.client);
 
@@ -179,8 +165,7 @@ impl ClientApp {
             process_event(&mut self.world, &mut self.client, &mut self.sounds, on_gui);
 
             if let Some(editor) = self.client.scene_graph.editor_mut() {
-                let zoom = self.client.camera.zoom;
-                if let Some(delta) = editor.handle_keys(&self.client.input, &self.world, zoom) {
+                if let Some(delta) = editor.handle_keys(&self.client.input, &self.world) {
                     self.node.send(MessageKind::RequestDelta(delta));
                 }
             }
@@ -210,7 +195,6 @@ impl ClientApp {
         }
 
         match &self.client.scene_graph {
-            SceneGraph::Loading(_, _, _) => self.update_loading(),
             _ => self.update_in_world(),
         }
     }
@@ -380,7 +364,9 @@ impl ClientApp {
     }
 
     fn docking_activate(&mut self) {
-        if let Some(docking) = self.client.docking_interface() {
+        if let Some(free) = self.client.scene_graph.free()
+            && let Some(docking) = free.docking_interface()
+        {
             let delta = WorldDelta::MergeGrids(
                 docking.parent.grid_id,
                 docking.child.grid_id,
@@ -435,7 +421,7 @@ impl ClientApp {
             UiEventKind::Click => {
                 self.sounds.push(SoundEffect::ButtonDown);
                 match c.msg {
-                    UiMessage::SceneNavigate(nav) => {
+                    UiMessage::Navigate(nav) => {
                         self.client.scene_graph.handle_navigation(nav);
                     }
                     UiMessage::Exit => self.exit(),
@@ -598,118 +584,23 @@ fn generate_assets_ui(assets: &Assets, input: &InputState, width: f32, height: f
     Tree::new().with_layout(root, None)
 }
 
-fn make_docking_ui(
-    builder: &UiBuilder,
-    docking: &DockingInterface,
-    world: &World,
-) -> Option<Node<UiMessage>> {
-    let parent = world.grids.try_get(docking.parent.grid_id).ok()?;
-    let child = world.grids.try_get(docking.child.grid_id).ok()?;
-
-    let sep = parent
-        .particle_location
-        .translation
-        .distance(child.particle_location.translation);
-
-    let sep = distance_str(sep as f64);
-
-    let docking_ui = Node::column(
-        Size::Fit,
-        vec![
-            builder.draghandle(DragHandle::Docking),
-            builder.text("Docking Control Panel"),
-            builder.text("Multiline string\nAnother line\nAnd another!"),
-            builder.text(format!("{} <- {}", parent.name, child.name)),
-            builder.text(format!("Separation: {}", sep)),
-            builder.button(UiMessage::DockingShiftX, "Offset X"),
-            builder.button(UiMessage::DockingShiftY, "Offset Y"),
-            builder.button(UiMessage::DockingRotate, "Rotate"),
-            builder.button(UiMessage::DockingActivate, "Dock"),
-        ],
-    );
-
-    Some(docking_ui)
-}
-
-fn loading_layout(ui: &UiBuilder, steps: u32, total: u32, status: &str) -> Node<UiMessage> {
-    let progress = steps as f32 / total as f32;
-    let pstr = format!("{}/{}", steps, total);
-    Node::column(
-        500,
-        vec![
-            ui.text("Loading..."),
-            ui.progress_bar(progress),
-            ui.text(pstr),
-            ui.text(status),
-        ],
-    )
-}
-
-fn make_world_ui(ui: &UiBuilder, app: &ClientApp, tree: &mut Tree<UiMessage>) {
-    let mut root: Node<UiMessage> = Node::root(Size::Fit, Size::Fit).with_children(
-        [
-            ui.button(
-                UiMessage::SceneNavigate(SceneNavigation::MainMenu),
-                "Return to Main Menu",
-            ),
-            ui.button(UiMessage::WriteSaveToDisk, "Save Game"),
-            ui.button(UiMessage::AltMode, "Toggle Alt Mode"),
-            ui.button(UiMessage::DebugText, "Toggle Debug Text"),
-            ui.button(UiMessage::SimSpeed(0), "Toggle Pause"),
-            ui.button(UiMessage::SimSpeed(1), "Sim 1x"),
-            ui.button(UiMessage::SimSpeed(10), "Sim 10x"),
-            ui.button(UiMessage::SimSpeed(100), "Sim 100x"),
-            ui.button(UiMessage::SimSpeed(1000), "Sim 1000x"),
-        ]
-        .into_iter(),
-    );
-
-    if let Some(loc) = app.client.selected_grid_loc()
-        && app.client.scene_graph.editor().is_none()
-    {
-        let msg = UiMessage::SceneNavigate(SceneNavigation::Editor(loc.grid_id));
-        let b = ui.button(msg, "Open Ship Editor");
-        root.add_child(b);
-    }
-
-    if app.client.scene_graph.editor().is_some() {
-        let msg = UiMessage::SceneNavigate(SceneNavigation::Free);
-        root.add_child(ui.button(msg, "Leave Ship Editor"));
-    }
-
-    tree.add_layout(root, None);
-
-    if let Some(docking) = app.client.docking_interface() {
-        if let Some(ui) = make_docking_ui(ui, &docking, &app.world) {
-            tree.add_layout(ui, app.menu_origin)
-        }
-    }
-}
-
-fn make_gui(font: &Font, app: &ClientApp) -> Tree<UiMessage> {
+fn make_gui(font: Rc<Font>, app: &ClientApp) -> Tree<UiMessage> {
     let builder = UiBuilder::new(font);
 
     let mut tree = Tree::new();
 
     match &app.client.scene_graph {
-        SceneGraph::Loading(steps, total, status) => {
-            tree.add_layout(
-                loading_layout(&builder, *steps, *total, status),
-                app.menu_origin,
-            );
-        }
         SceneGraph::MainMenu => {
             main_menu_ui(&mut tree, &builder, app.menu_origin);
         }
-        SceneGraph::Free(..) => {
-            make_world_ui(&builder, app, &mut tree);
+        SceneGraph::Free(free) => {
+            make_free_flying_ui(&builder, free, &app.world, &mut tree);
             make_part_info_gui(&builder, &app.world, &app.client, &app.assets, &mut tree);
         }
         SceneGraph::Editor(..) => {
-            make_world_ui(&builder, app, &mut tree);
+            make_editor_ui(&builder, &mut tree);
         }
         SceneGraph::Part(state) => {
-            make_world_ui(&builder, app, &mut tree);
             if let Some(node) = part_info_modal(
                 state.part_id,
                 &builder,
@@ -719,7 +610,6 @@ fn make_gui(font: &Font, app: &ClientApp) -> Tree<UiMessage> {
             ) {
                 tree.add_layout(node, Vec2::splat(200.0));
             }
-            part_focus_ui(&mut tree, &state.command_prompt, &builder);
         }
         SceneGraph::ListSaves => {
             list_saves_scene_ui(&mut tree, &builder, app.menu_origin);
@@ -731,14 +621,6 @@ fn make_gui(font: &Font, app: &ClientApp) -> Tree<UiMessage> {
             settings_scene_ui(&mut tree, &builder, app.menu_origin);
         }
     }
-
-    if let Some(dl) = &app.async_world_download {
-        let node = loading_layout(&builder, dl.steps(), dl.total(), dl.status());
-        tree.add_layout(node, Vec2::new(400.0, 200.0));
-    }
-
-    let text = Node::text(1000, 20, format!("{:?}", app.client.scene_graph));
-    tree.add_layout(text, Vec2::splat(40.0));
 
     tree
 }
@@ -794,9 +676,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let ui = make_gui(font, &main_app);
 
-        let scrp = main_app.client.mouse_screen_position;
-
-        if let Some(c) = main_app.ui_state.update(&ui, scrp, &main_app.client.input) {
+        if let Some(c) = main_app.ui_state.update(
+            &ui,
+            main_app.client.mouse_screen_position,
+            &main_app.client.input,
+        ) {
             main_app.on_ui_event(c);
         }
 

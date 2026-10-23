@@ -1,13 +1,12 @@
+use crate::Scene;
 use bary_core::prelude::*;
 use bary_input::InputState;
 use bary_ui::Tree;
 
-use crate::SceneNavigation;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UiMessage {
     Drag(DragHandle),
-    SceneNavigate(SceneNavigation),
+    Navigate(Scene),
     Exit,
     AltMode,
     DebugText,
@@ -28,9 +27,9 @@ pub enum UiMessage {
     Salt(usize),
 }
 
-impl From<SceneNavigation> for UiMessage {
-    fn from(value: SceneNavigation) -> Self {
-        Self::SceneNavigate(value)
+impl From<Scene> for UiMessage {
+    fn from(value: Scene) -> Self {
+        Self::Navigate(value)
     }
 }
 

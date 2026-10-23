@@ -3,7 +3,7 @@ use bary_parts::load_parts_from_dir;
 use bary_sim::load_names_from_file;
 use log::debug;
 use raylib::prelude::*;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, rc::Rc};
 
 pub type MaybeTexture = Option<Texture2D>;
 
@@ -13,7 +13,7 @@ pub type MaybeFont = Option<Font>;
 pub struct Assets {
     lato_regular: MaybeFont,
     fira_code: MaybeFont,
-    consolas: MaybeFont,
+    consolas: Option<Rc<Font>>,
     pub part_textures: BTreeMap<String, Texture2D>,
     pub animation: MaybeTexture,
     pub terrain_spritesheet: MaybeTexture,
@@ -23,8 +23,8 @@ pub struct Assets {
 }
 
 impl Assets {
-    pub fn ui_font(&self) -> &Font {
-        self.consolas.as_ref().unwrap()
+    pub fn ui_font(&self) -> Rc<Font> {
+        self.consolas.clone().unwrap()
     }
 }
 
@@ -43,9 +43,11 @@ pub fn load_assets(
         .load_font_ex(thread, "assets/fonts/FiraCode-Bold.ttf", 32, None)
         .ok();
 
-    assets.consolas = rl
+    let consolas = rl
         .load_font_ex(thread, "assets/fonts/Consolas-Regular.ttf", 32, None)
         .ok();
+
+    assets.consolas = consolas.map(|c| Rc::new(c));
 
     assets.ship_names = load_names_from_file("assets/ship_names.txt").unwrap_or(vec![]);
 

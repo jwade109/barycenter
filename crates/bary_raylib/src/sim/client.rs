@@ -3,29 +3,6 @@ use bary_core::prelude::*;
 use bary_input::*;
 use bary_sim::Camera;
 use bary_sim::*;
-use serde::{Deserialize, Serialize};
-
-#[derive(Default, Debug, Deserialize, Serialize, Clone)]
-pub struct SelectionInfo {
-    pub hovered: Option<GridLocation>,
-    pub selected: Vec<GridLocation>,
-}
-
-impl SelectionInfo {
-    pub fn selecting(grid_id: Ent) -> Self {
-        Self {
-            hovered: None,
-            selected: vec![GridLocation {
-                grid_id,
-                coord: PartCoord((-1000, -1000).into()),
-            }],
-        }
-    }
-
-    pub fn first_selected_grid(&self) -> Option<Ent> {
-        self.selected.first().map(|e| e.grid_id)
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct TerrainSelectionInfo {
@@ -37,7 +14,8 @@ pub struct TerrainSelectionInfo {
 pub struct FreeFlying {
     pub follow_vehicle: Option<Ent>,
     pub lock_rotation: bool,
-    pub selection_info: SelectionInfo,
+    pub hovered_vehicle: Option<GridLocation>,
+    pub selected_vehicles: Vec<GridLocation>,
     pub hovered_chunk: Option<TerrainSelectionInfo>,
     pub waypoint_widget: Option<DVec2>,
 
@@ -51,12 +29,33 @@ impl FreeFlying {
         Self {
             follow_vehicle: None,
             lock_rotation: false,
-            selection_info: SelectionInfo::default(),
+            hovered_vehicle: None,
+            selected_vehicles: Vec::new(),
             waypoint_widget: None,
             hovered_chunk: None,
             offset: PartCoord::ZERO,
             rotation: Rotation::East,
         }
+    }
+
+    pub fn docking_interface(&self) -> Option<DockingInterface> {
+        if self.selected_vehicles.len() != 2 {
+            return None;
+        }
+
+        let parent = *self.selected_vehicles.first()?;
+        let child = *self.selected_vehicles.get(1)?;
+
+        if parent.grid_id == child.grid_id {
+            return None;
+        }
+
+        Some(DockingInterface {
+            parent,
+            child,
+            offset: self.offset,
+            rotation: self.rotation,
+        })
     }
 }
 
@@ -114,12 +113,7 @@ impl ClientSpecificInfo {
 
         self.scene_graph = SceneGraph::Free(FreeFlying {
             follow_vehicle: Some(editor.vehicle),
-            lock_rotation: false,
-            selection_info: SelectionInfo::selecting(editor.vehicle),
-            waypoint_widget: None,
-            hovered_chunk: None,
-            offset: PartCoord::ZERO,
-            rotation: Rotation::East,
+            ..FreeFlying::new()
         });
 
         self.chat.log("Left ship editor");
@@ -135,7 +129,7 @@ impl ClientSpecificInfo {
                     coord,
                 })
             }
-            SceneGraph::Free(f) => f.selection_info.selected.first().cloned(),
+            SceneGraph::Free(f) => f.selected_vehicles.first().cloned(),
             _ => None,
         }
     }
@@ -149,7 +143,7 @@ impl ClientSpecificInfo {
                     coord,
                 })
             }
-            SceneGraph::Free(f) => f.selection_info.hovered,
+            SceneGraph::Free(f) => f.hovered_vehicle,
             _ => None,
         }
     }
@@ -157,30 +151,8 @@ impl ClientSpecificInfo {
     pub fn focused_grid_id(&self) -> Option<Ent> {
         match &self.scene_graph {
             SceneGraph::Editor(e) => Some(e.vehicle),
-            SceneGraph::Free(f) => f.selection_info.first_selected_grid(),
+            SceneGraph::Free(f) => f.selected_vehicles.first().map(|s| s.grid_id),
             _ => None,
         }
-    }
-
-    pub fn docking_interface(&self) -> Option<DockingInterface> {
-        let free = self.scene_graph.free()?;
-
-        if free.selection_info.selected.len() != 2 {
-            return None;
-        }
-
-        let parent = *free.selection_info.selected.first()?;
-        let child = *free.selection_info.selected.get(1)?;
-
-        if parent.grid_id == child.grid_id {
-            return None;
-        }
-
-        Some(DockingInterface {
-            parent,
-            child,
-            offset: free.offset,
-            rotation: free.rotation,
-        })
     }
 }

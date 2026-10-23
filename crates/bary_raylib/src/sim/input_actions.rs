@@ -102,7 +102,7 @@ fn update_actual_hover_part_info(client: &mut ClientSpecificInfo, grids: &Compon
     let screen_dims = client.screen_dims;
 
     if let Some(free) = client.scene_graph.free_mut() {
-        free.selection_info.hovered = None;
+        free.hovered_vehicle = None;
         let screen_pos = some_or_return!(mouse_screen_position);
         let world_pos = screen_to_world(&client.camera, screen_pos, screen_dims);
         let (grid_id, offset) = some_or_return!(get_closest_grid(grids, world_pos, None));
@@ -118,7 +118,7 @@ fn update_actual_hover_part_info(client: &mut ClientSpecificInfo, grids: &Compon
         }
         let origin = grid.origin();
         let coord = PartCoord::from_meters_floored(in_frame(origin, world_pos));
-        free.selection_info.hovered = Some(GridLocation::new(grid_id, coord));
+        free.hovered_vehicle = Some(GridLocation::new(grid_id, coord));
     } else if let Some(editor) = client.scene_graph.editor_mut() {
         editor.hovered = None;
         let grid = ok_or_return!(grids.try_get(editor.vehicle));
@@ -160,20 +160,20 @@ fn set_target_camera_if_following(
 
 fn select_hovered_grid_loc_on_click(client: &mut ClientSpecificInfo, sounds: &mut SoundEffects) {
     let free = some_or_return!(client.scene_graph.free_mut());
-    let old_grid = free.selection_info.first_selected_grid();
+    let old_grid = free.selected_vehicles.first().map(|s| s.grid_id);
 
-    let Some(hovered) = free.selection_info.hovered else {
-        free.selection_info.selected.clear();
+    let Some(hovered) = free.hovered_vehicle else {
+        free.selected_vehicles.clear();
         return;
     };
 
     if client.input.is_key_pressed(Key::ShiftLeft) {
-        free.selection_info.selected.push(hovered);
+        free.selected_vehicles.push(hovered);
     } else {
-        free.selection_info.selected = vec![hovered];
+        free.selected_vehicles = vec![hovered];
     }
 
-    if free.selection_info.first_selected_grid().is_some() {
+    if free.selected_vehicles.first().map(|s| s.grid_id).is_some() {
         sounds.push(SoundEffect::Open);
     } else if old_grid.is_some() {
         sounds.push(SoundEffect::Close);
@@ -305,13 +305,13 @@ fn update_terrain_selection_info(client: &mut ClientSpecificInfo, asteroids: &Co
 
 fn toggle_tracking_for_selected_grid(client: &ClientSpecificInfo) -> Option<WorldDelta> {
     let free = client.scene_graph.free()?;
-    let grid_id = free.selection_info.first_selected_grid()?;
+    let grid_id = free.selected_vehicles.first().map(|s| s.grid_id)?;
     Some(WorldDelta::ToggleTracking(grid_id))
 }
 
 fn explode_at_mouseover(client: &ClientSpecificInfo) -> Option<WorldDelta> {
     let free = client.scene_graph.free()?;
-    let loc = free.selection_info.hovered?;
+    let loc = free.hovered_vehicle?;
     Some(WorldDelta::Explode(loc))
 }
 

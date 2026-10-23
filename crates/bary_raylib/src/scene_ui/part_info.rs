@@ -1,5 +1,5 @@
 use crate::*;
-use bary_core::prelude::{Ent, Vec2};
+use bary_core::prelude::Ent;
 use bary_factory::InvSlot;
 use bary_input::InputState;
 use bary_sim::*;
@@ -12,7 +12,7 @@ pub fn part_info_modal(
     ui: &UiBuilder,
     world: &World,
     assets: &Assets,
-    command_input: &str,
+    cmd: &str,
 ) -> Option<Node<UiMessage>> {
     let part = world.parts.try_get(part_id).ok()?;
     let proto = world.prototypes.try_get(part.prototype).ok()?;
@@ -65,7 +65,7 @@ pub fn part_info_modal(
         }
     }
 
-    children.push(ui.text(command_input.to_string()));
+    children.push(ui.text(cmd));
 
     Some(Node::column(600.0, children))
 }
@@ -100,10 +100,6 @@ fn computer_info_str(cpu: &Computer) -> String {
     }
 
     lines.into_iter().collect()
-}
-
-pub fn part_focus_ui(tree: &mut Tree<UiMessage>, text: &str, ui: &UiBuilder) {
-    tree.add_layout(ui.text(text), Vec2::splat(300.0));
 }
 
 pub fn part_focus_terminal_input(state: &mut PartFocusState, input: &InputState) {

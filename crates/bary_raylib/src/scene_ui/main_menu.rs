@@ -1,4 +1,4 @@
-use crate::{DragHandle, SceneNavigation, UiBuilder, UiMessage};
+use crate::{DragHandle, Scene, UiBuilder, UiMessage};
 use bary_core::prelude::Vec2;
 use bary_ui::*;
 
@@ -11,10 +11,10 @@ fn make_main_menu(ui: &UiBuilder) -> Node<UiMessage> {
         Size::Fit,
         vec![
             ui.draghandle(DragHandle::MainMenu),
-            ui.button(SceneNavigation::ListSaves, "Load Single Player"),
+            ui.button(Scene::ListSaves, "Load Single Player"),
             ui.button(UiMessage::JoinMultiplayer, "Join Server"),
-            ui.button(SceneNavigation::Settings, "Settings"),
-            ui.button(SceneNavigation::Kicked, "Go to Kicked Menu"),
+            ui.button(Scene::Settings, "Settings"),
+            ui.button(Scene::Kicked, "Go to Kicked Menu"),
             ui.button(UiMessage::Exit, "Exit to Desktop"),
         ],
     )

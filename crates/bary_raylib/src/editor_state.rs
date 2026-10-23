@@ -19,12 +19,12 @@ pub struct EditorState {
     pub vehicle_name_field: Option<(EditableText, bool)>,
 }
 
-fn editor_offset_moves_with_wasd(input: &InputState, offset: &mut PartCoord, zoom: f32) {
+fn editor_offset_moves_with_wasd(input: &InputState, offset: &mut PartCoord) {
     if input.is_key_pressed(rdev::Key::ControlLeft) {
         return;
     }
 
-    let speed = 1;
+    let speed = 4;
 
     if input.just_pressed(rdev::Key::KeyS) {
         offset.0.y -= speed;
@@ -57,12 +57,7 @@ impl EditorState {
     }
 
     #[must_use]
-    pub fn handle_keys(
-        &mut self,
-        input: &InputState,
-        world: &World,
-        camera_zoom: f32,
-    ) -> Option<WorldDelta> {
+    pub fn handle_keys(&mut self, input: &InputState, world: &World) -> Option<WorldDelta> {
         let mut ret = None;
 
         if input.just_pressed_debounced(rdev::Key::Return) && self.vehicle_name_field.is_some() {
@@ -93,7 +88,7 @@ impl EditorState {
                 self.next_layer(true);
             }
 
-            editor_offset_moves_with_wasd(input, &mut self.target_coord, camera_zoom);
+            editor_offset_moves_with_wasd(input, &mut self.target_coord);
         }
 
         if input.just_pressed_debounced(rdev::Key::KeyN) && self.vehicle_name_field.is_none() {

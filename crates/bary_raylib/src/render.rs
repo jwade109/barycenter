@@ -285,7 +285,7 @@ fn draw_grid_far_indicators(
             d.draw_triangle(v1, v2, v3, color);
         }
 
-        let is_hovered = Some(id) == free.selection_info.hovered.map(|g| g.grid_id);
+        let is_hovered = Some(id) == free.hovered_vehicle.map(|g| g.grid_id);
 
         if !name.is_empty() {
             let color = if is_hovered {
@@ -398,7 +398,9 @@ pub fn draw_world(
         draw_hovered_inventory(&mut c, world, client);
     }
 
-    if let Some(docking) = client.docking_interface() {
+    if let Some(free) = client.scene_graph.free()
+        && let Some(docking) = free.docking_interface()
+    {
         _ = draw_docking_interface(&mut c, world, &docking);
     }
 
@@ -489,7 +491,7 @@ pub fn draw_selected_part_cursors(
     client: &ClientSpecificInfo,
 ) {
     let free = some_or_return!(client.scene_graph.free());
-    for loc in &free.selection_info.selected {
+    for loc in &free.selected_vehicles {
         let grid = ok_or_continue!(world.grids.try_get(loc.grid_id));
         let occ = some_or_continue!(grid.get_parts_at(loc.coord));
         for (_layer, id) in occ.iter() {
@@ -602,7 +604,7 @@ fn draw_chat(d: &mut RaylibDrawHandle, chat: &Chat, screen_dims: Vec2, assets: &
         let t = format_log(log);
         let pos = Vector2::new(x as f32, y as f32);
         let font = assets.ui_font();
-        d.draw_text_ex(font, &t, pos, font_size, 0.0, Color::WHITE);
+        d.draw_text_ex(font.as_ref(), &t, pos, font_size, 0.0, Color::WHITE);
         y -= font_size;
     }
 }
@@ -766,7 +768,7 @@ fn draw_selected_grid_info(
     let font = assets.ui_font();
     for (label, x, y) in labels {
         let pos = Vector2::new(x, y);
-        draw_text_centered(d, font, &label, pos, font_size, Color::WHITE);
+        draw_text_centered(d, font.as_ref(), &label, pos, font_size, Color::WHITE);
     }
 }
 
@@ -916,7 +918,7 @@ pub fn draw_editor_rename_field(
 
     d.draw_rectangle(x, y, width, height, Color::BLACK.alpha(0.8));
     d.draw_rectangle_lines(x, y, width, height, Color::WHITE);
-    draw_text_centered(d, font, &text, pos, font_size, text_color);
+    draw_text_centered(d, font.as_ref(), &text, pos, font_size, text_color);
 }
 
 pub fn get_hovered_prototype(client: &ClientSpecificInfo, world: &World) -> Option<Ent> {
@@ -1176,7 +1178,7 @@ fn draw_waypoint_far_indicators(
 
 fn draw_waypoint_widget(d: &mut RaylibDrawHandle, client: &ClientSpecificInfo) {
     let free = some_or_return!(client.scene_graph.free());
-    if free.selection_info.selected.is_empty() {
+    if free.selected_vehicles.is_empty() {
         return;
     }
     let start = some_or_return!(free.waypoint_widget);
@@ -1184,7 +1186,7 @@ fn draw_waypoint_widget(d: &mut RaylibDrawHandle, client: &ClientSpecificInfo) {
     let end = screen_to_world(&client.camera, screen_pos, client.screen_dims);
     draw_line(d, start, end, Color::GRAY);
 
-    let n_ships = free.selection_info.selected.len();
+    let n_ships = free.selected_vehicles.len();
 
     for i in 0..n_ships {
         let s = if n_ships == 1 {
@@ -1314,13 +1316,13 @@ fn draw_selection_info(
     client: &ClientSpecificInfo,
 ) {
     let free = some_or_return!(client.scene_graph.free());
-    if let Some(gridloc) = free.selection_info.hovered {
+    if let Some(gridloc) = free.hovered_vehicle {
         let grid = ok_or_return!(grids.try_get(gridloc.grid_id));
         let loc = grid.centroid_isometry();
         let r = grid.bounding_radius() * 1.4;
         draw_circle(d, loc.translation, r, Color::GREEN);
     }
-    for loc in &free.selection_info.selected {
+    for loc in &free.selected_vehicles {
         let grid = ok_or_return!(grids.try_get(loc.grid_id));
         let loc = grid.centroid_isometry();
         let r = grid.bounding_radius() * 1.4 + 0.5;
@@ -1881,7 +1883,7 @@ pub fn draw_terminal<T: std::fmt::Debug>(
     for (i, (line, severity)) in cmd.lines().enumerate() {
         let origin = text_origin - IVec2::Y * (font_size + line_gap) * (i as i32 + 1);
         d.draw_text_ex(
-            font,
+            font.as_ref(),
             &line,
             Vector2::new(origin.x as f32, origin.y as f32),
             font_size as f32,
@@ -1892,7 +1894,7 @@ pub fn draw_terminal<T: std::fmt::Debug>(
 
     {
         d.draw_text_ex(
-            font,
+            font.as_ref(),
             &display_bg,
             Vector2::new(text_origin.x as f32, text_origin.y as f32),
             font_size as f32,
@@ -1901,7 +1903,7 @@ pub fn draw_terminal<T: std::fmt::Debug>(
         );
 
         d.draw_text_ex(
-            font,
+            font.as_ref(),
             &display,
             Vector2::new(text_origin.x as f32, text_origin.y as f32),
             font_size as f32,
@@ -1920,7 +1922,7 @@ pub fn draw_gui(
     let font = assets.ui_font();
 
     for node in gui.iter() {
-        draw_node(state, d, node, font, assets);
+        draw_node(state, d, node, font.as_ref(), assets);
     }
 }
 
@@ -2170,5 +2172,5 @@ pub fn draw_debug_info(
 
     let pos = Vector2::new(pos.x + padding as f32, pos.y + padding as f32);
 
-    d.draw_text_ex(font, &s, pos, 16.0, 0.0, Color::ORANGE);
+    d.draw_text_ex(font.as_ref(), &s, pos, 16.0, 0.0, Color::ORANGE);
 }

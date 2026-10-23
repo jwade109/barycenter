@@ -192,7 +192,7 @@ impl BaryServer {
     }
 
     fn on_accept_message(&mut self, msg: Message) {
-        info!("Got a command: {:?}", msg);
+        debug!("Got a command: {:?}", msg);
         self.send_tlm_ack();
 
         let MessageSource::Client(client_id) = msg.source else {

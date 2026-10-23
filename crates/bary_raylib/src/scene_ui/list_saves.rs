@@ -1,4 +1,4 @@
-use crate::{DragHandle, SceneNavigation, UiBuilder, UiMessage};
+use crate::{DragHandle, Scene, UiBuilder, UiMessage};
 use bary_core::prelude::Vec2;
 use bary_sim::list_saves_in_dir;
 use bary_ui::*;
@@ -18,7 +18,7 @@ fn make_savefiles_menu(ui: &UiBuilder, saves: &[String]) -> Node<UiMessage> {
         buttons.push(b);
     }
 
-    buttons.push(ui.button(SceneNavigation::MainMenu, "Return to Main Menu"));
+    buttons.push(ui.button(Scene::MainMenu, "Return to Main Menu"));
 
     Node::column(Size::Fit, buttons)
 }
