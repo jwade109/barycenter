@@ -130,13 +130,11 @@ impl Computer {
             vehicle_control: VehicleControl::NULLOPT,
             prototype,
             command_queue: vec![
-                // TimedInstruction::timed(300, Instruction::rcs_forward()),
-                // TimedInstruction::timed(150, Instruction::rcs_right()),
-                // TimedInstruction::timed(150, Instruction::rcs_left()),
-                // TimedInstruction::timed(80, Instruction::rcs_backward()),
+                // TimedInstruction::timed(3000, Instruction::rcs_forward()),
+                // TimedInstruction::timed(1500, Instruction::rcs_right()),
+                // TimedInstruction::timed(1500, Instruction::rcs_left()),
+                // TimedInstruction::timed(800, Instruction::rcs_backward()),
                 // TimedInstruction::timed(20000, Instruction::Drift),
-                // TimedInstruction::timed(20000, Instruction::HoldPosition((0.0, 0.0, 0.0).into())),
-                // TimedInstruction::perp(Instruction::HoldPosition((100.0, 100.0, 0.0).into())),
             ],
         }
     }

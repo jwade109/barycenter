@@ -1,15 +1,18 @@
 use crate::*;
 use bary_core::prelude::{Ent, Vec2};
 use bary_factory::InvSlot;
+use bary_input::InputState;
 use bary_sim::*;
 use bary_ui::*;
-use early_returns::*;
+use log::warn;
+use rdev::EventType;
 
 pub fn part_info_modal(
     part_id: Ent,
     ui: &UiBuilder,
     world: &World,
     assets: &Assets,
+    command_input: &str,
 ) -> Option<Node<UiMessage>> {
     let part = world.parts.try_get(part_id).ok()?;
     let proto = world.prototypes.try_get(part.prototype).ok()?;
@@ -62,48 +65,12 @@ pub fn part_info_modal(
         }
     }
 
+    children.push(ui.text(command_input.to_string()));
+
     Some(Node::column(600.0, children))
 }
 
-pub fn make_part_info_gui(
-    ui: &UiBuilder,
-    world: &World,
-    client: &ClientSpecificInfo,
-    assets: &Assets,
-    tree: &mut Tree<UiMessage>,
-) {
-    let gridloc = some_or_return!(client.selected_grid_loc());
-    let grid = ok_or_return!(world.grids.try_get(gridloc.grid_id));
-    let occ = some_or_return!(grid.get_parts_at(gridloc.coord));
-
-    let mut children = Vec::new();
-
-    let s = format!(
-        "At {}-{}: {:?}",
-        gridloc.grid_id,
-        gridloc.coord,
-        occ.to_array()
-    );
-
-    children.push(ui.draghandle(DragHandle::PartInfo));
-    children.push(ui.text(s));
-
-    for (_, part_id) in occ.iter() {
-        children.push(ui.sep());
-        children.push(ui.button(
-            SceneNavigation::Part(part_id),
-            format!("Go to Part {}", part_id),
-        ));
-        if let Some(node) = part_info_modal(part_id, ui, world, assets) {
-            children.push(node);
-        }
-    }
-
-    let node = Node::column(600, children);
-    tree.add_layout(node, Vec2::splat(100.0));
-}
-
-pub fn slot_info_str(idx: usize, slot: &InvSlot) -> String {
+fn slot_info_str(idx: usize, slot: &InvSlot) -> String {
     if let Some(contents) = slot.contents() {
         format!(
             "{}. {:?} ({}) ({:0.1}%) {}",
@@ -118,7 +85,7 @@ pub fn slot_info_str(idx: usize, slot: &InvSlot) -> String {
     }
 }
 
-pub fn computer_info_str(cpu: &Computer) -> String {
+fn computer_info_str(cpu: &Computer) -> String {
     let mut lines = vec![
         format!("On: {}", cpu.on),
         format!("\nStatus: {:?}", cpu.status),
@@ -135,6 +102,38 @@ pub fn computer_info_str(cpu: &Computer) -> String {
     lines.into_iter().collect()
 }
 
-pub fn part_focus_ui(tree: &mut Tree<UiMessage>, ui: &UiBuilder) {
-    tree.add_layout(ui.text("Hello!"), Vec2::splat(300.0));
+pub fn part_focus_ui(tree: &mut Tree<UiMessage>, text: &str, ui: &UiBuilder) {
+    tree.add_layout(ui.text(text), Vec2::splat(300.0));
+}
+
+pub fn part_focus_terminal_input(state: &mut PartFocusState, input: &InputState) {
+    if let Some(cmd) = single_line_string_edit(&mut state.command_prompt, input) {
+        warn!("WOW: {}", cmd);
+    }
+}
+
+pub fn single_line_string_edit(s: &mut String, input: &InputState) -> Option<String> {
+    for event in input.events() {
+        if let EventType::KeyPress(k) = event.event_type {
+            match k {
+                rdev::Key::Backspace => {
+                    s.pop();
+                }
+                rdev::Key::Return => return Some(std::mem::take(s)),
+                rdev::Key::BackQuote => (),
+                rdev::Key::Escape => (),
+                rdev::Key::Tab => (),
+                rdev::Key::UpArrow => (),
+                rdev::Key::DownArrow => (),
+                _ => {
+                    if let Some(n) = &event.name {
+                        if n.is_ascii() {
+                            s.extend(n.chars());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }

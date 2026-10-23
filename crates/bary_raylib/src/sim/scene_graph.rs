@@ -13,6 +13,21 @@ pub enum SceneNavigation {
 }
 
 #[derive(Debug)]
+pub struct PartFocusState {
+    pub part_id: Ent,
+    pub command_prompt: String,
+}
+
+impl PartFocusState {
+    pub fn new(part_id: Ent) -> Self {
+        Self {
+            part_id,
+            command_prompt: String::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum SceneGraph {
     Loading(u32, u32, String),
     MainMenu,
@@ -21,7 +36,7 @@ pub enum SceneGraph {
     Settings,
     Editor(EditorState),
     Free(FreeFlying),
-    Part(Ent),
+    Part(PartFocusState),
 }
 
 impl SceneGraph {
@@ -33,7 +48,7 @@ impl SceneGraph {
             SceneNavigation::MainMenu => Self::MainMenu,
             SceneNavigation::Kicked => Self::Kicked,
             SceneNavigation::Settings => Self::Settings,
-            SceneNavigation::Part(id) => Self::Part(id),
+            SceneNavigation::Part(id) => Self::Part(PartFocusState::new(id)),
         }
     }
 

@@ -205,6 +205,10 @@ impl ClientApp {
             self.client.input.process_rdev_event(&event, focused);
         }
 
+        if let SceneGraph::Part(state) = &mut self.client.scene_graph {
+            part_focus_terminal_input(state, &self.client.input);
+        }
+
         match &self.client.scene_graph {
             SceneGraph::Loading(_, _, _) => self.update_loading(),
             _ => self.update_in_world(),
@@ -704,12 +708,18 @@ fn make_gui(font: &Font, app: &ClientApp) -> Tree<UiMessage> {
         SceneGraph::Editor(..) => {
             make_world_ui(&builder, app, &mut tree);
         }
-        SceneGraph::Part(id) => {
+        SceneGraph::Part(state) => {
             make_world_ui(&builder, app, &mut tree);
-            if let Some(node) = part_info_modal(*id, &builder, &app.world, &app.assets) {
+            if let Some(node) = part_info_modal(
+                state.part_id,
+                &builder,
+                &app.world,
+                &app.assets,
+                &state.command_prompt,
+            ) {
                 tree.add_layout(node, Vec2::splat(200.0));
             }
-            part_focus_ui(&mut tree, &builder);
+            part_focus_ui(&mut tree, &state.command_prompt, &builder);
         }
         SceneGraph::ListSaves => {
             list_saves_scene_ui(&mut tree, &builder, app.menu_origin);
