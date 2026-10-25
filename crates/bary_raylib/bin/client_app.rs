@@ -19,11 +19,6 @@ use backend::*;
 use mp_backend::*;
 use sp_backend::*;
 
-struct Raylib {
-    handle: RaylibHandle,
-    thread: RaylibThread,
-}
-
 pub struct ClientApp {
     input_handler: InputHandler,
     client: ClientSpecificInfo,
@@ -34,7 +29,6 @@ pub struct ClientApp {
     update_timer: WallTimer,
     should_exit: bool,
     show_debug_text: bool,
-    sounds: SoundEffects,
 }
 
 impl ClientApp {
@@ -71,8 +65,10 @@ impl ClientApp {
         handle.set_exit_key(None);
         handle.hide_cursor();
 
+        let mut raylib = Raylib::new(handle, thread);
+
         let mut assets = Assets::default();
-        load_assets(&mut assets, &mut handle, &thread);
+        load_assets(&mut assets, &mut raylib);
 
         let update_timer = WallTimer::with_dur(Duration::from_millis(20));
         let ui_state = UiInteractionState::default();
@@ -84,8 +80,6 @@ impl ClientApp {
             Box::new(SinglePlayerBackend::new(world))
         };
 
-        let raylib = Raylib { handle, thread };
-
         let app = ClientApp {
             backend,
             client: ClientSpecificInfo::new(),
@@ -96,7 +90,6 @@ impl ClientApp {
             update_timer,
             should_exit: false,
             show_debug_text: false,
-            sounds: SoundEffects::new(),
         };
 
         Ok((app, raylib))
@@ -112,7 +105,6 @@ impl ClientApp {
         let post_deltas = post_simulation_update(
             self.backend.world(),
             &mut self.client,
-            &mut self.sounds,
             self.terminal.is_focused(),
         );
 
@@ -128,12 +120,7 @@ impl ClientApp {
 
         let on_gui = self.ui_state.is_on_gui();
         if !self.terminal.is_active() {
-            process_event(
-                self.backend.world(),
-                &mut self.client,
-                &mut self.sounds,
-                on_gui,
-            );
+            process_event(self.backend.world(), &mut self.client, on_gui);
 
             if let Some(editor) = self.client.scene_graph.editor_mut() {
                 if let Some(delta) = editor.handle_keys(&self.client.input, self.backend.world()) {
@@ -147,16 +134,18 @@ impl ClientApp {
         // GET SOME BASIC INPUT INFORMATION FROM RAYLIB
 
         self.client.mouse_screen_position = raylib
-            .handle
+            .handle()
             .is_cursor_on_screen()
-            .then(|| raylib_to_glam(raylib.handle.get_mouse_position()));
+            .then(|| raylib_to_glam(raylib.handle().get_mouse_position()));
 
         self.client.screen_dims = Vec2::new(
-            raylib.handle.get_screen_width() as f32,
-            raylib.handle.get_screen_height() as f32,
+            raylib.handle().get_screen_width() as f32,
+            raylib.handle().get_screen_height() as f32,
         );
 
-        self.client.input = self.input_handler.update(raylib.handle.is_window_focused());
+        self.client.input = self
+            .input_handler
+            .update(raylib.handle().is_window_focused());
 
         match &self.client.scene_graph {
             _ => self.update_in_world(),
@@ -258,7 +247,7 @@ impl ClientApp {
 
     pub fn on_click(&mut self, ui: UiRef) {
         info!("Click event: {:?}", ui);
-        self.sounds.push(SoundEffect::ButtonDown);
+        self.client.sounds.push(SoundEffect::ButtonDown);
 
         let Some(onclick) = ui.onclick else {
             return;
@@ -302,7 +291,7 @@ impl ClientApp {
                 self.on_drag(c.reference, delta);
             }
             UiEventKind::Release => {
-                self.sounds.push(SoundEffect::ButtonUp);
+                self.client.sounds.push(SoundEffect::ButtonUp);
             }
             UiEventKind::Click => self.on_click(c.reference),
         }
@@ -396,7 +385,7 @@ fn make_gui(
     }
 
     if app.show_debug_text {
-        make_debug_ui(&mut ui, app, timers, raylib.handle.get_fps());
+        make_debug_ui(&mut ui, app, timers, raylib.handle().get_fps());
     }
 
     let (tree, state) = ui.take();
@@ -475,7 +464,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (mut main_app, mut raylib) = ClientApp::new(args, log::LevelFilter::Info)?;
 
-    while !raylib.handle.window_should_close() && !main_app.should_exit {
+    while !raylib.handle().window_should_close() && !main_app.should_exit {
         if !main_app.update_timer.tick() {
             continue;
         }
@@ -498,13 +487,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             main_app.on_ui_event(c);
         }
 
-        raylib
-            .handle
-            .draw(&raylib.thread, |mut d: RaylibDrawHandle<'_>| {
-                draw(&mut d, &main_app, ui.clone());
-            });
+        raylib.draw(|mut d: RaylibDrawHandle<'_>| {
+            draw(&mut d, &main_app, ui.clone());
+        });
 
-        sounds.play_sounds(std::mem::take(&mut main_app.sounds));
+        sounds.play_sounds(std::mem::take(&mut main_app.client.sounds));
 
         if main_app.client.input.just_pressed(rdev::Key::KeyC)
             && main_app.client.input.is_key_pressed(rdev::Key::ControlLeft)

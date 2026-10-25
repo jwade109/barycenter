@@ -175,7 +175,7 @@ fn set_target_camera_if_following(
     actual.isometry.translation = target.isometry.translation;
 }
 
-fn select_hovered_grid_loc_on_click(client: &mut ClientSpecificInfo, sounds: &mut SoundEffects) {
+fn select_hovered_grid_loc_on_click(client: &mut ClientSpecificInfo) {
     let free = some_or_return!(client.scene_graph.free_mut());
     let old_grid = free.selected_vehicles.first().map(|s| s.grid_id);
 
@@ -191,9 +191,9 @@ fn select_hovered_grid_loc_on_click(client: &mut ClientSpecificInfo, sounds: &mu
     }
 
     if free.selected_vehicles.first().map(|s| s.grid_id).is_some() {
-        sounds.push(SoundEffect::Open);
+        client.sounds.push(SoundEffect::Open);
     } else if old_grid.is_some() {
-        sounds.push(SoundEffect::Close);
+        client.sounds.push(SoundEffect::Close);
     }
 }
 
@@ -240,12 +240,7 @@ fn editor_on_left_click(world: &World, client: &mut ClientSpecificInfo) -> Optio
     }
 }
 
-pub fn process_event(
-    world: &World,
-    client: &mut ClientSpecificInfo,
-    sounds: &mut SoundEffects,
-    on_gui: bool,
-) {
+pub fn process_event(world: &World, client: &mut ClientSpecificInfo, on_gui: bool) {
     let events: Vec<_> = client.input.events().cloned().collect();
 
     for event in events {
@@ -256,7 +251,7 @@ pub fn process_event(
                         input_handlers::save_world_and_alert_chat(world, client);
                     }
                 }
-                Key::KeyF => input_handlers::toggle_following_on_key_f(client, sounds),
+                Key::KeyF => input_handlers::toggle_following_on_key_f(client),
                 Key::KeyR => {
                     input_handlers::reset_camera_on_ctrl_r(client);
                     input_handlers::lock_rotation_on_key_r(client);
@@ -271,7 +266,7 @@ pub fn process_event(
                 if !on_gui {
                     match button {
                         Button::Left => {
-                            select_hovered_grid_loc_on_click(client, sounds);
+                            select_hovered_grid_loc_on_click(client);
                         }
                         Button::Right => (),
                         Button::Middle => (),
@@ -466,7 +461,6 @@ fn do_terrain_tile_under_mouse(
 pub fn post_simulation_update(
     world: &World,
     client: &mut ClientSpecificInfo,
-    sounds: &mut SoundEffects,
     is_terminal_focused: bool,
 ) -> Vec<WorldDelta> {
     client.chat.drop_old_messages();
@@ -507,7 +501,7 @@ pub fn post_simulation_update(
                     &mut client.target_camera,
                     &mut fly.follow_vehicle,
                     &mut fly.lock_rotation,
-                    sounds,
+                    &mut client.sounds,
                 );
 
                 camera_zooms_with_plus_minus(&client.input, &mut client.target_camera);

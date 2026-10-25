@@ -94,12 +94,12 @@ pub fn save_world_and_alert_chat(world: &World, client: &mut ClientSpecificInfo)
     }
 }
 
-pub fn toggle_following_on_key_f(client: &mut ClientSpecificInfo, sounds: &mut SoundEffects) {
+pub fn toggle_following_on_key_f(client: &mut ClientSpecificInfo) {
     let free = some_or_return!(client.scene_graph.free());
     let grid_id = some_or_return!(free.selected_vehicles.first().map(|s| s.grid_id));
 
     if client.scene_graph.look_at(grid_id) {
-        sounds.push(SoundEffect::Follow);
+        client.sounds.push(SoundEffect::Follow);
         debug!("Following {}", grid_id);
     }
 }

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::{EditorCommand, Scene};
 use bary_core::prelude::*;
 use bary_input::InputState;
-use bary_sim::{TimedInstruction, WorldDelta};
+use bary_sim::WorldDelta;
 use bary_ui::{NodePath, Tree};
 
 #[derive(Debug, Clone)]

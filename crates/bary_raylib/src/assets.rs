@@ -28,21 +28,39 @@ impl Assets {
     }
 }
 
-fn load_font(rl: &mut RaylibHandle, thread: &RaylibThread, filename: &str) -> Option<Rc<Font>> {
-    let font = rl.load_font_ex(thread, filename, 32, None).ok()?;
+fn load_font(raylib: &mut Raylib, filename: &str) -> Option<Rc<Font>> {
+    let font = raylib
+        .handle
+        .load_font_ex(&raylib.thread, filename, 32, None)
+        .ok()?;
     Some(Rc::new(font))
 }
 
-pub fn load_assets(
-    assets: &mut Assets,
-    rl: &mut raylib::RaylibHandle,
-    thread: &raylib::RaylibThread,
-) {
+pub struct Raylib {
+    handle: RaylibHandle,
+    thread: RaylibThread,
+}
+
+impl Raylib {
+    pub fn new(handle: RaylibHandle, thread: RaylibThread) -> Self {
+        Self { handle, thread }
+    }
+
+    pub fn draw(&mut self, func: impl FnMut(RaylibDrawHandle)) {
+        self.handle.draw(&self.thread, func);
+    }
+
+    pub fn handle(&self) -> &RaylibHandle {
+        &self.handle
+    }
+}
+
+pub fn load_assets(assets: &mut Assets, raylib: &mut Raylib) {
     debug!("Loading assets");
 
-    assets.lato_regular = load_font(rl, thread, "assets/fonts/Lato-Regular.ttf");
-    assets.fira_code = load_font(rl, thread, "assets/fonts/FiraCode-Bold.ttf");
-    assets.consolas = load_font(rl, thread, "assets/fonts/Consolas-Regular.ttf");
+    assets.lato_regular = load_font(raylib, "assets/fonts/Lato-Regular.ttf");
+    assets.fira_code = load_font(raylib, "assets/fonts/FiraCode-Bold.ttf");
+    assets.consolas = load_font(raylib, "assets/fonts/Consolas-Regular.ttf");
 
     assets.ship_names = load_names_from_file("assets/ship_names.txt").unwrap_or(vec![]);
 
@@ -52,14 +70,18 @@ pub fn load_assets(
 
     for (name, _part) in parts {
         let skin_path = format!("assets/parts/{}/skin.png", name);
-        if let Ok(tex) = rl.load_texture(thread, &skin_path) {
+        if let Ok(tex) = raylib.handle.load_texture(&raylib.thread, &skin_path) {
             assets.part_textures.insert(name, tex);
         }
     }
 
-    assets.terrain_spritesheet = rl
-        .load_texture(&thread, "assets/terrain/terrain_sprites.png")
+    assets.terrain_spritesheet = raylib
+        .handle
+        .load_texture(&raylib.thread, "assets/terrain/terrain_sprites.png")
         .ok();
 
-    assets.pipe_tilemap = rl.load_texture(thread, "assets/pipe.png").ok();
+    assets.pipe_tilemap = raylib
+        .handle
+        .load_texture(&raylib.thread, "assets/pipe.png")
+        .ok();
 }

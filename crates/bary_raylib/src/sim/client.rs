@@ -1,4 +1,4 @@
-use crate::SceneGraph;
+use crate::{SceneGraph, SoundEffects};
 use bary_core::prelude::*;
 use bary_input::*;
 use bary_sim::Camera;
@@ -80,6 +80,7 @@ pub struct ClientSpecificInfo {
     pub scene_graph: SceneGraph,
     pub input: InputState,
     pub alt_mode: bool,
+    pub sounds: SoundEffects,
 }
 
 impl ClientSpecificInfo {
@@ -103,6 +104,7 @@ impl ClientSpecificInfo {
             scene_graph: SceneGraph::MainMenu,
             input: InputState::default(),
             alt_mode: false,
+            sounds: SoundEffects::new(),
         }
     }
 
