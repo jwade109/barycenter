@@ -6,6 +6,10 @@ use bary_sim::*;
 use log::warn;
 use rdev::EventType;
 
+fn turn_on_off_text(state: bool) -> &'static str {
+    if state { "Turn Off" } else { "Turn On" }
+}
+
 pub fn get_part_info_modal(
     ui: &mut UiBuilder,
     part_id: Ent,
@@ -16,55 +20,45 @@ pub fn get_part_info_modal(
     let part = world.parts.try_get(part_id).ok()?;
     let proto = world.prototypes.try_get(part.prototype).ok()?;
 
-    (ui.text(proto.name.clone()));
+    ui.text(proto.name.clone());
 
     if let Some(texture) = assets.part_textures.get(&proto.name) {
-        (ui.sprite(proto.name.clone(), texture));
+        ui.sprite(proto.name.clone(), texture);
     }
 
     if let Ok(cpu) = world.computers.try_get(part_id) {
-        ui.button(
-            UiMessage::SetComputerOnOff(part_id, !cpu.on),
-            if cpu.on { "Turn Off" } else { "Turn On" },
-        );
+        let msg = WorldDelta::SetComputerState(part_id, !cpu.on);
+        ui.button(msg, turn_on_off_text(cpu.on));
         let info = computer_info_str(cpu);
         ui.text(info);
     }
     if let Ok(thruster) = world.thrusters.try_get(part_id) {
         let s = format!("{:#?}", thruster);
-        (ui.button(
-            UiMessage::SetThrusterState(part_id, !thruster.is_on()),
-            if thruster.is_on() {
-                "Turn Off"
-            } else {
-                "Turn On"
-            },
-        ));
-        (ui.text(s));
+        let msg = WorldDelta::SetThrusterState(part_id, !thruster.is_on());
+        ui.button(msg, turn_on_off_text(thruster.is_on()));
+        ui.text(s);
     }
     if let Ok(light) = world.lights.try_get(part_id) {
         let s = format!("{:#?}", light);
-        (ui.text(s));
+        ui.text(s);
     }
     if let Ok(mac) = world.machines.try_get(part_id) {
-        (ui.progress_bar(mac.progress()));
-        (ui.button(
-            UiMessage::SetMachineState(part_id, !mac.enabled),
-            if mac.enabled { "Turn Off" } else { "Turn On" },
-        ));
+        ui.progress_bar(mac.progress());
+        let msg = WorldDelta::SetMachineState(part_id, !mac.enabled);
+        ui.button(msg, turn_on_off_text(mac.enabled));
     }
     if let Ok(inv) = world.inventories.try_get(part_id) {
         for (idx, slot) in inv.slots().enumerate() {
             let line = slot_info_str(idx, slot);
-            (ui.text(line));
-            (ui.progress_bar(slot.fill_percentage()));
+            ui.text(line);
+            ui.progress_bar(slot.fill_percentage());
         }
     }
 
     if let Some(cmd) = cmd {
-        (ui.text(">> Command prompt ====="));
-        (ui.text(cmd.clone()));
-        (ui.text(">> =============="));
+        ui.text(">> Command prompt =====");
+        ui.text(cmd.clone());
+        ui.text(">> ==============");
         single_line_string_edit(cmd, ui.input());
     }
 

@@ -1,5 +1,5 @@
 use bary_core::prelude::*;
-use bary_input::{InputHandler, InputState};
+use bary_input::InputHandler;
 use bary_ipc::*;
 use bary_raylib::*;
 use bary_server::*;
@@ -15,31 +15,29 @@ mod backend;
 
 use backend::*;
 
-pub struct ClientApp {
-    input: InputHandler,
-
-    client: ClientSpecificInfo,
-
-    backend: MultiplayerBackend,
-
-    terminal: Terminal<TermCmd>,
-
+struct Raylib {
     handle: RaylibHandle,
     thread: RaylibThread,
+}
+
+pub struct ClientApp {
+    input: InputHandler,
+    client: ClientSpecificInfo,
+    backend: MultiplayerBackend,
+    terminal: Terminal<TermCmd>,
     assets: Assets,
     ui_state: UiInteractionState,
-
     update_timer: WallTimer,
-
     should_exit: bool,
-
     show_debug_text: bool,
-
     sounds: SoundEffects,
 }
 
 impl ClientApp {
-    fn new(args: Args, log_level: log::LevelFilter) -> Result<Self, Box<dyn std::error::Error>> {
+    fn new(
+        args: Args,
+        log_level: log::LevelFilter,
+    ) -> Result<(Self, Raylib), Box<dyn std::error::Error>> {
         let input = InputHandler::new();
 
         let world = World::empty();
@@ -79,20 +77,22 @@ impl ClientApp {
 
         let backend = MultiplayerBackend::new(world, node, args.username);
 
-        Ok(ClientApp {
+        let raylib = Raylib { handle, thread };
+
+        let app = ClientApp {
             backend,
             client: ClientSpecificInfo::new(),
             input,
             terminal,
-            handle,
-            thread,
             assets,
             ui_state,
             update_timer,
             should_exit: false,
             show_debug_text: false,
             sounds: SoundEffects::new(),
-        })
+        };
+
+        Ok((app, raylib))
     }
 
     fn update_in_world(&mut self) {
@@ -122,7 +122,7 @@ impl ClientApp {
         let on_gui = self.ui_state.is_on_gui();
         if !self.terminal.is_active() {
             process_event(
-                self.backend.world_mut(),
+                self.backend.world(),
                 &mut self.client,
                 &mut self.sounds,
                 on_gui,
@@ -130,27 +130,27 @@ impl ClientApp {
 
             if let Some(editor) = self.client.scene_graph.editor_mut() {
                 if let Some(delta) = editor.handle_keys(&self.client.input, self.backend.world()) {
-                    self.backend.send(MessageKind::RequestDelta(delta));
+                    self.backend.request_delta(delta);
                 }
             }
         }
     }
 
-    fn update(&mut self) {
+    fn update(&mut self, raylib: &Raylib) {
         // GET SOME BASIC INPUT INFORMATION FROM RAYLIB
 
-        self.client.mouse_screen_position = self
+        self.client.mouse_screen_position = raylib
             .handle
             .is_cursor_on_screen()
-            .then(|| raylib_to_glam(self.handle.get_mouse_position()));
+            .then(|| raylib_to_glam(raylib.handle.get_mouse_position()));
 
         self.client.screen_dims = Vec2::new(
-            self.handle.get_screen_width() as f32,
-            self.handle.get_screen_height() as f32,
+            raylib.handle.get_screen_width() as f32,
+            raylib.handle.get_screen_height() as f32,
         );
 
         for event in self.input.get_events() {
-            let focused = self.handle.is_window_focused();
+            let focused = raylib.handle.is_window_focused();
             self.client.input.process_rdev_event(&event, focused);
         }
 
@@ -196,10 +196,6 @@ impl ClientApp {
         self.should_exit = true;
     }
 
-    fn set_sim_speed(&mut self, speed: u32) {
-        self.backend.send(MessageKind::SetSimSpeed(speed));
-    }
-
     fn docking_rotate(&mut self) {
         if let Some(free) = self.client.scene_graph.free_mut() {
             free.rotation = free.rotation.next();
@@ -230,13 +226,13 @@ impl ClientApp {
                 docking.offset,
                 docking.rotation,
             );
-            self.backend.send(MessageKind::RequestDelta(delta));
+            self.backend.request_delta(delta);
         }
     }
 
     fn load_save_file(&mut self, path: String) {
         info!("Commanding server to load save file");
-        self.backend.send(MessageKind::LoadSave(path));
+        self.backend.load_save(path);
     }
 
     pub fn on_drag(&mut self, id: UiRef, delta: Vec2) {
@@ -271,18 +267,10 @@ impl ClientApp {
             UiMessage::Exit => self.exit(),
             UiMessage::AltMode => self.client.alt_mode ^= true,
             UiMessage::DebugText => self.show_debug_text ^= true,
-            UiMessage::SimSpeed(sp) => self.set_sim_speed(sp),
+            UiMessage::SimSpeed(sp) => self.backend.set_sim_speed(sp),
             UiMessage::DockingRotate => self.docking_rotate(),
             UiMessage::DockingActivate => self.docking_activate(),
             UiMessage::LoadSaveFile(path) => self.load_save_file(path),
-            UiMessage::SetMachineState(machine_id, state) => {
-                let delta = WorldDelta::SetMachineState(machine_id, state);
-                self.backend.request_delta(delta);
-            }
-            UiMessage::SetThrusterState(thruster_id, state) => {
-                let delta = WorldDelta::SetThrusterState(thruster_id, state);
-                self.backend.request_delta(delta);
-            }
             UiMessage::LoadSave => {
                 self.client.scene_graph = SceneGraph::ListSaves;
             }
@@ -292,9 +280,8 @@ impl ClientApp {
             UiMessage::WriteSaveToDisk => {
                 save_world_and_alert_chat(self.backend.world(), &mut self.client);
             }
-            UiMessage::SetComputerOnOff(id, state) => {
-                // TODO make a WorldDelta for this
-                _ = set_cpu_state(&mut self.backend.world_mut().computers, id, state);
+            UiMessage::Delta(delta) => {
+                self.backend.request_delta(delta);
             }
             UiMessage::EditorSetLayer(layer) => {
                 if let SceneGraph::Editor(state) = &mut self.client.scene_graph {
@@ -330,38 +317,14 @@ impl ClientApp {
         self.terminal.log_info(format!("{cmd:?}"));
 
         match cmd {
-            TermCmd::Say(s) => {
-                self.backend.send(MessageKind::ClientSays(s));
-            }
-            TermCmd::Ping => {
-                self.backend.send(MessageKind::Ping);
-            }
             TermCmd::Clear => {
                 self.terminal.clear();
             }
             TermCmd::SetSimSpeed(speed) => {
-                self.set_sim_speed(speed);
-            }
-            TermCmd::FindGridByName(name) => {
-                self.backend.send(MessageKind::FindGridByName(name));
+                self.backend.set_sim_speed(speed);
             }
             TermCmd::Exit => {
                 self.exit();
-            }
-            TermCmd::PrintEntityInfo(table) => {
-                self.backend.send(MessageKind::PrintEntityInfo(table));
-            }
-            TermCmd::ServerConnect => {
-                self.backend.reconnect();
-            }
-            TermCmd::ServerDisconnect => {
-                self.backend.disconnect();
-            }
-            TermCmd::RequestServerStatistics => {
-                self.backend.send(MessageKind::RequestServerStatistics);
-            }
-            TermCmd::ClientReqBlob(table) => {
-                self.backend.send(MessageKind::ClientBlobRequest(table));
             }
             TermCmd::ClientReqAllBlobs => {
                 self.terminal.log_warn(format!(
@@ -371,7 +334,7 @@ impl ClientApp {
                 self.backend.request_world_download();
             }
             TermCmd::World(delta) => {
-                self.backend.send(MessageKind::RequestDelta(delta));
+                self.backend.request_delta(delta);
             }
             TermCmd::Help => {
                 self.terminal.print_help_command();
@@ -390,8 +353,6 @@ impl ClientApp {
 struct Args {
     #[arg(long)]
     username: String,
-    #[arg(short)]
-    save_file: String,
     #[arg(short = 'a', default_value = "127.0.0.1:5000")]
     server_addr: String,
     #[arg(short = 'p', default_value = "5000")]
@@ -400,53 +361,12 @@ struct Args {
     run_server: bool,
 }
 
-#[allow(unused)]
-fn generate_assets_ui(assets: &Assets, input: &InputState, width: f32, height: f32) -> Tree<()> {
-    let mut root = Node::new(width, Size::Fit, "assets_ui");
-
-    for (ctx, mapping) in assets.keybinds.iter() {
-        let mut col = Node::new(Size::Grow, height / 2.0, "column")
-            .down()
-            .with_padding(4.0)
-            .with_child_gap(1.0);
-
-        let s = format!("{:?}", ctx);
-        let header = Node::text(Size::Grow, 40, s);
-
-        col.add_child(header);
-
-        let actions = ActionSet::new(input, mapping);
-
-        for (key, action) in mapping.iter() {
-            let color = if actions.just_triggered(*action) {
-                Color::TEAL
-            } else if actions.is_active(*action) {
-                Color::new(60, 60, 110, 255)
-            } else {
-                Color::new(20, 20, 20, 255)
-            };
-
-            let color = [
-                color.r as f32 / 255.0,
-                color.g as f32 / 255.0,
-                color.b as f32 / 255.0,
-                color.a as f32 / 255.0,
-            ];
-
-            let line = format!("{:?}: {:?}", key, action);
-            let row = Node::text(Size::Grow, 30, line).with_color(color);
-            col.add_child(row);
-        }
-
-        root.add_child(col);
-
-        // x += width + padding;
-    }
-
-    Tree::new().with_layout(root, None)
-}
-
-fn make_gui(font: Rc<Font>, app: &mut ClientApp, timers: &DebugTimers) -> Tree<UiMessage> {
+fn make_gui(
+    raylib: &Raylib,
+    font: Rc<Font>,
+    app: &mut ClientApp,
+    timers: &DebugTimers,
+) -> Tree<UiMessage> {
     let mut ui = UiBuilder::new(
         font,
         app.client.input.clone(),
@@ -479,7 +399,7 @@ fn make_gui(font: Rc<Font>, app: &mut ClientApp, timers: &DebugTimers) -> Tree<U
     }
 
     if app.show_debug_text {
-        make_debug_ui(&mut ui, app, timers, app.handle.get_fps());
+        make_debug_ui(&mut ui, app, timers, raylib.handle.get_fps());
     }
 
     let (tree, state) = ui.take();
@@ -520,12 +440,27 @@ fn server_thread(args: Args) {
         }
     };
 
-    server.load_world(args.save_file);
-
     loop {
         server.update();
         std::thread::sleep(Duration::from_millis(5));
     }
+}
+
+fn draw(mut d: &mut RaylibDrawHandle, app: &ClientApp, ui: Tree<UiMessage>) {
+    d.clear_background(Color::BLACK);
+
+    if matches!(
+        app.client.scene_graph,
+        SceneGraph::Editor(..) | SceneGraph::Free(..) | SceneGraph::Part(..)
+    ) {
+        draw_world(app.backend.world(), &app.client, &app.assets, &mut d);
+    }
+
+    draw_ui(&mut d, &app.ui_state, &ui, &app.assets);
+
+    draw_mouse_screen_position(&mut d, app.client.mouse_screen_position);
+
+    draw_terminal(&mut d, &app.terminal, &app.assets, Color::BLACK.alpha(0.8));
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -541,14 +476,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let sounds = SoundHandler::new();
 
-    let mut main_app = ClientApp::new(args, log::LevelFilter::Info)?;
+    let (mut main_app, mut raylib) = ClientApp::new(args, log::LevelFilter::Info)?;
 
-    while !main_app.handle.window_should_close() && !main_app.should_exit {
+    while !raylib.handle.window_should_close() && !main_app.should_exit {
         if !main_app.update_timer.tick() {
             continue;
         }
 
-        main_app.update();
+        main_app.update(&raylib);
 
         // AND DRAW IT ALL
 
@@ -556,7 +491,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let timers = DebugTimers::default();
 
-        let ui = make_gui(font, &mut main_app, &timers);
+        let ui = make_gui(&raylib, font, &mut main_app, &timers);
 
         if let Some(c) = main_app.ui_state.update(
             &ui,
@@ -566,33 +501,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             main_app.on_ui_event(c);
         }
 
-        main_app
+        raylib
             .handle
-            .draw(&main_app.thread, |mut d: RaylibDrawHandle<'_>| {
-                d.clear_background(Color::BLACK);
-
-                if matches!(
-                    main_app.client.scene_graph,
-                    SceneGraph::Editor(..) | SceneGraph::Free(..) | SceneGraph::Part(..)
-                ) {
-                    draw_world(
-                        main_app.backend.world(),
-                        &main_app.client,
-                        &main_app.assets,
-                        &mut d,
-                    );
-                }
-
-                draw_ui(&mut d, &main_app.ui_state, &ui, &main_app.assets);
-
-                draw_mouse_screen_position(&mut d, main_app.client.mouse_screen_position);
-
-                draw_terminal(
-                    &mut d,
-                    &main_app.terminal,
-                    &main_app.assets,
-                    Color::BLACK.alpha(0.8),
-                );
+            .draw(&raylib.thread, |mut d: RaylibDrawHandle<'_>| {
+                draw(&mut d, &main_app, ui.clone());
             });
 
         sounds.play_sounds(std::mem::take(&mut main_app.sounds));

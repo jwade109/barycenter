@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::Scene;
 use bary_core::prelude::*;
 use bary_input::InputState;
-use bary_sim::TimedInstruction;
+use bary_sim::{TimedInstruction, WorldDelta};
 use bary_ui::{NodePath, Tree};
 
 #[derive(Debug, Clone)]
@@ -23,18 +23,22 @@ pub enum UiMessage {
     HostMultiplayer,
     WriteSaveToDisk,
     LoadSaveFile(String),
-    SetMachineState(Ent, bool),
-    SetThrusterState(Ent, bool),
-    SetComputerOnOff(Ent, bool),
     Salt(usize),
     EditorSetLayer(PartLayer),
     EditorSetProto(Ent),
     TimedInstruction { grid_id: Ent, ti: TimedInstruction },
+    Delta(WorldDelta),
 }
 
 impl From<Scene> for UiMessage {
     fn from(value: Scene) -> Self {
         Self::Navigate(value)
+    }
+}
+
+impl From<WorldDelta> for UiMessage {
+    fn from(value: WorldDelta) -> Self {
+        Self::Delta(value)
     }
 }
 

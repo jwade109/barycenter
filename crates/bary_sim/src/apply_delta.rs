@@ -201,6 +201,10 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             )?;
             Ok(())
         }
+        WorldDelta::SetComputerState(cpu_id, state) => {
+            set_cpu_state(&mut world.computers, cpu_id, state)?;
+            Ok(())
+        }
         WorldDelta::SetGridInstruction(grid_id, ti) => {
             set_grid_instruction(world, grid_id, ti)?;
             Ok(())

@@ -90,5 +90,6 @@ pub enum WorldDelta {
     SetGridBlueprint(Ent, Option<BlueprintId>),
     SetMachineState(Ent, bool),
     SetThrusterState(Ent, bool),
+    SetComputerState(Ent, bool),
     SetGridInstruction(Ent, TimedInstruction),
 }

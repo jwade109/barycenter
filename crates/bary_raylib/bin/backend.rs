@@ -42,12 +42,16 @@ impl MultiplayerBackend {
         self.node.send(MessageKind::ClientTelemetry(tlm));
     }
 
-    pub fn send_ping(&mut self) {
+    fn send_ping(&mut self) {
         self.node.send(MessageKind::Ping);
     }
 
-    pub fn send(&mut self, msg: MessageKind) {
-        self.node.send(msg);
+    pub fn set_sim_speed(&mut self, speed: u32) {
+        self.node.send(MessageKind::SetSimSpeed(speed));
+    }
+
+    pub fn load_save(&mut self, path: impl Into<String>) {
+        self.node.send(MessageKind::LoadSave(path.into()));
     }
 
     pub fn node(&self) -> &ClientNode {
@@ -60,19 +64,6 @@ impl MultiplayerBackend {
 
     pub fn world(&self) -> &World {
         &self.world
-    }
-
-    pub fn world_mut(&mut self) -> &mut World {
-        &mut self.world
-    }
-
-    pub fn disconnect(&mut self) {
-        self.world = World::empty();
-        self.node.disconnect();
-    }
-
-    pub fn reconnect(&mut self) {
-        self.node.reconnect();
     }
 
     fn on_driver_packet(&mut self, ticks: u64, deltas: Vec<WorldDelta>) {
