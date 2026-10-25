@@ -60,7 +60,7 @@ pub fn debug_lines(
         update_timer.nominal_rate()
     ));
 
-    ui.text("");
+    ui.sep();
 
     if let Some(network) = network {
         ui.text(format!("Connected: {}", network.is_connected()));
@@ -68,9 +68,8 @@ pub fn debug_lines(
         ui.text(format!("RX:        {}", network.rx_count()));
         ui.text(format!("TX:        {}", network.tx_count()));
         ui.text(format!("Errors:    {}", network.errors()));
+        ui.sep();
     }
-
-    ui.text("");
 
     ui.text(format!("Ticks:     {}", world.ticks));
     ui.text(format!("Grids:     {}", world.grids.len()));

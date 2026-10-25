@@ -138,7 +138,7 @@ impl BaryServer {
 
     fn send_driver_packet(&mut self) {
         let deltas = self.queued_deltas.drain(..).collect();
-        let msg = MessageKind::Driver {
+        let msg = ServerMessage::Driver {
             ticks: self.world.ticks,
             deltas,
             players: self.world.players.clone(),
@@ -147,17 +147,17 @@ impl BaryServer {
     }
 
     fn send_tlm_ack(&mut self) {
-        self.node.broadcast(MessageKind::Ack);
+        self.node.broadcast(ServerMessage::Ack);
     }
 
     fn send_tlm_server_info(&mut self) {
         self.node
-            .broadcast(MessageKind::ServerStatistics(self.get_statistics()));
+            .broadcast(ServerMessage::ServerStatistics(self.get_statistics()));
     }
 
     fn send_md5_sync_packet(&mut self) {
         let frame = sync_frame_from_world(&self.world);
-        let msg = MessageKind::SyncFrame(frame);
+        let msg = ServerMessage::SyncFrame(frame);
         self.node.broadcast(msg);
     }
 
@@ -173,7 +173,7 @@ impl BaryServer {
             if let Some(next) = tr.next_blob {
                 debug!("Sending blob {next} to {client}");
                 if let Some(blob) = tr.blobs.remove(&next) {
-                    let kind = MessageKind::BlobResponse(blob);
+                    let kind = ServerMessage::BlobResponse(blob);
                     self.node.send(*client, kind);
                 }
                 tr.next_blob = tr.next_blob.map(|t| t.next()).flatten();
@@ -182,8 +182,8 @@ impl BaryServer {
 
             if tr.next_blob.is_none() {
                 info!("Finished transaction!");
-                let kind = MessageKind::FinishWorldDownload;
-                self.node.send(*client, kind);
+                let msg = ServerMessage::TransactionComplete;
+                self.node.send(*client, msg);
             }
         }
 
@@ -191,47 +191,42 @@ impl BaryServer {
             .retain(|_client, tr| tr.next_blob.is_some());
     }
 
-    fn on_accept_message(&mut self, msg: Message) {
+    fn on_accept_message(&mut self, client_id: ClientId, msg: ClientMessage) {
         debug!("Got a command: {:?}", msg);
         self.send_tlm_ack();
 
-        let MessageSource::Client(client_id) = msg.source else {
-            warn!("Got a message with unexpected source: {:?}", msg.source);
-            return;
-        };
-
-        match msg.kind {
-            MessageKind::Introduction { username } => {
+        match msg {
+            ClientMessage::Introduction { username } => {
                 self.on_accept_introduction(client_id, username);
             }
-            MessageKind::ClientTelemetry(tlm) => {
+            ClientMessage::ClientTelemetry(tlm) => {
                 self.on_accept_client_tlm(client_id, tlm);
             }
-            MessageKind::Ping => {
+            ClientMessage::Ping => {
                 self.on_accept_ping(client_id);
             }
-            MessageKind::ClientSays(s) => {
+            ClientMessage::ClientSays(s) => {
                 self.on_accept_client_say(client_id, s);
             }
-            MessageKind::SetSimSpeed(s) => {
+            ClientMessage::SetSimSpeed(s) => {
                 self.on_accept_set_sim_speed(client_id, s);
             }
-            MessageKind::RequestServerStatistics => {
+            ClientMessage::RequestServerStatistics => {
                 self.on_accept_req_server_info(client_id);
             }
-            MessageKind::ClientBlobRequest(table) => {
+            ClientMessage::ClientBlobRequest(table) => {
                 self.on_accept_client_blob_request(client_id, table);
             }
-            MessageKind::ClientBlobRequestAll => {
+            ClientMessage::ClientBlobRequestAll => {
                 self.on_accept_client_blob_request_all(client_id);
             }
-            MessageKind::RequestDelta(delta) => {
+            ClientMessage::RequestDelta(delta) => {
                 self.on_accept_world_delta(client_id, delta);
             }
-            MessageKind::LoadSave(path) => {
+            ClientMessage::LoadSave(path) => {
                 self.load_world(path);
             }
-            MessageKind::BeginAsyncWorldDownload => self.begin_async_world_download(client_id),
+            ClientMessage::BeginAsyncWorldDownload => self.begin_async_world_download(client_id),
             _ => self.on_unsupported_message(),
         }
     }
@@ -251,8 +246,9 @@ impl BaryServer {
         if !self.usernames.contains_key(&id) {
             info!("Client {id} has introduced themselves as {username}");
             self.usernames.insert(id, username.clone());
-            self.node.broadcast(MessageKind::PlayerConnected(username));
-            self.node.send(id, MessageKind::TakeYourHatOff);
+            self.node
+                .broadcast(ServerMessage::PlayerConnected(username));
+            self.node.send(id, ServerMessage::TakeYourHatOff);
         } else {
             error!("Client {id} has reintroduced themselves")
         }
@@ -270,7 +266,7 @@ impl BaryServer {
 
     fn on_unsupported_message(&mut self) {
         warn!("Unsupported message type!");
-        self.node.broadcast(MessageKind::Unsupported);
+        self.node.broadcast(ServerMessage::Unsupported);
     }
 
     pub fn load_world(&mut self, path: impl AsRef<Path>) {
@@ -281,7 +277,7 @@ impl BaryServer {
                 self.world = world;
                 self.save_file = Some(path.to_path_buf());
                 info!("Loaded {}", path.display());
-                self.node.broadcast(MessageKind::HaveNewSave);
+                self.node.broadcast(ServerMessage::HaveNewSave);
             }
             Err(e) => {
                 error!("Failed to load world: {e}");
@@ -291,7 +287,7 @@ impl BaryServer {
 
     fn on_accept_ping(&mut self, id: ClientId) -> Option<()> {
         self.ensure_client_is_connected(id)?;
-        self.node.broadcast(MessageKind::Pong);
+        self.node.broadcast(ServerMessage::Pong);
         Some(())
     }
 
@@ -310,30 +306,30 @@ impl BaryServer {
 
     fn on_accept_client_say(&mut self, id: ClientId, s: String) -> Option<()> {
         self.ensure_client_is_connected(id)?;
-        self.node.broadcast(MessageKind::ChatMessage(id, s));
+        self.node.broadcast(ServerMessage::ChatMessage(id, s));
         Some(())
     }
 
     fn on_accept_set_sim_speed(&mut self, id: ClientId, speed: u32) -> Option<()> {
         self.ensure_client_is_connected(id)?;
         self.tick_rate = speed;
-        self.node.send(id, MessageKind::Ack);
+        self.node.send(id, ServerMessage::Ack);
         Some(())
     }
 
     fn on_accept_req_server_info(&mut self, id: ClientId) {
         self.node
-            .send(id, MessageKind::ServerStatistics(self.get_statistics()));
+            .send(id, ServerMessage::ServerStatistics(self.get_statistics()));
     }
 
     fn on_accept_client_blob_request(&mut self, client: ClientId, table: TableIdent) {
         info!("Responding to blob request for {table} from {client}");
         if let Some(blob) = get_blob(&self.world, table) {
-            let kind = MessageKind::BlobResponse(blob);
-            self.node.send(client, kind);
+            let msg = ServerMessage::BlobResponse(blob);
+            self.node.send(client, msg);
         } else {
-            let kind = MessageKind::ServerSays(format!("Failed to serialize table: {:?}", table));
-            self.node.send(client, kind);
+            let msg = ServerMessage::ServerSays(format!("Failed to serialize table: {:?}", table));
+            self.node.send(client, msg);
         }
     }
 
@@ -344,7 +340,7 @@ impl BaryServer {
 
         match blobs {
             Ok(blobs) => {
-                let kind = MessageKind::MultiBlobResponse(
+                let kind = ServerMessage::MultiBlobResponse(
                     self.world.spawner.next(),
                     self.world.ticks,
                     blobs,
@@ -352,22 +348,23 @@ impl BaryServer {
                 self.node.send(client, kind);
             }
             Err(err) => {
-                let kind = MessageKind::ServerSays(format!("Failed to serialize table: {:?}", err));
-                self.node.send(client, kind);
+                let msg =
+                    ServerMessage::ServerSays(format!("Failed to serialize table: {:?}", err));
+                self.node.send(client, msg);
             }
         }
     }
 
     fn on_client_connect(&mut self, id: ClientId) {
         info!("Client {id} connected");
-        self.node.send(id, MessageKind::WhoGoesThere);
+        self.node.send(id, ServerMessage::WhoGoesThere);
     }
 
     fn on_client_disconnect(&mut self, id: ClientId, reason: DisconnectReason) {
         info!("Client {id} disconnected: {reason}");
         if let Some(username) = self.usernames.remove(&id) {
             self.node
-                .broadcast(MessageKind::PlayerDisconnected(username));
+                .broadcast(ServerMessage::PlayerDisconnected(username));
         }
     }
 
@@ -388,8 +385,8 @@ impl BaryServer {
                 ServerEvent::Disconnected(id, reason) => {
                     self.on_client_disconnect(id, reason);
                 }
-                ServerEvent::Message(msg) => {
-                    self.on_accept_message(msg);
+                ServerEvent::Message(id, msg) => {
+                    self.on_accept_message(id, msg);
                 }
             }
         }

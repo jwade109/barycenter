@@ -1,6 +1,6 @@
 use crate::*;
 use bary_core::prelude::WallTimer;
-use bary_ipc::{Blob, ClientNode, ClientTelemetry, Message, MessageKind};
+use bary_ipc::{Blob, ClientNode, ClientTelemetry, ServerMessage};
 use bary_raylib::AsyncWorldDownload;
 use bary_sim::{World, WorldDelta, apply_delta, timedelta_from_delta_ticks, update_world};
 use log::{error, warn};
@@ -33,26 +33,26 @@ impl MultiplayerBackend {
     }
 
     fn request_delta(&mut self, delta: WorldDelta) {
-        self.node.send(MessageKind::RequestDelta(delta));
+        self.node.send(delta);
     }
 
     fn report_telemetry(&mut self) {
         let tlm = ClientTelemetry {
             ticks: self.world.ticks,
         };
-        self.node.send(MessageKind::ClientTelemetry(tlm));
+        self.node.send(ClientMessage::ClientTelemetry(tlm));
     }
 
     fn send_ping(&mut self) {
-        self.node.send(MessageKind::Ping);
+        self.node.send(ClientMessage::Ping);
     }
 
     fn set_sim_speed(&mut self, speed: u32) {
-        self.node.send(MessageKind::SetSimSpeed(speed));
+        self.node.send(ClientMessage::SetSimSpeed(speed));
     }
 
     fn load_save(&mut self, path: impl Into<String>) {
-        self.node.send(MessageKind::LoadSave(path.into()));
+        self.node.send(ClientMessage::LoadSave(path.into()));
     }
 
     fn on_driver_packet(&mut self, ticks: u64, deltas: Vec<WorldDelta>) {
@@ -72,7 +72,7 @@ impl MultiplayerBackend {
     }
 
     fn on_rcv_who_goes_there(&mut self) {
-        self.node.send(MessageKind::Introduction {
+        self.node.send(ClientMessage::Introduction {
             username: self.username.clone(),
         });
     }
@@ -83,7 +83,7 @@ impl MultiplayerBackend {
     }
 
     fn on_rcv_have_new_save(&mut self) {
-        self.node.send(MessageKind::BeginAsyncWorldDownload);
+        self.node.send(ClientMessage::BeginAsyncWorldDownload);
         self.async_world_download = Some(AsyncWorldDownload::new());
     }
 
@@ -105,7 +105,7 @@ impl MultiplayerBackend {
     }
 
     fn request_world_download(&mut self) {
-        self.node.send(MessageKind::BeginAsyncWorldDownload);
+        self.node.send(ClientMessage::BeginAsyncWorldDownload);
         self.async_world_download = Some(AsyncWorldDownload::new());
     }
 
@@ -113,7 +113,7 @@ impl MultiplayerBackend {
         self.server_handshake_complete = true;
     }
 
-    fn update(&mut self) -> Vec<Message> {
+    fn update(&mut self) -> Vec<ServerMessage> {
         if self.server_ping_timer.tick() {
             if self.server_handshake_complete {
                 self.send_ping();
@@ -126,8 +126,8 @@ impl MultiplayerBackend {
 
         let mut propagated = Vec::new();
         for msg in self.node.update() {
-            match msg.kind.clone() {
-                MessageKind::Driver {
+            match msg.clone() {
+                ServerMessage::Driver {
                     ticks,
                     deltas,
                     players,
@@ -135,23 +135,23 @@ impl MultiplayerBackend {
                     self.on_driver_packet(ticks, deltas);
                     self.world.players = players;
                 }
-                MessageKind::Kicked => {
+                ServerMessage::Kicked => {
                     self.on_rcv_kicked();
                     propagated.push(msg);
                 }
-                MessageKind::WhoGoesThere => {
+                ServerMessage::WhoGoesThere => {
                     self.on_rcv_who_goes_there();
                 }
-                MessageKind::HaveNewSave => {
+                ServerMessage::HaveNewSave => {
                     self.on_rcv_have_new_save();
                 }
-                MessageKind::BlobResponse(blob) => {
+                ServerMessage::BlobResponse(blob) => {
                     self.on_rcv_blob(blob);
                 }
-                MessageKind::TakeYourHatOff => {
+                ServerMessage::TakeYourHatOff => {
                     self.on_rcv_take_your_hat_off();
                 }
-                MessageKind::MultiBlobResponse(ent, ticks, blobs) => {
+                ServerMessage::MultiBlobResponse(ent, ticks, blobs) => {
                     let delta = ticks as i64 - self.world.ticks as i64;
                     warn!(
                         "Delta ticks: {} AKA {:0.3}",
@@ -164,8 +164,8 @@ impl MultiplayerBackend {
                         self.on_rcv_blob(blob);
                     }
                 }
-                MessageKind::Ack => (),
-                MessageKind::Pong => (),
+                ServerMessage::Ack => (),
+                ServerMessage::Pong => (),
                 _ => propagated.push(msg),
             }
         }
@@ -202,7 +202,7 @@ impl Backend for MultiplayerBackend {
         Some(&self.username)
     }
 
-    fn update(&mut self) -> Vec<Message> {
+    fn update(&mut self) -> Vec<ServerMessage> {
         self.update()
     }
 }

@@ -74,14 +74,16 @@ impl ClientApp {
         let mut assets = Assets::default();
         load_assets(&mut assets, &mut handle, &thread);
 
-        // let node = ClientNode::with_str_addr(&args.server_addr)?;
+        let node = ClientNode::with_str_addr(&args.server_addr)?;
 
         let update_timer = WallTimer::with_dur(Duration::from_millis(20));
         let ui_state = UiInteractionState::default();
 
-        // let backend = Box::new(MultiplayerBackend::new(world, node, args.username));
-
-        let backend = Box::new(SinglePlayerBackend::new(world));
+        let backend: Box<dyn Backend> = if args.use_mp_backend {
+            Box::new(MultiplayerBackend::new(world, node, args.username))
+        } else {
+            Box::new(SinglePlayerBackend::new(world))
+        };
 
         let raylib = Raylib { handle, thread };
 
@@ -164,35 +166,35 @@ impl ClientApp {
         }
     }
 
-    pub fn on_rcv_server_msg(&mut self, msg: Message) {
+    pub fn on_rcv_server_msg(&mut self, msg: ServerMessage) {
         let s = format!("{:?}", msg);
         self.terminal.log_debug(s);
 
         debug!("{msg:?}");
 
-        match msg.kind {
-            MessageKind::ChatMessage(id, text) => {
+        match msg {
+            ServerMessage::ChatMessage(id, text) => {
                 let s = format!("[{id}]: {text}");
                 self.client.chat.log(s);
             }
-            MessageKind::FinishWorldDownload => {
+            ServerMessage::TransactionComplete => {
                 self.client.scene_graph = SceneGraph::Free(FreeFlying::new());
             }
-            MessageKind::SyncFrame(frame) => {
+            ServerMessage::SyncFrame(frame) => {
                 debug!("Got frame: {:?}", frame);
                 let our_frame = sync_frame_from_world(self.backend.world());
                 debug!("Our frame: {:?}", our_frame);
             }
-            MessageKind::PlayerConnected(username) => {
+            ServerMessage::PlayerConnected(username) => {
                 self.client.chat.log(format!("{username} just connected."));
             }
-            MessageKind::PlayerDisconnected(username) => {
+            ServerMessage::PlayerDisconnected(username) => {
                 self.client
                     .chat
                     .log(format!("{username} just disconnected."));
             }
-            MessageKind::ServerStatistics(_) => (),
-            _ => error!("Unsupported message from server: {:?}", msg.kind),
+            ServerMessage::ServerStatistics(_) => (),
+            _ => error!("Unsupported message from server: {:?}", msg),
         }
     }
 
@@ -364,6 +366,8 @@ struct Args {
     server_port: u16,
     #[arg(long)]
     run_server: bool,
+    #[arg(long)]
+    use_mp_backend: bool,
 }
 
 fn make_gui(

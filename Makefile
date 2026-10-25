@@ -7,8 +7,11 @@ local_server:
 mp_client:
 	cargo run --release -- -a 127.0.0.1:5000 --username mattmarti
 
-single_player:
+singleplayer:
 	cargo run --release -- --run-server --username kim_mcbudget
+
+multiplayer:
+	cargo run --release -- --run-server --username kim_mcbudget --use-mp-backend
 
 generate_worlds:
 	cargo run --release --bin generate_worlds

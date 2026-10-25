@@ -1,12 +1,14 @@
 use crate::backend::Backend;
+use bary_core::prelude::WallTimer;
 use bary_ipc::*;
-use bary_sim::{World, WorldDelta, apply_delta, load_world};
+use bary_sim::{World, WorldDelta, apply_delta, load_world, update_world};
 use log::*;
 
 pub struct SinglePlayerBackend {
     world: World,
     sim_speed: u32,
-    events: Vec<Message>,
+    events: Vec<ServerMessage>,
+    step_timer: WallTimer,
 }
 
 impl SinglePlayerBackend {
@@ -15,12 +17,12 @@ impl SinglePlayerBackend {
             world,
             sim_speed: 1,
             events: Vec::new(),
+            step_timer: WallTimer::hz(50),
         }
     }
 
-    fn append_event(&mut self, msg: MessageKind) {
-        let msg = Message::new(MessageSource::Server, msg);
-        self.events.push(msg);
+    fn append_event(&mut self, msg: impl Into<ServerMessage>) {
+        self.events.push(msg.into());
     }
 }
 
@@ -42,7 +44,8 @@ impl Backend for SinglePlayerBackend {
                 error!("Failed to load world: {e}");
             }
         }
-        self.append_event(MessageKind::HaveNewSave);
+        self.append_event(ServerMessage::HaveNewSave);
+        self.request_world_download();
     }
 
     fn set_sim_speed(&mut self, speed: u32) {
@@ -50,7 +53,7 @@ impl Backend for SinglePlayerBackend {
     }
 
     fn request_world_download(&mut self) {
-        self.append_event(MessageKind::FinishWorldDownload);
+        self.append_event(ServerMessage::TransactionComplete);
     }
 
     fn network(&self) -> Option<&ClientNode> {
@@ -61,7 +64,13 @@ impl Backend for SinglePlayerBackend {
         None
     }
 
-    fn update(&mut self) -> Vec<Message> {
+    fn update(&mut self) -> Vec<ServerMessage> {
+        if self.step_timer.tick() {
+            for _ in 0..self.sim_speed {
+                update_world(&mut self.world);
+            }
+        }
+
         std::mem::take(&mut self.events)
     }
 }

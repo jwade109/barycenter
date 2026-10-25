@@ -1,4 +1,4 @@
-use bary_ipc::{ClientNode, Message};
+use bary_ipc::{ClientNode, ServerMessage};
 use bary_sim::{World, WorldDelta};
 
 pub trait Backend {
@@ -16,5 +16,5 @@ pub trait Backend {
 
     fn username(&self) -> Option<&str>;
 
-    fn update(&mut self) -> Vec<Message>;
+    fn update(&mut self) -> Vec<ServerMessage>;
 }

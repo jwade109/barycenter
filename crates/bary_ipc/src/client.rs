@@ -149,7 +149,7 @@ impl ClientNode {
     }
 
     #[must_use]
-    pub fn update(&mut self) -> Vec<Message> {
+    pub fn update(&mut self) -> Vec<ServerMessage> {
         let now = Instant::now();
         let duration = now - self.last_updated;
         self.last_updated = now;
@@ -164,7 +164,7 @@ impl ClientNode {
         let mut messages = Vec::new();
 
         while let Some(bytes) = self.client.receive_message(DefaultChannel::ReliableOrdered) {
-            let msg: Message = bincode::deserialize(&bytes).unwrap();
+            let msg: ServerMessage = bincode::deserialize(&bytes).unwrap();
             self.rx_count += 1;
             messages.push(msg);
         }
@@ -176,15 +176,12 @@ impl ClientNode {
         messages
     }
 
-    pub fn send_message(&mut self, msg: Message) {
+    pub fn send(&mut self, msg: impl Into<ClientMessage>) {
+        let msg = msg.into();
         let bytes = bincode::serialize(&msg).unwrap();
         self.client
             .send_message(DefaultChannel::ReliableOrdered, bytes);
         self.tx_count += 1;
-    }
-
-    pub fn send(&mut self, kind: MessageKind) {
-        self.send_message(Message::new(MessageSource::Client(self.id), kind));
     }
 
     pub fn disconnect(&mut self) {

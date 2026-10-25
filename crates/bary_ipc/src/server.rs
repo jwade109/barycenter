@@ -1,4 +1,4 @@
-use crate::{ClientId, Message, MessageKind, MessageSource};
+use crate::{ClientId, ClientMessage, ServerMessage};
 use log::{debug, info};
 pub use renet::DisconnectReason;
 use renet::*;
@@ -16,7 +16,7 @@ pub struct ClientInfo {
 pub enum ServerEvent {
     Connected(ClientId),
     Disconnected(ClientId, DisconnectReason),
-    Message(Message),
+    Message(ClientId, ClientMessage),
 }
 
 pub struct ServerNode {
@@ -67,8 +67,7 @@ impl ServerNode {
         self.client_info.iter()
     }
 
-    pub fn broadcast(&mut self, msg: MessageKind) {
-        let msg = msg.with_source(MessageSource::Server);
+    pub fn broadcast(&mut self, msg: ServerMessage) {
         let message = bincode::serialize(&msg).unwrap();
         self.renet
             .broadcast_message(DefaultChannel::ReliableOrdered, message);
@@ -78,8 +77,8 @@ impl ServerNode {
         }
     }
 
-    pub fn send(&mut self, id: ClientId, kind: MessageKind) {
-        let message = bincode::serialize(&kind.with_source(MessageSource::Server)).unwrap();
+    pub fn send(&mut self, id: ClientId, msg: ServerMessage) {
+        let message = bincode::serialize(&msg).unwrap();
         self.renet
             .send_message(id.0, DefaultChannel::ReliableOrdered, message);
 
@@ -122,7 +121,7 @@ impl ServerNode {
                 .renet
                 .receive_message(client_id, DefaultChannel::ReliableOrdered)
             {
-                if let Ok(message) = bincode::deserialize::<Message>(&message) {
+                if let Ok(message) = bincode::deserialize::<ClientMessage>(&message) {
                     debug!("Received message from client {}: {:?}", client_id, message);
                     self.client_info
                         .entry(ClientId(client_id))
@@ -132,7 +131,7 @@ impl ServerNode {
                             tx_count: 0,
                         });
 
-                    let event = ServerEvent::Message(message);
+                    let event = ServerEvent::Message(ClientId(client_id), message);
                     messages.push(event);
                 }
             }
@@ -172,7 +171,7 @@ mod tests {
         assert!(c1.is_connected());
         assert!(c2.is_connected());
 
-        server.send(c1.id(), MessageKind::Ack);
+        server.send(c1.id(), ServerMessage::Ack);
 
         _ = server.update();
 
@@ -185,7 +184,7 @@ mod tests {
 
         let msg = m1.first().unwrap();
 
-        assert!(msg.is_ack());
+        assert!(matches!(msg, &ServerMessage::Ack));
     }
 
     #[test]
@@ -204,22 +203,15 @@ mod tests {
         assert_eq!(server.renet().connected_clients(), 1);
         assert!(client.is_connected());
 
-        server.broadcast(MessageKind::Ack);
-        server.broadcast(MessageKind::PrintEntityInfo(TableIdent::Grids));
-        server.send(
-            client.id(),
-            MessageKind::PrintEntityInfo(TableIdent::Computers),
-        );
+        server.broadcast(ServerMessage::Ack);
+        server.broadcast(ServerMessage::HaveNewSave);
+        server.send(client.id(), ServerMessage::Nack);
 
         _ = server.update();
 
         let msgs = client.update();
 
         assert_eq!(msgs.len(), 3);
-
-        assert_eq!(msgs[0].source, MessageSource::Server);
-        assert_eq!(msgs[1].source, MessageSource::Server);
-        assert_eq!(msgs[2].source, MessageSource::Server);
     }
 
     #[test]
@@ -238,11 +230,11 @@ mod tests {
         assert_eq!(server.renet().connected_clients(), 1);
         assert!(client.is_connected());
 
-        server.broadcast(MessageKind::Ack);
+        server.broadcast(ServerMessage::Ack);
         _ = server.update();
 
         let msgs = client.update();
         let msg = msgs.first().unwrap();
-        assert!(msg.is_ack());
+        assert!(matches!(msg, ServerMessage::Ack));
     }
 }
