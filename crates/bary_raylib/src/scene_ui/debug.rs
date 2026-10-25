@@ -8,9 +8,9 @@ pub fn debug_lines(
     world: &World,
     client: &ClientSpecificInfo,
     timers: &DebugTimers,
-    node: &ClientNode,
+    network: Option<&ClientNode>,
     update_timer: &WallTimer,
-    username: &str,
+    username: Option<&str>,
     user_id: Option<Ent>,
     fps: u32,
 ) {
@@ -42,7 +42,10 @@ pub fn debug_lines(
         apparent_datetime(world.ticks).format("%b %d %Y %I:%M:%S %p"),
     ));
 
-    ui.text(format!("Username:  {}", username));
+    if let Some(username) = username {
+        ui.text(format!("Username:  {}", username));
+    }
+
     if let Some(uid) = user_id {
         ui.text(format!("User ID:   {}", uid));
     }
@@ -59,11 +62,13 @@ pub fn debug_lines(
 
     ui.text("");
 
-    ui.text(format!("Connected: {}", node.is_connected()));
-    ui.text(format!("Address:   {}", node.server_addr()));
-    ui.text(format!("RX:        {}", node.rx_count()));
-    ui.text(format!("TX:        {}", node.tx_count()));
-    ui.text(format!("Errors:    {}", node.errors()));
+    if let Some(network) = network {
+        ui.text(format!("Connected: {}", network.is_connected()));
+        ui.text(format!("Address:   {}", network.server_addr()));
+        ui.text(format!("RX:        {}", network.rx_count()));
+        ui.text(format!("TX:        {}", network.tx_count()));
+        ui.text(format!("Errors:    {}", network.errors()));
+    }
 
     ui.text("");
 
@@ -109,9 +114,9 @@ pub fn debug_ui(
     world: &World,
     client: &ClientSpecificInfo,
     timers: &DebugTimers,
-    node: &ClientNode,
+    network: Option<&ClientNode>,
     update_timer: &WallTimer,
-    username: &str,
+    username: Option<&str>,
     user_id: Option<Ent>,
     fps: u32,
 ) {
@@ -120,7 +125,7 @@ pub fn debug_ui(
         world,
         client,
         timers,
-        node,
+        network,
         update_timer,
         username,
         user_id,

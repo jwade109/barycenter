@@ -12,8 +12,12 @@ use raylib::prelude::*;
 use std::{rc::Rc, time::Duration};
 
 mod backend;
+mod mp_backend;
+mod sp_backend;
 
 use backend::*;
+use mp_backend::*;
+use sp_backend::*;
 
 struct Raylib {
     handle: RaylibHandle,
@@ -21,9 +25,9 @@ struct Raylib {
 }
 
 pub struct ClientApp {
-    input: InputHandler,
+    input_handler: InputHandler,
     client: ClientSpecificInfo,
-    backend: MultiplayerBackend,
+    backend: Box<dyn Backend>,
     terminal: Terminal<TermCmd>,
     assets: Assets,
     ui_state: UiInteractionState,
@@ -38,7 +42,7 @@ impl ClientApp {
         args: Args,
         log_level: log::LevelFilter,
     ) -> Result<(Self, Raylib), Box<dyn std::error::Error>> {
-        let input = InputHandler::new();
+        let input_handler = InputHandler::new();
 
         let world = World::empty();
 
@@ -70,19 +74,21 @@ impl ClientApp {
         let mut assets = Assets::default();
         load_assets(&mut assets, &mut handle, &thread);
 
-        let node = ClientNode::with_str_addr(&args.server_addr)?;
+        // let node = ClientNode::with_str_addr(&args.server_addr)?;
 
         let update_timer = WallTimer::with_dur(Duration::from_millis(20));
         let ui_state = UiInteractionState::default();
 
-        let backend = MultiplayerBackend::new(world, node, args.username);
+        // let backend = Box::new(MultiplayerBackend::new(world, node, args.username));
+
+        let backend = Box::new(SinglePlayerBackend::new(world));
 
         let raylib = Raylib { handle, thread };
 
         let app = ClientApp {
             backend,
             client: ClientSpecificInfo::new(),
-            input,
+            input_handler,
             terminal,
             assets,
             ui_state,
@@ -149,10 +155,9 @@ impl ClientApp {
             raylib.handle.get_screen_height() as f32,
         );
 
-        for event in self.input.get_events() {
-            let focused = raylib.handle.is_window_focused();
-            self.client.input.process_rdev_event(&event, focused);
-        }
+        self.input_handler.update(raylib.handle.is_window_focused());
+
+        self.client.input = self.input_handler.input().clone();
 
         match &self.client.scene_graph {
             _ => self.update_in_world(),
@@ -415,7 +420,7 @@ fn make_debug_ui(ui: &mut UiBuilder, app: &ClientApp, timers: &DebugTimers, fps:
         app.backend.world(),
         &app.client,
         timers,
-        app.backend.node(),
+        app.backend.network(),
         &app.update_timer,
         app.backend.username(),
         app.client.player_id,
@@ -515,7 +520,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
 
-        main_app.client.input.on_frame_boundary();
+        main_app.input_handler.on_frame_boundary();
     }
 
     info!("Done.");
