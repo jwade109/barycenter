@@ -4,6 +4,12 @@ use bary_parts::BlueprintId;
 use bary_sim::{World, WorldDelta};
 use early_returns::*;
 
+#[derive(Debug, Clone, Copy)]
+pub enum EditorCommand {
+    SetLayer(PartLayer),
+    SetProto(Ent),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct EditorState {
     pub vehicle: Ent,
@@ -17,6 +23,19 @@ pub struct EditorState {
     pub hovered: Option<PartCoord>,
 
     pub vehicle_name_field: Option<(EditableText, bool)>,
+}
+
+impl EditorState {
+    pub fn handle_command(&mut self, cmd: EditorCommand) {
+        match cmd {
+            EditorCommand::SetLayer(layer) => {
+                self.layer = Some(layer);
+            }
+            EditorCommand::SetProto(id) => {
+                self.prototype_id = Some(id);
+            }
+        }
+    }
 }
 
 fn editor_offset_moves_with_wasd(input: &InputState, offset: &mut PartCoord) {

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::Scene;
+use crate::{EditorCommand, Scene};
 use bary_core::prelude::*;
 use bary_input::InputState;
 use bary_sim::{TimedInstruction, WorldDelta};
@@ -24,9 +24,7 @@ pub enum UiMessage {
     WriteSaveToDisk,
     LoadSaveFile(String),
     Salt(usize),
-    EditorSetLayer(PartLayer),
-    EditorSetProto(Ent),
-    TimedInstruction { grid_id: Ent, ti: TimedInstruction },
+    Editor(EditorCommand),
     Delta(WorldDelta),
 }
 
@@ -39,6 +37,12 @@ impl From<Scene> for UiMessage {
 impl From<WorldDelta> for UiMessage {
     fn from(value: WorldDelta) -> Self {
         Self::Delta(value)
+    }
+}
+
+impl From<EditorCommand> for UiMessage {
+    fn from(value: EditorCommand) -> Self {
+        Self::Editor(value)
     }
 }
 

@@ -45,16 +45,14 @@ impl Backend for SinglePlayerBackend {
             }
         }
         self.append_event(ServerMessage::HaveNewSave);
-        self.request_world_download();
+        self.append_event(ServerMessage::TransactionComplete);
     }
 
     fn set_sim_speed(&mut self, speed: u32) {
         self.sim_speed = speed;
     }
 
-    fn request_world_download(&mut self) {
-        self.append_event(ServerMessage::TransactionComplete);
-    }
+    fn request_world_download(&mut self) {}
 
     fn network(&self) -> Option<&ClientNode> {
         None

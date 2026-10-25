@@ -53,10 +53,8 @@ pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World,
 
             ui.sep();
 
-            let make_instr = |instr: Instruction| UiMessage::TimedInstruction {
-                grid_id: loc.grid_id,
-                ti: TimedInstruction::perp(instr),
-            };
+            let make_instr =
+                |instr: Instruction| WorldDelta::SetGridInstruction(loc.grid_id, instr.into());
 
             let adrift = make_instr(Instruction::Drift);
 

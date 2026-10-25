@@ -22,21 +22,11 @@ impl InputHandler {
         Self { receiver, input }
     }
 
-    pub fn get_events(&self) -> Vec<rdev::Event> {
-        self.receiver.try_iter().collect()
-    }
-
-    pub fn input(&self) -> &InputState {
-        &self.input
-    }
-
-    pub fn update(&mut self, is_focused: bool) {
-        for event in self.get_events() {
+    pub fn update(&mut self, is_focused: bool) -> InputState {
+        self.input.on_frame_boundary();
+        for event in self.receiver.try_iter() {
             self.input.process_rdev_event(&event, is_focused);
         }
-    }
-
-    pub fn on_frame_boundary(&mut self) {
-        self.input.on_frame_boundary();
+        self.input.clone()
     }
 }

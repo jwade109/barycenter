@@ -105,7 +105,7 @@ impl UiBuilder {
         let s = s.into();
         let dims = self.font.measure_text(&s, self.font_size, 0.0);
         let w = dims.x + 36.0;
-        let h = dims.y + 18.0;
+        let h = dims.y + 7.0;
         let id_salt = format!("button_{}", s.replace(" ", "_"));
         self.add_to_active(Node::button(s, msg, w, h, id_salt));
     }

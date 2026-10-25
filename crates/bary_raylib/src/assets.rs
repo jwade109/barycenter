@@ -11,8 +11,8 @@ pub type MaybeFont = Option<Font>;
 
 #[derive(Default)]
 pub struct Assets {
-    lato_regular: MaybeFont,
-    fira_code: MaybeFont,
+    lato_regular: Option<Rc<Font>>,
+    fira_code: Option<Rc<Font>>,
     consolas: Option<Rc<Font>>,
     pub part_textures: BTreeMap<String, Texture2D>,
     pub animation: MaybeTexture,
@@ -28,6 +28,11 @@ impl Assets {
     }
 }
 
+fn load_font(rl: &mut RaylibHandle, thread: &RaylibThread, filename: &str) -> Option<Rc<Font>> {
+    let font = rl.load_font_ex(thread, filename, 32, None).ok()?;
+    Some(Rc::new(font))
+}
+
 pub fn load_assets(
     assets: &mut Assets,
     rl: &mut raylib::RaylibHandle,
@@ -35,19 +40,9 @@ pub fn load_assets(
 ) {
     debug!("Loading assets");
 
-    assets.lato_regular = rl
-        .load_font_ex(thread, "assets/fonts/Lato-Regular.ttf", 32, None)
-        .ok();
-
-    assets.fira_code = rl
-        .load_font_ex(thread, "assets/fonts/FiraCode-Bold.ttf", 32, None)
-        .ok();
-
-    let consolas = rl
-        .load_font_ex(thread, "assets/fonts/Consolas-Regular.ttf", 32, None)
-        .ok();
-
-    assets.consolas = consolas.map(|c| Rc::new(c));
+    assets.lato_regular = load_font(rl, thread, "assets/fonts/Lato-Regular.ttf");
+    assets.fira_code = load_font(rl, thread, "assets/fonts/FiraCode-Bold.ttf");
+    assets.consolas = load_font(rl, thread, "assets/fonts/Consolas-Regular.ttf");
 
     assets.ship_names = load_names_from_file("assets/ship_names.txt").unwrap_or(vec![]);
 

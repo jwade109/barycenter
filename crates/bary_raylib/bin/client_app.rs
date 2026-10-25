@@ -74,12 +74,11 @@ impl ClientApp {
         let mut assets = Assets::default();
         load_assets(&mut assets, &mut handle, &thread);
 
-        let node = ClientNode::with_str_addr(&args.server_addr)?;
-
         let update_timer = WallTimer::with_dur(Duration::from_millis(20));
         let ui_state = UiInteractionState::default();
 
         let backend: Box<dyn Backend> = if args.use_mp_backend {
+            let node = ClientNode::with_str_addr(&args.server_addr)?;
             Box::new(MultiplayerBackend::new(world, node, args.username))
         } else {
             Box::new(SinglePlayerBackend::new(world))
@@ -157,9 +156,7 @@ impl ClientApp {
             raylib.handle.get_screen_height() as f32,
         );
 
-        self.input_handler.update(raylib.handle.is_window_focused());
-
-        self.client.input = self.input_handler.input().clone();
+        self.client.input = self.input_handler.update(raylib.handle.is_window_focused());
 
         match &self.client.scene_graph {
             _ => self.update_in_world(),
@@ -290,19 +287,10 @@ impl ClientApp {
             UiMessage::Delta(delta) => {
                 self.backend.request_delta(delta);
             }
-            UiMessage::EditorSetLayer(layer) => {
+            UiMessage::Editor(cmd) => {
                 if let SceneGraph::Editor(state) = &mut self.client.scene_graph {
-                    state.layer = Some(layer);
+                    state.handle_command(cmd)
                 }
-            }
-            UiMessage::EditorSetProto(id) => {
-                if let SceneGraph::Editor(state) = &mut self.client.scene_graph {
-                    state.prototype_id = Some(id);
-                }
-            }
-            UiMessage::TimedInstruction { grid_id, ti } => {
-                let delta = WorldDelta::SetGridInstruction(grid_id, ti);
-                self.backend.request_delta(delta);
             }
             e => warn!("Unhandled click event: {e:?}"),
         }
@@ -523,8 +511,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         {
             break;
         }
-
-        main_app.input_handler.on_frame_boundary();
     }
 
     info!("Done.");

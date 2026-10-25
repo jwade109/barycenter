@@ -126,7 +126,7 @@ impl MultiplayerBackend {
 
         let mut propagated = Vec::new();
         for msg in self.node.update() {
-            match msg.clone() {
+            let e = match msg.clone() {
                 ServerMessage::Driver {
                     ticks,
                     deltas,
@@ -134,22 +134,28 @@ impl MultiplayerBackend {
                 } => {
                     self.on_driver_packet(ticks, deltas);
                     self.world.players = players;
+                    continue;
                 }
                 ServerMessage::Kicked => {
                     self.on_rcv_kicked();
                     propagated.push(msg);
+                    continue;
                 }
                 ServerMessage::WhoGoesThere => {
                     self.on_rcv_who_goes_there();
+                    continue;
                 }
                 ServerMessage::HaveNewSave => {
                     self.on_rcv_have_new_save();
+                    continue;
                 }
                 ServerMessage::BlobResponse(blob) => {
                     self.on_rcv_blob(blob);
+                    continue;
                 }
                 ServerMessage::TakeYourHatOff => {
                     self.on_rcv_take_your_hat_off();
+                    continue;
                 }
                 ServerMessage::MultiBlobResponse(ent, ticks, blobs) => {
                     let delta = ticks as i64 - self.world.ticks as i64;
@@ -163,11 +169,18 @@ impl MultiplayerBackend {
                     for blob in blobs {
                         self.on_rcv_blob(blob);
                     }
+                    continue;
                 }
-                ServerMessage::Ack => (),
-                ServerMessage::Pong => (),
-                _ => propagated.push(msg),
-            }
+                ServerMessage::Ack => {
+                    continue;
+                }
+                ServerMessage::Pong => {
+                    continue;
+                }
+                e => e,
+            };
+
+            propagated.push(e);
         }
         propagated
     }

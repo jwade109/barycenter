@@ -137,7 +137,7 @@ impl BaryServer {
     }
 
     fn send_driver_packet(&mut self) {
-        let deltas = self.queued_deltas.drain(..).collect();
+        let deltas = std::mem::take(&mut self.queued_deltas);
         let msg = ServerMessage::Driver {
             ticks: self.world.ticks,
             deltas,
@@ -375,6 +375,8 @@ impl BaryServer {
 
         if self.md5_sync_timer.tick() {
             self.send_md5_sync_packet();
+            self.send_driver_packet();
+            self.send_tlm_server_info();
         }
 
         for msg in self.node.update() {
@@ -395,8 +397,6 @@ impl BaryServer {
             update_world(&mut self.world);
         }
 
-        self.send_driver_packet();
-        self.send_tlm_server_info();
         self.process_transactions();
     }
 }
