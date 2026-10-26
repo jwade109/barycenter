@@ -20,8 +20,11 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             Ok(())
         }
         WorldDelta::Ping(pos) => {
-            let particle = PingParticle::new(pos, world.ticks);
-            world.particles.push(Particle::Ping(particle));
+            // let particle = PingParticle::new(pos, world.ticks);
+            // world.particles.push(Particle::Ping(particle));
+            let tr = RadioTransmission::new(pos).with_range(3000.0);
+            let id = world.spawner.spawn();
+            world.transmissions.spawn(id, tr);
             Ok(())
         }
         WorldDelta::SpawnShipAt(name, bp_id, iso) => {

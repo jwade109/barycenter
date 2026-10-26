@@ -379,6 +379,8 @@ pub fn draw_world(
 
     draw_ping_particles(&mut c, &world.particles, world.ticks);
 
+    draw_radio_transmissions(&mut c, &world.transmissions);
+
     // draw_isometry_axes(&mut c, world.camera.isometry, "CAM", Vec2::splat(5.0));
     // draw_isometry_axes(&mut c, world.target_camera.isometry, "", Vec2::splat(5.0));
 
@@ -1158,6 +1160,23 @@ fn draw_ping_particles(d: &mut RaylibDrawHandle, particles: &Vec<Particle>, curr
                 }
             }
         }
+    }
+}
+
+fn draw_radio_transmissions(
+    d: &mut RaylibDrawHandle,
+    transmissions: &Components<RadioTransmission>,
+) {
+    for tr in transmissions.values() {
+        let color = if tr.is_response() {
+            Color::TEAL
+        } else {
+            Color::RED
+        };
+
+        let alpha = (tr.received_power() / 200.0).clamp(0.0, 0.5) + 0.5;
+
+        draw_circle(d, tr.origin(), tr.radius(), color.alpha(alpha as f32));
     }
 }
 

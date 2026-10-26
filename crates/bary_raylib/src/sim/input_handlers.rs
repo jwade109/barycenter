@@ -22,7 +22,7 @@ pub fn drive_ship_on_enter(client: &mut ClientSpecificInfo, world: &World) -> Op
 }
 
 pub fn command_selected_ships_to_waypoint(
-    client: &mut ClientSpecificInfo,
+    client: &ClientSpecificInfo,
     p: DVec2,
     q: DVec2,
 ) -> Vec<WorldDelta> {

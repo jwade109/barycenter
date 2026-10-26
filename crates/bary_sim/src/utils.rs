@@ -968,6 +968,12 @@ pub fn update_world(world: &mut World) -> DebugTimers {
         sys_mine_tiles(world);
     }
 
+    {
+        let _timer = timers.scope("radio_transmissions");
+
+        sys_update_transmissions(world);
+    }
+
     timers
 }
 
@@ -1407,6 +1413,57 @@ pub fn set_machine_state(world: &mut World, machine_id: Ent, state: bool) -> Bar
     let machine = world.machines.try_get_mut(machine_id)?;
     machine.enabled = state;
     Ok(())
+}
+
+fn sys_update_transmissions(world: &mut World) {
+    let mut new_transmissions = Vec::new();
+    world.transmissions.retain(|tr_id, tr| {
+        let Some((inner, outer)) = tr.update(NOMINAL_DT) else {
+            info!("[{}] Dissipated.", tr_id);
+            return false;
+        };
+
+        for (grid_id, grid) in world.grids.iter_mut() {
+            if tr.source() == Some(*grid_id) {
+                continue;
+            }
+            let p = grid.particle_location.tr();
+            let d = tr.origin().distance(p);
+            if inner <= d && d < outer {
+                info!(
+                    "[{}] {} received with power {}",
+                    tr_id,
+                    grid.name,
+                    tr.received_power()
+                );
+                if !tr.is_response() {
+                    let new_tr = RadioTransmission::new(p)
+                        .with_range(1500.0)
+                        .with_source(*grid_id)
+                        .with_contents(TransmissionContents::Response);
+                    new_transmissions.push(new_tr);
+                }
+            }
+        }
+
+        true
+    });
+
+    for (grid_id, grid) in world.grids.iter() {
+        if chance(0.001) {
+            let pos = grid.particle_location.tr();
+            let tr = RadioTransmission::new(pos)
+                .with_range(10000.0)
+                .with_source(*grid_id)
+                .with_contents(TransmissionContents::Message);
+            new_transmissions.push(tr);
+        }
+    }
+
+    for tr in new_transmissions {
+        let id = world.spawner.spawn();
+        world.transmissions.spawn(id, tr);
+    }
 }
 
 #[cfg(test)]
