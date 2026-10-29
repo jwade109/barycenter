@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Planet {
     pub name: String,
-    pub iso: Isometry2d,
+    pub pos: Isometry2d,
+    pub vel: Isometry2d,
     pub body: Body,
     pub parent: Option<Ent>,
 }
@@ -20,15 +21,18 @@ impl Planet {
 pub fn spawn_planet(
     world: &mut World,
     name: String,
-    iso: Isometry2d,
+    pos: Isometry2d,
+    vel: Isometry2d,
     mass: f64,
     radius: f64,
+    parent: Option<Ent>,
 ) -> Ent {
     let planet = Planet {
         name,
-        iso,
+        pos,
+        vel,
         body: Body::with_mass(radius, mass, 1E6),
-        parent: None,
+        parent,
     };
 
     let id = world.spawner.spawn();

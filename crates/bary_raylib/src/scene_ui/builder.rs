@@ -122,4 +122,10 @@ impl UiBuilder {
     pub fn progress_bar(&mut self, val: f32) {
         self.add_to_active(Node::progress_bar(Size::Grow, 11, val, "progress_bar"));
     }
+
+    pub fn window(&mut self, id_salt: impl Into<IdSalt>, func: impl FnOnce(&mut UiBuilder) -> ()) {
+        self.begin_window(id_salt);
+        func(self);
+        self.end_window();
+    }
 }

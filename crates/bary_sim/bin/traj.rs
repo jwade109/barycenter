@@ -58,7 +58,7 @@ fn run_simulation(
 
     let cpu = world.computers.try_get_mut(cpu_id).unwrap();
 
-    cpu.command_queue = instructions;
+    cpu.extend_instruction_queue(instructions);
 
     let mut ret = Vec::new();
 

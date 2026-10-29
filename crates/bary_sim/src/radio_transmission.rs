@@ -1,7 +1,7 @@
 use bary_core::prelude::*;
 use serde::{Deserialize, Serialize};
 
-pub const SPEED_OF_LIGHT: f64 = 500.0; // m/s
+pub const SPEED_OF_LIGHT: f64 = 5000.0; // m/s
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum TransmissionContents {

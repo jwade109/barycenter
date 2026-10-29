@@ -6,7 +6,10 @@
 
 - !SpawnPlanet
     name: Lado
-    location:
+    pos:
+      translation: [0, 0]
+      rotation: 0
+    vel:
       translation: [0, 0]
       rotation: 0
     radius: 100
@@ -21,16 +24,22 @@
 - !SpawnShip [["bellerophon", 0], "Gerri", { translation: [500.0, 500.0], rotation: 0.3 }]
 - !SetVelocity { translation: [-15.0, 12.0], rotation: 0.02 }
 
+- !SpawnShip [["remora", 0], "Harold", { translation: [4000.0, 1200.0], rotation: 0.3 }]
+- !SetVelocity { translation: [-3.0, 7.0], rotation: 0.02 }
+
 - !SpawnPlanet
     name: Yol
-    location:
+    pos:
       translation: [3000, 3000]
       rotation: 0.3
+    vel:
+      translation: [-6, 6]
+      rotation: 0
     radius: 40
     mass: 1000000000000000
 
-- !SpawnShip [["pollux", 0], "Tammy", { translation: [3000.0, 3200.0], rotation: 0 }]
-- !SetVelocity { translation: [-16.0, 0.0], rotation: -0.3 }
+- !SpawnShip [["pollux", 0], "Tammy", { translation: [3100.0, 3300.0], rotation: 0 }]
+- !SetVelocity { translation: [-22.0, 6.0], rotation: -0.3 }
 
-- !SpawnShip [["remora", 0], "Juan", { translation: [3000.0, 3200.0], rotation: 0.3 }]
-- !SetVelocity { translation: [-15.0, 1.0], rotation: 0.1 }
+- !SpawnShip [["remora", 0], "Juan", { translation: [3000.0, 3300.0], rotation: 0.3 }]
+- !SetVelocity { translation: [-21.0, 7.0], rotation: 0.1 }

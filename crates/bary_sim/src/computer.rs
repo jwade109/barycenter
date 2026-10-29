@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use bary_core::prelude::*;
 use bary_factory::*;
 use bary_orbital::*;
@@ -113,15 +115,15 @@ impl std::fmt::Display for TimedInstruction {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Computer {
-    pub on: bool,
-    pub status: MachineStatus,
-    pub ticks_this_cycle: u32,
-    pub ticks_per_cycle: u32,
-    pub fired_this_tick: bool,
-    pub iters: u64,
-    pub vehicle_control: VehicleControl,
-    pub prototype: Ent,
-    pub command_queue: Vec<TimedInstruction>,
+    on: bool,
+    status: MachineStatus,
+    ticks_this_cycle: u32,
+    ticks_per_cycle: u32,
+    fired_this_tick: bool,
+    ticks: u64,
+    vehicle_control: VehicleControl,
+    prototype: Ent,
+    instructions: VecDeque<TimedInstruction>,
 }
 
 impl Computer {
@@ -132,17 +134,62 @@ impl Computer {
             ticks_this_cycle: 0,
             ticks_per_cycle: 5,
             fired_this_tick: false,
-            iters: 0,
+            ticks: 0,
             vehicle_control: VehicleControl::NULLOPT,
             prototype,
-            command_queue: vec![
-                // TimedInstruction::timed(3000, Instruction::rcs_forward()),
-                // TimedInstruction::timed(1500, Instruction::rcs_right()),
-                // TimedInstruction::timed(1500, Instruction::rcs_left()),
-                // TimedInstruction::timed(800, Instruction::rcs_backward()),
-                // TimedInstruction::timed(20000, Instruction::Drift),
-            ],
+            instructions: VecDeque::new(),
         }
+    }
+
+    pub fn is_on(&self) -> bool {
+        self.on
+    }
+
+    pub fn fired_this_tick(&self) -> bool {
+        self.fired_this_tick
+    }
+
+    pub fn status(&self) -> MachineStatus {
+        self.status
+    }
+
+    pub fn ticks(&self) -> u64 {
+        self.ticks
+    }
+
+    pub fn get_current_control(&self) -> &VehicleControl {
+        &self.vehicle_control
+    }
+
+    pub fn set_current_control(&mut self, ctrl: VehicleControl) {
+        self.vehicle_control = ctrl;
+    }
+
+    pub fn prototype(&self) -> Ent {
+        self.prototype
+    }
+
+    pub fn set_state(&mut self, state: bool) {
+        self.on = state;
+    }
+
+    pub fn enqueue_instruction(&mut self, ti: TimedInstruction) {
+        self.instructions.push_back(ti);
+    }
+
+    pub fn extend_instruction_queue(
+        &mut self,
+        commands: impl IntoIterator<Item = TimedInstruction>,
+    ) {
+        self.instructions.extend(commands);
+    }
+
+    pub fn clear_instruction_queue(&mut self) {
+        self.instructions.clear();
+    }
+
+    pub fn instructions(&self) -> impl Iterator<Item = &TimedInstruction> {
+        self.instructions.iter()
     }
 
     pub fn tick_forward(&mut self) {
@@ -156,12 +203,12 @@ impl Computer {
             self.fired_this_tick = self.ticks_this_cycle == self.ticks_per_cycle;
             if self.fired_this_tick {
                 self.ticks_this_cycle = 0;
-                self.iters += 1;
+                self.ticks += 1;
             }
-            if let Some(ins) = self.command_queue.first_mut() {
+            if let Some(ins) = self.instructions.front_mut() {
                 ins.tick();
                 if ins.is_complete() {
-                    self.command_queue.remove(0);
+                    self.instructions.remove(0);
                 }
             }
         } else {
@@ -170,17 +217,17 @@ impl Computer {
     }
 
     pub fn current_instruction(&self) -> Option<Instruction> {
-        let cmd = self.command_queue.first()?;
+        let cmd = self.instructions.front()?;
         Some(cmd.instruction)
     }
 
     pub fn current_instruction_mut(&mut self) -> Option<&mut Instruction> {
-        let cmd = self.command_queue.first_mut()?;
+        let cmd = self.instructions.front_mut()?;
         Some(&mut cmd.instruction)
     }
 
-    pub fn current_control(&self) -> Option<VehicleControl> {
-        let cmd = self.command_queue.first()?;
+    pub fn control_from_instruction(&self) -> Option<VehicleControl> {
+        let cmd = self.instructions.front()?;
         if let Instruction::Ctrl(ctrl) = cmd.instruction {
             Some(ctrl)
         } else if let Instruction::Drift = cmd.instruction {
@@ -194,7 +241,7 @@ impl Computer {
         if let Some(wp) = self.current_waypoint() {
             return Some(Angle::radians(wp.rotation));
         }
-        let cmd = self.command_queue.first()?;
+        let cmd = self.instructions.front()?;
 
         match cmd.instruction {
             Instruction::HoldAttitude(hdg) => Some(hdg),
@@ -220,7 +267,7 @@ impl Computer {
     }
 
     pub fn current_waypoint(&self) -> Option<Isometry2d> {
-        let cmd = self.command_queue.first()?;
+        let cmd = self.instructions.front()?;
         if let Instruction::HoldPosition(wp) = cmd.instruction {
             Some(wp)
         } else {

@@ -55,6 +55,7 @@ pub enum WorldDelta {
     SpawnPlanet {
         name: String,
         iso: Isometry2d,
+        vel: Isometry2d,
         radius: f64,
         mass: f64,
     },

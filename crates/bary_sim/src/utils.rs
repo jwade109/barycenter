@@ -581,7 +581,8 @@ pub fn set_primary_computer_waypoint_c(
     let primary_cpu_id = get_primary_cpu_id(grid_id, grids)?;
     let computer = computers.try_get_mut(primary_cpu_id)?;
     let command = TimedInstruction::perp(Instruction::HoldPosition(waypoint.into()));
-    computer.command_queue = vec![command];
+    computer.clear_instruction_queue();
+    computer.enqueue_instruction(command);
     Ok(primary_cpu_id)
 }
 
@@ -591,7 +592,7 @@ pub fn set_cpu_state(
     new_state: bool,
 ) -> BaryResult<()> {
     let computer = computers.try_get_mut(cpu_id)?;
-    computer.on = new_state;
+    computer.set_state(new_state);
     Ok(())
 }
 
@@ -604,7 +605,8 @@ pub fn set_grid_as_drifting(world: &mut World, cpu_id: Ent) -> BaryResult<()> {
 
 pub fn set_cpu_instruction(world: &mut World, cpu_id: Ent, ti: TimedInstruction) -> BaryResult<()> {
     let cpu = world.computers.try_get_mut(cpu_id)?;
-    cpu.command_queue = vec![ti];
+    cpu.clear_instruction_queue();
+    cpu.enqueue_instruction(ti);
     Ok(())
 }
 
@@ -934,6 +936,7 @@ pub fn update_world(world: &mut World) -> DebugTimers {
         world.grid_acceleration_updates += dirty_set.len() as u64;
         sys_update_grid_acceleration_c(dirty_set, &mut world.grids, &world.thrusters, &world.parts);
         sys_update_computers(&mut world.computers, &world.parts, &world.grids);
+        sys_propagate_planets(&mut world.planets);
         sys_propagate_grid_rigid_bodies(&mut world.grids);
         sys_propagate_n_body_accel(&mut world.grids, &world.planets);
     }
@@ -1384,9 +1387,8 @@ pub fn merge_grids(
 
     for cpu_id in &parent.computers {
         let computer = world.computers.try_get_mut(*cpu_id)?;
-        computer.command_queue.clear();
-        let instr = TimedInstruction::perp(Instruction::Drift);
-        computer.command_queue.push(instr);
+        computer.clear_instruction_queue();
+        computer.enqueue_instruction(Instruction::Drift.into());
     }
 
     Ok(())

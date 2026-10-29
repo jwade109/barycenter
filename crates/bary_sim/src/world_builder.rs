@@ -4,7 +4,10 @@ use bary_factory::*;
 use bary_parts::*;
 use log::*;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, path::{Path, PathBuf}};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 enum WorldBuilderCommand {
@@ -18,7 +21,8 @@ enum WorldBuilderCommand {
     SpawnAsteroid(Isometry2d, f32, u32),
     SpawnPlanet {
         name: String,
-        location: Isometry2d,
+        pos: Isometry2d,
+        vel: Isometry2d,
         radius: f64,
         mass: f64,
     },
@@ -125,12 +129,14 @@ impl WorldBuilder {
         mut self,
         name: impl Into<String>,
         p: impl Into<Isometry2d>,
+        v: impl Into<Isometry2d>,
         mass: f64,
         r: f64,
     ) -> Self {
         let cmd = WorldBuilderCommand::SpawnPlanet {
             name: name.into(),
-            location: p.into(),
+            pos: p.into(),
+            vel: v.into(),
             radius: r,
             mass,
         };
@@ -291,11 +297,13 @@ impl WorldBuilder {
                 }
                 WorldBuilderCommand::SpawnPlanet {
                     name,
-                    location,
+                    pos,
+                    vel,
                     mass,
                     radius,
                 } => {
-                    let id = spawn_planet(&mut world, name, location, mass, radius);
+                    let id =
+                        spawn_planet(&mut world, name, pos, vel, mass, radius, self.cursor_planet);
                     self.cursor_planet = Some(id);
                 }
             }

@@ -133,10 +133,11 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
         WorldDelta::SpawnPlanet {
             name,
             iso,
+            vel,
             mass,
             radius,
         } => {
-            spawn_planet(world, name, iso, mass, radius);
+            spawn_planet(world, name, iso, vel, mass, radius, None);
             Ok(())
         }
         WorldDelta::RemoveTerrainTile { asteroid, tile } => {

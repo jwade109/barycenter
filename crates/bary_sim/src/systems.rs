@@ -3,7 +3,7 @@ use crate::*;
 use bary_core::prelude::*;
 use bary_orbital::*;
 use early_returns::some_or_continue;
-use early_returns::some_or_return;
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 /// Updates ring particles.
@@ -24,6 +24,25 @@ pub fn sys_propagate_grid_rigid_bodies(grids: &mut Components<VehicleGrid>) {
     }
 }
 
+pub fn sys_propagate_planets(planets: &mut Components<Planet>) {
+    let mut pos = BTreeMap::new();
+    for (id, planet) in planets.iter() {
+        pos.insert(*id, (planet.body, planet.pos.translation));
+    }
+
+    for child in planets.values_mut() {
+        let id = some_or_continue!(child.parent);
+        let (parent_body, parent_pos) = *some_or_continue!(pos.get(&id));
+        let v = child.pos.translation - parent_pos;
+        let accel = parent_body.gravity(v);
+        child.vel.translation += accel * NOMINAL_DT;
+
+        child.pos += child.vel * NOMINAL_DT;
+
+        child.pos.rotation = wrap_pi_npi_f64(child.pos.rotation);
+    }
+}
+
 pub fn sys_propagate_n_body_accel(
     grids: &mut Components<VehicleGrid>,
     planets: &Components<Planet>,
@@ -31,7 +50,7 @@ pub fn sys_propagate_n_body_accel(
     for grid in grids.values_mut() {
         let planet_id = some_or_continue!(grid.orbital_parent);
         let planet = some_or_continue!(planets.get(planet_id));
-        let v = grid.particle_location.translation - planet.iso.translation;
+        let v = grid.particle_location.translation - planet.pos.translation;
         let accel = planet.gravity(v);
         grid.velocity.translation += accel * NOMINAL_DT;
     }
@@ -62,7 +81,7 @@ pub fn sys_update_thrusters(
         let Ok(cpu) = computers.try_get(*cpu_id) else {
             continue;
         };
-        if !cpu.fired_this_tick {
+        if !cpu.fired_this_tick() {
             continue;
         }
 
@@ -76,7 +95,7 @@ pub fn sys_update_thrusters(
                 continue;
             };
 
-            let ctrl = cpu.vehicle_control;
+            let ctrl = cpu.get_current_control();
 
             let tac = match part.region.rot() {
                 Rotation::East => ctrl.plus_x,
@@ -207,12 +226,12 @@ pub fn sys_update_computers(
     for (cpu_id, computer) in computers.iter_mut() {
         computer.tick_forward();
 
-        if !computer.fired_this_tick {
+        if !computer.fired_this_tick() {
             continue;
         }
 
-        if let Some(ctrl) = computer.current_control() {
-            computer.vehicle_control = ctrl;
+        if let Some(ctrl) = computer.control_from_instruction() {
+            computer.set_current_control(ctrl);
         } else if let Some(target_pose) = computer.current_waypoint() {
             let Ok(part) = parts.try_get(*cpu_id) else {
                 continue;
@@ -236,7 +255,7 @@ pub fn sys_update_computers(
             let (ctrl, _status) =
                 position_hold_control_law(target, target_pose.rotation as f64, &body, DVec2::ZERO);
 
-            computer.vehicle_control = ctrl;
+            computer.set_current_control(ctrl);
         } else if let Some(target) = computer.current_angle() {
             let Ok(part) = parts.try_get(*cpu_id) else {
                 continue;
@@ -258,7 +277,7 @@ pub fn sys_update_computers(
 
             let (ctrl, _status) = attitude_control_law(target.as_rad() as f64, &pid, &body);
 
-            computer.vehicle_control = ctrl;
+            computer.set_current_control(ctrl);
         } else if let Some(dv) = computer.delta_v_mut() {
             *dv -= Vec2::splat(0.1);
             let Ok(part) = parts.try_get(*cpu_id) else {
@@ -277,7 +296,7 @@ pub fn sys_update_computers(
             };
             let (ctrl, _status) = attitude_control_law(target as f64, &pid, &body);
 
-            computer.vehicle_control = ctrl;
+            computer.set_current_control(ctrl);
         }
     }
 }
@@ -439,10 +458,10 @@ mod tests {
 
         // these entities should be the same every time
         assert_eq!(*id, Ent(62));
-        assert_eq!(cpu.prototype, Ent(6));
+        assert_eq!(cpu.prototype(), Ent(6));
 
         // get the prototype definition for the computer
-        let proto = world.prototypes.get(cpu.prototype).unwrap();
+        let proto = world.prototypes.get(cpu.prototype()).unwrap();
 
         // it should be the "cpu" part
         assert_eq!(proto.part_name(), "cpu");

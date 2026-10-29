@@ -27,8 +27,8 @@ pub fn get_part_info_modal(
     }
 
     if let Ok(cpu) = world.computers.try_get(part_id) {
-        let msg = WorldDelta::SetComputerState(part_id, !cpu.on);
-        ui.button(msg, turn_on_off_text(cpu.on));
+        let msg = WorldDelta::SetComputerState(part_id, !cpu.is_on());
+        ui.button(msg, turn_on_off_text(cpu.is_on()));
         let info = computer_info_str(cpu);
         ui.text(info);
     }
@@ -99,14 +99,12 @@ fn slot_info_str(idx: usize, slot: &InvSlot) -> String {
 
 fn computer_info_str(cpu: &Computer) -> String {
     let mut lines = vec![
-        format!("On: {}", cpu.on),
-        format!("\nStatus: {:?}", cpu.status),
-        format!("\nTicks: {}", cpu.ticks_this_cycle),
-        format!("\nFired: {}", cpu.fired_this_tick),
-        format!("\nIters: {}", cpu.iters),
+        format!("On: {}", cpu.is_on()),
+        format!("\nStatus: {:?}", cpu.status()),
+        format!("\nTicks: {}", cpu.ticks()),
     ];
 
-    for cmd in &cpu.command_queue {
+    for cmd in cpu.instructions() {
         let line = format!("\n  - {}", cmd);
         lines.push(line);
     }

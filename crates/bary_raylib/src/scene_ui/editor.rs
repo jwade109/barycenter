@@ -20,23 +20,21 @@ pub fn make_editor_ui(ui: &mut UiBuilder, editor: &EditorState, world: &World) {
 }
 
 fn new_editor_layer_indicator(ui: &mut UiBuilder) {
-    ui.begin_window("editor_layer_selection");
-
-    for layer in PartLayer::all() {
-        ui.button(EditorCommand::SetLayer(layer), format!("{:?}", layer));
-    }
-
-    ui.end_window();
+    ui.window("editor_layer_selection", |ui| {
+        for layer in PartLayer::all() {
+            ui.button(EditorCommand::SetLayer(layer), format!("{:?}", layer));
+        }
+    });
 }
 
 fn all_parts_in_layer_ui(ui: &mut UiBuilder, layer: PartLayer, world: &World) {
-    ui.begin_window("editor_parts_selection");
-    for (proto_id, proto) in world.prototypes.iter() {
-        if proto.layer != layer {
-            continue;
-        }
+    ui.window("editor_parts_selection", |ui| {
+        for (proto_id, proto) in world.prototypes.iter() {
+            if proto.layer != layer {
+                continue;
+            }
 
-        ui.button(EditorCommand::SetProto(*proto_id), &proto.name);
-    }
-    ui.end_window();
+            ui.button(EditorCommand::SetProto(*proto_id), &proto.name);
+        }
+    });
 }

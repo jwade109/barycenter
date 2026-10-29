@@ -5,7 +5,7 @@ use bary_sim::*;
 fn scenario_a() -> BaryResult<()> {
     let world = WorldBuilder::new()
         .assets()
-        .planet("Lado", Isometry2d::ZERO, 3E15, 100.0)
+        .planet("Lado", Isometry2d::ZERO, Isometry2d::ZERO, 3E15, 100.0)
         .blueprint(("pollux", 0))
         .blueprint(("pollux", 2))
         .blueprint("bellerophon")

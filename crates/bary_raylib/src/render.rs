@@ -1,3 +1,5 @@
+use std::num::FpCategory::Nan;
+
 use crate::UiInteractionState;
 use crate::UiMessage;
 use crate::assets::*;
@@ -8,6 +10,7 @@ use crate::utils::*;
 use bary_core::prelude::PI;
 use bary_core::prelude::*;
 use bary_factory::*;
+use bary_orbital::SparseOrbit;
 use bary_orbital::TerrainMaterial;
 use bary_parts::*;
 use bary_sim::Camera;
@@ -15,6 +18,7 @@ use bary_sim::*;
 use bary_terminal::*;
 use bary_ui::*;
 use early_returns::*;
+use log::info;
 use raylib::prelude::*;
 
 pub fn to_raylib_camera(camera: &Camera, screen_dims: Vec2) -> Camera2D {
@@ -302,9 +306,24 @@ fn draw_grid_far_indicators(
 
 fn draw_planets(d: &mut RaylibDrawHandle, world: &World) {
     for planet in world.planets.values() {
-        draw_circle(d, planet.iso.tr(), planet.body.radius, Color::WHITE);
+        draw_circle(d, planet.pos.tr(), planet.body.radius, Color::WHITE);
         let label = format!("{:#?}", planet);
-        draw_isometry_axes(d, planet.iso, &label, DVec2::splat(10.0));
+        draw_isometry_axes(d, planet.pos, &label, DVec2::splat(10.0));
+    }
+}
+
+fn draw_orbits(d: &mut RaylibDrawHandle, world: &World) {
+    for grid in world.grids.values() {
+        let parent_id = some_or_continue!(grid.orbital_parent);
+        let planet = some_or_continue!(world.planets.get(parent_id));
+        let pos = grid.particle_location.tr() - planet.pos.tr();
+        let vel = grid.velocity.tr() - planet.vel.tr();
+        if let Some(orbit) = SparseOrbit::from_pv((pos, vel), planet.body, Nanotime::zero()) {
+            let mut iso = Isometry2d::new(planet.pos.tr(), 0.0).offset(orbit.center());
+            iso.rotation = orbit.arg_periapsis;
+            let dims = DVec2::new(orbit.semi_major_axis, orbit.semi_minor_axis()) * 2.0;
+            draw_ellipse(d, iso, dims, Color::ORANGE);
+        }
     }
 }
 
@@ -321,7 +340,9 @@ pub fn draw_world(
     // this apparently is incredibly slow; curious
     let mut c = d.begin_mode2D(raylib_camera);
 
-    draw_planets(&mut c, &world);
+    draw_planets(&mut c, world);
+
+    draw_orbits(&mut c, world);
 
     draw_origin_and_range_indicators(&mut c);
 
@@ -1192,7 +1213,7 @@ fn draw_waypoint_far_indicators(
     let marker_radius = 11.0f32;
 
     for cpu in computers.values() {
-        if !cpu.on {
+        if !cpu.is_on() {
             continue;
         }
 
@@ -1338,6 +1359,19 @@ pub fn fill_circle(d: &mut RaylibDrawHandle, p: impl Into<DVec2>, r: impl Into<f
 pub fn draw_circle(d: &mut RaylibDrawHandle, p: impl Into<DVec2>, r: impl Into<f64>, color: Color) {
     let center = glam_to_raylib_swap_y(p);
     d.draw_circle_lines_v(center, r.into() as f32, color);
+}
+
+pub fn draw_ellipse(d: &mut RaylibDrawHandle, iso: Isometry2d, dims: DVec2, color: Color) {
+    let points = linspace_f64(0.0, 2.0 * PI_64, 30)
+        .into_iter()
+        .map(|a| {
+            let x = a.cos() * dims.x / 2.0;
+            let y = a.sin() * dims.y / 2.0;
+            glam_to_raylib_swap_y(iso.offset((x, y)).tr())
+        })
+        .collect::<Vec<_>>();
+
+    d.draw_line_strip(&points, color);
 }
 
 fn draw_selection_info(
@@ -1608,7 +1642,7 @@ fn draw_lights(
             continue;
         };
 
-        if !cpu.on {
+        if !cpu.is_on() {
             continue;
         }
 
