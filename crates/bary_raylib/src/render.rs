@@ -1362,7 +1362,7 @@ pub fn draw_circle(d: &mut RaylibDrawHandle, p: impl Into<DVec2>, r: impl Into<f
 }
 
 pub fn draw_ellipse(d: &mut RaylibDrawHandle, iso: Isometry2d, dims: DVec2, color: Color) {
-    let points = linspace_f64(0.0, 2.0 * PI_64, 30)
+    let points = linspace_f64(0.0, 2.0 * PI_64, 100)
         .into_iter()
         .map(|a| {
             let x = a.cos() * dims.x / 2.0;

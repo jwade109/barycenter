@@ -1,7 +1,7 @@
 use crate::backend::Backend;
 use bary_core::prelude::WallTimer;
 use bary_ipc::*;
-use bary_sim::{World, WorldDelta, apply_delta, load_world, update_world};
+use bary_sim::*;
 use log::*;
 
 pub struct SinglePlayerBackend {
@@ -62,10 +62,10 @@ impl Backend for SinglePlayerBackend {
         None
     }
 
-    fn update(&mut self) -> Vec<ServerMessage> {
+    fn update(&mut self, controls: &ExternalControls) -> Vec<ServerMessage> {
         if self.step_timer.tick() {
             for _ in 0..self.sim_speed {
-                update_world(&mut self.world);
+                update_world_with_user_controls(&mut self.world, controls);
             }
         }
 

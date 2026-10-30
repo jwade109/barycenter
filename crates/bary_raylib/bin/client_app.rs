@@ -1,6 +1,7 @@
 use bary_core::prelude::*;
-use bary_input::InputHandler;
+use bary_input::{InputHandler, InputState};
 use bary_ipc::*;
+use bary_orbital::VehicleControl;
 use bary_raylib::*;
 use bary_server::*;
 use bary_sim::*;
@@ -29,6 +30,39 @@ pub struct ClientApp {
     update_timer: WallTimer,
     should_exit: bool,
     show_debug_text: bool,
+}
+
+fn keyboard_control_law(input: &InputState) -> VehicleControl {
+    let mut ctrl = VehicleControl::NULLOPT;
+
+    use rdev::Key;
+
+    let docking_mode = input.is_key_pressed(Key::ControlLeft);
+
+    if docking_mode {
+        ctrl.plus_x.throttle = input.is_key_pressed(Key::UpArrow) as u8 as f32;
+        ctrl.plus_y.throttle = input.is_key_pressed(Key::RightArrow) as u8 as f32;
+        ctrl.neg_x.throttle = input.is_key_pressed(Key::DownArrow) as u8 as f32;
+        ctrl.neg_y.throttle = input.is_key_pressed(Key::LeftArrow) as u8 as f32;
+    } else {
+        ctrl.plus_x.throttle = input.is_key_pressed(Key::UpArrow) as u8 as f32;
+        ctrl.neg_x.throttle = input.is_key_pressed(Key::DownArrow) as u8 as f32;
+
+        ctrl.attitude = if input.is_key_pressed(Key::LeftArrow) {
+            10.0
+        } else if input.is_key_pressed(Key::RightArrow) {
+            -10.0
+        } else {
+            0.0
+        };
+    }
+
+    ctrl.plus_x.use_rcs = docking_mode;
+    ctrl.plus_y.use_rcs = docking_mode;
+    ctrl.neg_x.use_rcs = docking_mode;
+    ctrl.neg_y.use_rcs = docking_mode;
+
+    ctrl
 }
 
 impl ClientApp {
@@ -98,7 +132,17 @@ impl ClientApp {
     fn update_in_world(&mut self) {
         let deltas = pre_simulation_update(self.backend.world(), &mut self.client);
 
-        for msg in self.backend.update() {
+        let ctrl = keyboard_control_law(&self.client.input);
+
+        let ship_control = self
+            .client
+            .scene_graph
+            .free()
+            .and_then(|f| f.follow_vehicle.map(|id| (id, ctrl)));
+
+        let controls = ExternalControls { ship_control };
+
+        for msg in self.backend.update(&controls) {
             self.on_rcv_server_msg(msg);
         }
 

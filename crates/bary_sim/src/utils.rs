@@ -916,7 +916,20 @@ pub fn insert_pipe(
     )
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ExternalControls {
+    pub ship_control: Option<(Ent, VehicleControl)>,
+}
+
 pub fn update_world(world: &mut World) -> DebugTimers {
+    let controls = ExternalControls::default();
+    update_world_with_user_controls(world, &controls)
+}
+
+pub fn update_world_with_user_controls(
+    world: &mut World,
+    controls: &ExternalControls,
+) -> DebugTimers {
     world.ticks += 1;
 
     let mut timers = DebugTimers::default();
@@ -931,6 +944,7 @@ pub fn update_world(world: &mut World) -> DebugTimers {
             &world.grids,
             &world.parts,
             &world.computers,
+            controls,
         );
 
         world.grid_acceleration_updates += dirty_set.len() as u64;

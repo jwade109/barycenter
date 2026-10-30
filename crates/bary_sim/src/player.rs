@@ -44,34 +44,3 @@ impl Player {
         matches!(self.state, PlayerState::Flying(_))
     }
 }
-
-// fn keyboard_control_law(keys: &ButtonInput<KeyCode>) -> VehicleControl {
-//     let mut ctrl = VehicleControl::NULLOPT;
-
-//     let docking_mode = keys.pressed(KeyCode::ControlLeft);
-
-//     if docking_mode {
-//         ctrl.plus_x.throttle = keys.pressed(KeyCode::ArrowUp) as u8 as f32;
-//         ctrl.plus_y.throttle = keys.pressed(KeyCode::ArrowRight) as u8 as f32;
-//         ctrl.neg_x.throttle = keys.pressed(KeyCode::ArrowDown) as u8 as f32;
-//         ctrl.neg_y.throttle = keys.pressed(KeyCode::ArrowLeft) as u8 as f32;
-//     } else {
-//         ctrl.plus_x.throttle = keys.pressed(KeyCode::ArrowUp) as u8 as f32;
-//         ctrl.neg_x.throttle = keys.pressed(KeyCode::ArrowDown) as u8 as f32;
-
-//         ctrl.attitude = if keys.pressed(KeyCode::ArrowLeft) {
-//             10.0
-//         } else if keys.pressed(KeyCode::ArrowRight) {
-//             -10.0
-//         } else {
-//             0.0
-//         };
-//     }
-
-//     ctrl.plus_x.use_rcs = docking_mode;
-//     ctrl.plus_y.use_rcs = docking_mode;
-//     ctrl.neg_x.use_rcs = docking_mode;
-//     ctrl.neg_y.use_rcs = docking_mode;
-
-//     ctrl
-// }

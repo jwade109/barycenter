@@ -67,6 +67,7 @@ pub fn sys_update_thrusters(
     grids: &Components<VehicleGrid>,
     parts: &Components<Part>,
     computers: &Components<Computer>,
+    controls: &ExternalControls,
 ) -> BTreeSet<Ent> {
     let mut needs_update = BTreeSet::new();
 
@@ -87,6 +88,14 @@ pub fn sys_update_thrusters(
 
         let mut thruster_changed = false;
 
+        let ctrl = if let Some((vehicle_id, external_ctrl)) = &controls.ship_control {
+            (grid_id == vehicle_id)
+                .then_some(*external_ctrl)
+                .unwrap_or_default()
+        } else {
+            *cpu.get_current_control()
+        };
+
         for thruster_id in &grid.thrusters {
             let Ok(thruster) = thrusters.try_get_mut(*thruster_id) else {
                 continue;
@@ -94,8 +103,6 @@ pub fn sys_update_thrusters(
             let Ok(part) = parts.try_get(*thruster_id) else {
                 continue;
             };
-
-            let ctrl = cpu.get_current_control();
 
             let tac = match part.region.rot() {
                 Rotation::East => ctrl.plus_x,
