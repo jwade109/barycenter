@@ -4,11 +4,11 @@ use crate::{EditorCommand, Scene};
 use bary_core::prelude::*;
 use bary_input::InputState;
 use bary_sim::WorldDelta;
-use bary_ui::{NodePath, Tree};
+use bary_ui::{IdSalt, Tree};
 
 #[derive(Debug, Clone)]
 pub enum UiMessage {
-    Drag(String),
+    Drag(IdSalt),
     Navigate(Scene),
     Exit,
     AltMode,
@@ -26,6 +26,7 @@ pub enum UiMessage {
     Salt(usize),
     Editor(EditorCommand),
     Delta(WorldDelta),
+    AckTransmission(Ent),
 }
 
 impl From<Scene> for UiMessage {
@@ -48,7 +49,7 @@ impl From<EditorCommand> for UiMessage {
 
 #[derive(Debug, Clone)]
 pub struct UiRef {
-    pub path: NodePath,
+    pub path: IdSalt,
     pub offset: Vec2,
     pub onclick: Option<UiMessage>,
 }
@@ -59,16 +60,16 @@ pub struct UiInteractionState {
     screen_pos: Option<Vec2>,
     hot: Option<UiRef>,
     active: Option<UiRef>,
-    offsets: BTreeMap<String, Vec2>,
+    offsets: BTreeMap<IdSalt, Vec2>,
 }
 
 impl UiInteractionState {
-    pub fn window_pos(&mut self, salt: impl Into<String>, offset: Vec2) -> Vec2 {
+    pub fn window_pos(&mut self, salt: impl Into<IdSalt>, offset: Vec2) -> Vec2 {
         *self.offsets.entry(salt.into()).or_insert(offset)
     }
 
-    pub fn shift_offset(&mut self, salt: &str, delta: Vec2) {
-        if let Some(pos) = self.offsets.get_mut(salt) {
+    pub fn shift_offset(&mut self, salt: impl Into<IdSalt>, delta: Vec2) {
+        if let Some(pos) = self.offsets.get_mut(&salt.into()) {
             *pos += delta;
         }
     }
@@ -123,11 +124,11 @@ impl UiInteractionState {
         self.hot.as_ref()
     }
 
-    pub fn active_path(&self) -> Option<&NodePath> {
+    pub fn active_path(&self) -> Option<&IdSalt> {
         self.active.as_ref().map(|a| &a.path)
     }
 
-    pub fn hot_path(&self) -> Option<&NodePath> {
+    pub fn hot_path(&self) -> Option<&IdSalt> {
         self.hot.as_ref().map(|a| &a.path)
     }
 

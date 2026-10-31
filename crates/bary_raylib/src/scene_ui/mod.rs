@@ -7,6 +7,7 @@ mod list_saves;
 mod main_menu;
 mod part_info;
 mod settings;
+mod transmission_window;
 
 pub use builder::*;
 pub use debug::*;
@@ -17,3 +18,4 @@ pub use list_saves::*;
 pub use main_menu::*;
 pub use part_info::*;
 pub use settings::*;
+pub use transmission_window::*;

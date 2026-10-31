@@ -1,6 +1,6 @@
 use bary_core::prelude::{Components, Ent, Isometry2d, TableIdent};
 use bary_parts::PartPrototype;
-use bary_sim::{Computer, Part, Player, Thruster, WorldDelta};
+use bary_sim::{Computer, Part, Player, SimulationEvent, Thruster, WorldDelta};
 use crossbeam_queue::SegQueue;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -103,6 +103,8 @@ pub enum ServerMessage {
     PlayerDisconnected(String),
     /// broadcasted by server when a client says something
     ChatMessage(ClientId, String),
+    /// propagated from world_update
+    Simulation(SimulationEvent),
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

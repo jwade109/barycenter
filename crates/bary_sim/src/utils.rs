@@ -5,6 +5,7 @@ use bary_orbital::{TerrainMaterial, VehicleControl};
 use bary_parts::*;
 use early_returns::*;
 use log::*;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
@@ -921,15 +922,27 @@ pub struct ExternalControls {
     pub ship_control: Option<(Ent, VehicleControl)>,
 }
 
-pub fn update_world(world: &mut World) -> DebugTimers {
+pub struct WorldUpdate {
+    pub timers: DebugTimers,
+    pub events: Sender<SimulationEvent>,
+}
+
+pub fn update_world(world: &mut World) -> WorldUpdate {
     let controls = ExternalControls::default();
     update_world_with_user_controls(world, &controls)
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SimulationEvent {
+    pub transmission: RadioTransmission,
 }
 
 pub fn update_world_with_user_controls(
     world: &mut World,
     controls: &ExternalControls,
-) -> DebugTimers {
+) -> WorldUpdate {
+    let mut events = Sender::new();
+
     world.ticks += 1;
 
     let mut timers = DebugTimers::default();
@@ -988,10 +1001,10 @@ pub fn update_world_with_user_controls(
     {
         let _timer = timers.scope("radio_transmissions");
 
-        sys_update_transmissions(world);
+        sys_update_transmissions(world, &mut events);
     }
 
-    timers
+    WorldUpdate { timers, events }
 }
 
 pub fn get_slot_mut_c<'a>(
@@ -1431,11 +1444,11 @@ pub fn set_machine_state(world: &mut World, machine_id: Ent, state: bool) -> Bar
     Ok(())
 }
 
-fn sys_update_transmissions(world: &mut World) {
-    let mut new_transmissions = Vec::new();
+fn sys_update_transmissions(world: &mut World, events: &mut Sender<SimulationEvent>) {
+    let mut new_transmissions = Sender::new();
+
     world.transmissions.retain(|tr_id, tr| {
         let Some((inner, outer)) = tr.update(NOMINAL_DT) else {
-            info!("[{}] Dissipated.", tr_id);
             return false;
         };
 
@@ -1443,21 +1456,21 @@ fn sys_update_transmissions(world: &mut World) {
             if tr.source() == Some(*grid_id) {
                 continue;
             }
+
             let p = grid.particle_location.tr();
             let d = tr.origin().distance(p);
             if inner <= d && d < outer {
-                info!(
-                    "[{}] {} received with power {}",
-                    tr_id,
-                    grid.name,
-                    tr.received_power()
-                );
                 if !tr.is_response() {
+                    let event = SimulationEvent {
+                        transmission: tr.clone(),
+                    };
+                    events.send(event);
+
                     let new_tr = RadioTransmission::new(p)
                         .with_range(1500.0)
                         .with_source(*grid_id)
                         .with_contents(TransmissionContents::Response);
-                    new_transmissions.push(new_tr);
+                    new_transmissions.send(new_tr);
                 }
             }
         }
@@ -1467,16 +1480,17 @@ fn sys_update_transmissions(world: &mut World) {
 
     for (grid_id, grid) in world.grids.iter() {
         if chance(0.001) {
+            let msg = format!("Hello world, my name is {}", grid.name);
             let pos = grid.particle_location.tr();
             let tr = RadioTransmission::new(pos)
                 .with_range(10000.0)
                 .with_source(*grid_id)
-                .with_contents(TransmissionContents::Message);
-            new_transmissions.push(tr);
+                .with_message(msg);
+            new_transmissions.send(tr);
         }
     }
 
-    for tr in new_transmissions {
+    for tr in new_transmissions.take() {
         let id = world.spawner.spawn();
         world.transmissions.spawn(id, tr);
     }

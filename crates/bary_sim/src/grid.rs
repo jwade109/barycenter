@@ -1,7 +1,9 @@
 use bary_core::prelude::*;
 use bary_parts::*;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+
+use crate::RadioTransmission;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VehicleGrid {
@@ -25,6 +27,8 @@ pub struct VehicleGrid {
     // TODO this is not tested in any way.
     pub occupancy: BTreeMap<(i32, i32), PartOccupancy>,
     pub orbital_parent: Option<Ent>,
+
+    pub transmission_inbox: VecDeque<RadioTransmission>,
 }
 
 impl VehicleGrid {
@@ -47,6 +51,13 @@ impl VehicleGrid {
         self.particle_location.offset(-self.center_of_mass)
     }
 
+    pub fn receive_transmission(&mut self, rt: RadioTransmission) {
+        self.transmission_inbox.push_back(rt);
+        if self.transmission_inbox.len() > 20 {
+            self.transmission_inbox.pop_front();
+        }
+    }
+
     pub fn with_name(name: impl Into<String>, bp_id: Option<BlueprintId>) -> Self {
         VehicleGrid {
             name: name.into(),
@@ -64,6 +75,7 @@ impl VehicleGrid {
             vehicle_bounds: (IVec2::ZERO, IVec2::ZERO),
             occupancy: BTreeMap::new(),
             orbital_parent: None,
+            transmission_inbox: VecDeque::new(),
         }
     }
 

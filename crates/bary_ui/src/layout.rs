@@ -1,70 +1,33 @@
 #![allow(dead_code)]
 #![allow(unused)]
 
+use std::hash::DefaultHasher;
+use std::hash::Hash;
+use std::hash::Hasher;
+
 use crate::svg::write_svg;
 use bary_core::prelude::*;
 use log::*;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct NodePath(String);
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
+}
 
-impl NodePath {
-    pub fn new() -> Self {
-        Self("/".into())
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct IdSalt(u64);
 
-    pub fn append(&self, s: impl Into<String>) -> Self {
-        let mut ret = self.clone();
-        if ret.0.chars().last() != Some('/') {
-            ret.0.push('/');
-        }
-        ret.0.extend(s.into().chars());
-        ret
+impl<T: Hash> From<T> for IdSalt {
+    fn from(value: T) -> Self {
+        Self(calculate_hash(&value))
     }
 }
 
-impl std::fmt::Debug for NodePath {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum IdSalt {
-    Integer(i64),
-    String(String),
-}
-
-impl IdSalt {
-    pub fn to_string(&self) -> String {
-        match self {
-            Self::Integer(val) => format!("{}", val),
-            Self::String(s) => s.clone(),
-        }
-    }
-}
-
-impl From<i64> for IdSalt {
-    fn from(value: i64) -> Self {
-        Self::Integer(value)
-    }
-}
-
-impl From<String> for IdSalt {
-    fn from(value: String) -> Self {
-        Self::String(value)
-    }
-}
-
-impl From<&str> for IdSalt {
-    fn from(value: &str) -> Self {
-        Self::String(value.to_string())
-    }
-}
-
-impl From<&String> for IdSalt {
-    fn from(value: &String) -> Self {
-        Self::String(value.clone())
+impl std::ops::Add for IdSalt {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 ^ rhs.0)
     }
 }
 
@@ -170,7 +133,7 @@ pub struct Node<T: UiMsg> {
     enabled: bool,
     sprite: Option<String>,
     style: NodeStyle,
-    path: NodePath,
+    path: IdSalt,
     id_salt: IdSalt,
 }
 
@@ -201,7 +164,7 @@ impl<T: UiMsg> Node<T> {
                 disabled_color: [0.2, 0.2, 0.2, 0.8],
                 text_justify: TextJustify::Center,
             },
-            path: NodePath::new(),
+            path: IdSalt(0),
             id_salt: id_salt.into(),
         }
     }
@@ -369,7 +332,7 @@ impl<T: UiMsg> Node<T> {
         root
     }
 
-    pub fn path(&self) -> &NodePath {
+    pub fn path(&self) -> &IdSalt {
         &self.path
     }
 
@@ -655,13 +618,13 @@ fn populate_positions<'a, T: 'a + UiMsg>(mut root: &mut Node<T>, origin: impl In
     });
 }
 
-fn assign_layers_and_paths<T: UiMsg>(root: &mut Node<T>, path: NodePath, layer: u32) {
+fn assign_layers_and_paths<T: UiMsg>(root: &mut Node<T>, path: IdSalt, layer: u32) {
     root.layer = Some(layer);
     root.path = path.clone();
 
     if let Some(c) = root.children_mut() {
         for c in c {
-            let child_path = path.append(c.id_salt.to_string());
+            let child_path = path + c.id_salt;
             assign_layers_and_paths(c, child_path, layer + 1);
         }
     }
@@ -771,7 +734,8 @@ impl<T: UiMsg> Tree<T> {
         populate_fit_sizes(&mut node);
         populate_grow_sizes(&mut node);
         populate_positions(&mut node, origin);
-        assign_layers_and_paths(&mut node, NodePath::new(), 0);
+        let index = self.roots.len() as u64;
+        assign_layers_and_paths(&mut node, IdSalt(index), 0);
         self.roots.push(node);
     }
 
@@ -909,7 +873,7 @@ mod tests {
         populate_fit_sizes(&mut root);
         populate_grow_sizes(&mut root);
         populate_positions(&mut root, None);
-        assign_layers_and_paths(&mut root, NodePath::new(), 0);
+        assign_layers_and_paths(&mut root, IdSalt(0), 0);
 
         let aabbs = root
             .iter()

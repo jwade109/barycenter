@@ -65,7 +65,14 @@ impl Backend for SinglePlayerBackend {
     fn update(&mut self, controls: &ExternalControls) -> Vec<ServerMessage> {
         if self.step_timer.tick() {
             for _ in 0..self.sim_speed {
-                update_world_with_user_controls(&mut self.world, controls);
+                let response = update_world_with_user_controls(&mut self.world, controls);
+                let events = response.events.take();
+                if !events.is_empty() {
+                    self.events
+                        .extend(events.into_iter().map(|s| ServerMessage::Simulation(s)));
+                    self.sim_speed = 1;
+                    break;
+                }
             }
         }
 

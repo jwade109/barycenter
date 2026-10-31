@@ -30,6 +30,9 @@ pub struct ClientApp {
     update_timer: WallTimer,
     should_exit: bool,
     show_debug_text: bool,
+
+    spawner: EntitySpawner,
+    transmission_windows: Components<RadioTransmission>,
 }
 
 fn keyboard_control_law(input: &InputState) -> VehicleControl {
@@ -124,6 +127,8 @@ impl ClientApp {
             update_timer,
             should_exit: false,
             show_debug_text: false,
+            spawner: EntitySpawner::default(),
+            transmission_windows: Components::default(),
         };
 
         Ok((app, raylib))
@@ -224,8 +229,16 @@ impl ClientApp {
                     .log(format!("{username} just disconnected."));
             }
             ServerMessage::ServerStatistics(_) => (),
+            ServerMessage::Simulation(sim) => {
+                self.on_sim_event(sim);
+            }
             _ => error!("Unsupported message from server: {:?}", msg),
         }
+    }
+
+    fn on_sim_event(&mut self, sim: SimulationEvent) {
+        let id = self.spawner.spawn();
+        self.transmission_windows.spawn(id, sim.transmission);
     }
 
     fn exit(&mut self) {
@@ -282,7 +295,7 @@ impl ClientApp {
                 self.docking_shift(delta, false);
             }
             Some(UiMessage::Drag(handle)) => {
-                self.ui_state.shift_offset(&handle, delta);
+                self.ui_state.shift_offset(handle, delta);
             }
             Some(e) => warn!("Unhandled drag event: {e:?}"),
             None => (),
@@ -324,6 +337,9 @@ impl ClientApp {
                 if let SceneGraph::Editor(state) = &mut self.client.scene_graph {
                     state.handle_command(cmd)
                 }
+            }
+            UiMessage::AckTransmission(id) => {
+                _ = self.transmission_windows.despawn(id);
             }
             e => warn!("Unhandled click event: {e:?}"),
         }
@@ -410,6 +426,7 @@ fn make_gui(
         SceneGraph::Free(free) => {
             make_free_flying_ui(&mut ui, free, app.backend.world(), &app.assets);
             make_part_info_gui(&mut ui, app.backend.world(), &app.client, &app.assets);
+            make_transmission_ui(&mut ui, &app.transmission_windows);
         }
         SceneGraph::Editor(editor) => {
             make_editor_ui(&mut ui, editor, app.backend.world());

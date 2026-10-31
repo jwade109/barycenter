@@ -36,11 +36,11 @@ impl UiBuilder {
     }
 
     pub fn begin_window(&mut self, id_salt: impl Into<IdSalt>) {
-        let id_salt = id_salt.into().to_string();
+        let id_salt = id_salt.into();
         let x = random_range(100.0..700.0);
         let y = random_range(100.0..400.0);
         let offset = self.window_pos(id_salt.clone(), (x, y).into());
-        let node = Node::column(Size::Fit, &id_salt, Vec::new());
+        let node = Node::column(Size::Fit, id_salt, Vec::new());
         self.active_node = Some((node, offset));
         self.draghandle(id_salt);
     }
@@ -58,7 +58,7 @@ impl UiBuilder {
     }
 
     pub fn window_pos(&mut self, salt: impl Into<IdSalt>, offset: Vec2) -> Vec2 {
-        self.state.window_pos(salt.into().to_string(), offset)
+        self.state.window_pos(salt.into(), offset)
     }
 
     pub fn input(&self) -> &InputState {
@@ -82,7 +82,7 @@ impl UiBuilder {
         }
     }
 
-    pub fn draghandle(&mut self, salt: impl Into<String>) {
+    pub fn draghandle(&mut self, salt: impl Into<IdSalt>) {
         let s = salt.into();
         let msg = UiMessage::Drag(s.clone());
         let n = Node::handle(Size::Grow, 20, s, msg);
