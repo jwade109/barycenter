@@ -29,6 +29,7 @@ pub struct VehicleGrid {
     pub orbital_parent: Option<Ent>,
 
     pub transmission_inbox: VecDeque<RadioTransmission>,
+    pub controlled_by: Option<String>,
 }
 
 impl VehicleGrid {
@@ -76,6 +77,7 @@ impl VehicleGrid {
             occupancy: BTreeMap::new(),
             orbital_parent: None,
             transmission_inbox: VecDeque::new(),
+            controlled_by: None,
         }
     }
 

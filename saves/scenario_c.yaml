@@ -1,3 +1,6 @@
+# This is a very small toy example with two gravitational bodies and a number
+# of ships of various classes.
+
 - !LoadBlueprint ["pollux", 0]
 - !LoadBlueprint ["pollux", 2]
 - !LoadBlueprint ["remora", 0]

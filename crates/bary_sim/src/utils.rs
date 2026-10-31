@@ -917,9 +917,9 @@ pub fn insert_pipe(
     )
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ExternalControls {
-    pub ship_control: Option<(Ent, VehicleControl)>,
+    pub user_controls: BTreeMap<String, VehicleControl>,
 }
 
 pub struct WorldUpdate {
@@ -934,7 +934,7 @@ pub fn update_world(world: &mut World) -> WorldUpdate {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SimulationEvent {
-    pub transmission: RadioTransmission,
+    pub transmission: ReceivedTransmission,
 }
 
 pub fn update_world_with_user_controls(
@@ -1296,6 +1296,12 @@ pub fn spawn_grid_with_random_name(
     spawn_grid_with_bp_id(world, &bp_id, &name)
 }
 
+pub fn set_controlling_player(world: &mut World, grid_id: Ent, username: String) -> Option<()> {
+    let grid = world.grids.try_get_mut(grid_id).ok()?;
+    grid.controlled_by = username.into();
+    Some(())
+}
+
 pub fn can_insert_part_c(
     grid_id: Ent,
     pl: GridRegion,
@@ -1447,7 +1453,7 @@ pub fn set_machine_state(world: &mut World, machine_id: Ent, state: bool) -> Bar
 fn sys_update_transmissions(world: &mut World, events: &mut Sender<SimulationEvent>) {
     let mut new_transmissions = Sender::new();
 
-    world.transmissions.retain(|tr_id, tr| {
+    world.transmissions.retain(|_tr_id, tr| {
         let Some((inner, outer)) = tr.update(NOMINAL_DT) else {
             return false;
         };
@@ -1461,13 +1467,17 @@ fn sys_update_transmissions(world: &mut World, events: &mut Sender<SimulationEve
             let d = tr.origin().distance(p);
             if inner <= d && d < outer {
                 if !tr.is_response() {
-                    let event = SimulationEvent {
-                        transmission: tr.clone(),
+                    let rt = ReceivedTransmission {
+                        original: tr.clone(),
+                        received_location: p,
+                        received_by: *grid_id,
                     };
+
+                    let event = SimulationEvent { transmission: rt };
                     events.send(event);
 
                     let new_tr = RadioTransmission::new(p)
-                        .with_range(1500.0)
+                        .with_range(10000.0)
                         .with_source(*grid_id)
                         .with_contents(TransmissionContents::Response);
                     new_transmissions.send(new_tr);
@@ -1479,11 +1489,11 @@ fn sys_update_transmissions(world: &mut World, events: &mut Sender<SimulationEve
     });
 
     for (grid_id, grid) in world.grids.iter() {
-        if chance(0.001) {
+        if chance(0.0001) {
             let msg = format!("Hello world, my name is {}", grid.name);
             let pos = grid.particle_location.tr();
             let tr = RadioTransmission::new(pos)
-                .with_range(10000.0)
+                .with_range(30000.0)
                 .with_source(*grid_id)
                 .with_message(msg);
             new_transmissions.send(tr);

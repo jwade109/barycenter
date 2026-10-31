@@ -28,6 +28,9 @@ enum WorldBuilderCommand {
     },
     SpawnPlayer(String, Isometry2d),
     EnterPiloting,
+    BindPlayerToGrid {
+        username: String,
+    },
 }
 
 pub struct WorldBuilder {
@@ -305,6 +308,11 @@ impl WorldBuilder {
                     let id =
                         spawn_planet(&mut world, name, pos, vel, mass, radius, self.cursor_planet);
                     self.cursor_planet = Some(id);
+                }
+                WorldBuilderCommand::BindPlayerToGrid { username } => {
+                    if let Some(grid_id) = self.cursor_grid {
+                        set_controlling_player(&mut world, grid_id, username);
+                    }
                 }
             }
         }

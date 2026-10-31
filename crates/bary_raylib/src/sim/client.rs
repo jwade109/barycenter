@@ -70,6 +70,7 @@ pub struct DockingInterface {
 /// clients in multiplayer.
 pub struct ClientSpecificInfo {
     pub player_id: Option<Ent>,
+    pub username: String,
     pub ticks: u64,
     pub tick_rate: u32,
     pub chat: Chat,
@@ -81,12 +82,15 @@ pub struct ClientSpecificInfo {
     pub input: InputState,
     pub alt_mode: bool,
     pub sounds: SoundEffects,
+    pub spawner: EntitySpawner,
+    pub transmissions: Components<ReceivedTransmission>,
 }
 
 impl ClientSpecificInfo {
-    pub fn new() -> Self {
+    pub fn new(username: String) -> Self {
         Self {
             player_id: None,
+            username,
             ticks: 0,
             tick_rate: 1,
             chat: Chat::default(),
@@ -105,6 +109,8 @@ impl ClientSpecificInfo {
             input: InputState::default(),
             alt_mode: false,
             sounds: SoundEffects::new(),
+            spawner: EntitySpawner::default(),
+            transmissions: Components::default(),
         }
     }
 

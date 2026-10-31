@@ -10,7 +10,7 @@ use bary_ui::*;
 use clap::Parser;
 use log::*;
 use raylib::prelude::*;
-use std::{rc::Rc, time::Duration};
+use std::{collections::BTreeMap, rc::Rc, time::Duration};
 
 mod backend;
 mod mp_backend;
@@ -30,9 +30,6 @@ pub struct ClientApp {
     update_timer: WallTimer,
     should_exit: bool,
     show_debug_text: bool,
-
-    spawner: EntitySpawner,
-    transmission_windows: Components<RadioTransmission>,
 }
 
 fn keyboard_control_law(input: &InputState) -> VehicleControl {
@@ -110,6 +107,8 @@ impl ClientApp {
         let update_timer = WallTimer::with_dur(Duration::from_millis(20));
         let ui_state = UiInteractionState::default();
 
+        let username = args.username.clone();
+
         let backend: Box<dyn Backend> = if args.use_mp_backend {
             let node = ClientNode::with_str_addr(&args.server_addr)?;
             Box::new(MultiplayerBackend::new(world, node, args.username))
@@ -119,7 +118,7 @@ impl ClientApp {
 
         let app = ClientApp {
             backend,
-            client: ClientSpecificInfo::new(),
+            client: ClientSpecificInfo::new(username),
             input_handler,
             terminal,
             assets,
@@ -127,8 +126,6 @@ impl ClientApp {
             update_timer,
             should_exit: false,
             show_debug_text: false,
-            spawner: EntitySpawner::default(),
-            transmission_windows: Components::default(),
         };
 
         Ok((app, raylib))
@@ -139,13 +136,9 @@ impl ClientApp {
 
         let ctrl = keyboard_control_law(&self.client.input);
 
-        let ship_control = self
-            .client
-            .scene_graph
-            .free()
-            .and_then(|f| f.follow_vehicle.map(|id| (id, ctrl)));
-
-        let controls = ExternalControls { ship_control };
+        let controls = ExternalControls {
+            user_controls: BTreeMap::from([(self.client.username.clone(), ctrl)]),
+        };
 
         for msg in self.backend.update(&controls) {
             self.on_rcv_server_msg(msg);
@@ -237,8 +230,8 @@ impl ClientApp {
     }
 
     fn on_sim_event(&mut self, sim: SimulationEvent) {
-        let id = self.spawner.spawn();
-        self.transmission_windows.spawn(id, sim.transmission);
+        let id = self.client.spawner.spawn();
+        self.client.transmissions.spawn(id, sim.transmission);
     }
 
     fn exit(&mut self) {
@@ -339,7 +332,10 @@ impl ClientApp {
                 }
             }
             UiMessage::AckTransmission(id) => {
-                _ = self.transmission_windows.despawn(id);
+                _ = self.client.transmissions.despawn(id);
+            }
+            UiMessage::ClearTransmissions => {
+                self.client.transmissions.clear();
             }
             e => warn!("Unhandled click event: {e:?}"),
         }
@@ -426,7 +422,7 @@ fn make_gui(
         SceneGraph::Free(free) => {
             make_free_flying_ui(&mut ui, free, app.backend.world(), &app.assets);
             make_part_info_gui(&mut ui, app.backend.world(), &app.client, &app.assets);
-            make_transmission_ui(&mut ui, &app.transmission_windows);
+            make_transmission_ui(&mut ui, &app.client.transmissions);
         }
         SceneGraph::Editor(editor) => {
             make_editor_ui(&mut ui, editor, app.backend.world());

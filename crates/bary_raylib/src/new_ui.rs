@@ -27,6 +27,7 @@ pub enum UiMessage {
     Editor(EditorCommand),
     Delta(WorldDelta),
     AckTransmission(Ent),
+    ClearTransmissions,
 }
 
 impl From<Scene> for UiMessage {

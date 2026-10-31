@@ -19,6 +19,13 @@ pub struct RadioTransmission {
     contents: TransmissionContents,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ReceivedTransmission {
+    pub original: RadioTransmission,
+    pub received_by: Ent,
+    pub received_location: DVec2,
+}
+
 impl RadioTransmission {
     pub fn new(origin: DVec2) -> Self {
         Self {
@@ -64,6 +71,14 @@ impl RadioTransmission {
 
     pub fn received_power(&self) -> f64 {
         self.emission_power / (1.0 + self.radius).powi(2)
+    }
+
+    pub fn maximum_range(&self) -> f64 {
+        self.emission_power.sqrt() - 1.0
+    }
+
+    pub fn remaining_range(&self) -> f64 {
+        self.maximum_range() - self.radius
     }
 
     pub fn source(&self) -> Option<Ent> {

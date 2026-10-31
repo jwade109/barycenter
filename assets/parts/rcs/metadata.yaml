@@ -5,7 +5,7 @@ dims: [1, 1]
 thruster_data:
   model: "LPP50-I"
   exhaust_velocity: 2000.0
-  thrust: 4000.0
+  thrust: 18000.0
   plume_length: 0.5
   plume_angle: 0.7
   is_rcs: true

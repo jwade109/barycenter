@@ -70,8 +70,8 @@ impl Backend for SinglePlayerBackend {
                 if !events.is_empty() {
                     self.events
                         .extend(events.into_iter().map(|s| ServerMessage::Simulation(s)));
-                    self.sim_speed = 1;
-                    break;
+                    // self.sim_speed = 1;
+                    // break;
                 }
             }
         }

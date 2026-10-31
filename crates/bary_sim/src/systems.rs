@@ -88,10 +88,12 @@ pub fn sys_update_thrusters(
 
         let mut thruster_changed = false;
 
-        let ctrl = if let Some((vehicle_id, external_ctrl)) = &controls.ship_control {
-            (grid_id == vehicle_id)
-                .then_some(*external_ctrl)
-                .unwrap_or_default()
+        let ctrl = if let Some(ctrl) = grid
+            .controlled_by
+            .as_ref()
+            .and_then(|username| controls.user_controls.get(username))
+        {
+            *ctrl
         } else {
             *cpu.get_current_control()
         };

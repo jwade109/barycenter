@@ -312,6 +312,16 @@ fn draw_planets(d: &mut RaylibDrawHandle, world: &World) {
     }
 }
 
+fn draw_orbit(d: &mut RaylibDrawHandle, planet_pos: DVec2, orbit: &SparseOrbit) {
+    if orbit.is_hyperbolic() {
+        return;
+    }
+    let mut iso = Isometry2d::new(planet_pos, 0.0).offset(orbit.center());
+    iso.rotation = orbit.arg_periapsis;
+    let dims = DVec2::new(orbit.semi_major_axis, orbit.semi_minor_axis()) * 2.0;
+    draw_ellipse(d, iso, dims, Color::ORANGE);
+}
+
 fn draw_orbits(d: &mut RaylibDrawHandle, world: &World) {
     for grid in world.grids.values() {
         let parent_id = some_or_continue!(grid.orbital_parent);
@@ -319,10 +329,7 @@ fn draw_orbits(d: &mut RaylibDrawHandle, world: &World) {
         let pos = grid.particle_location.tr() - planet.pos.tr();
         let vel = grid.velocity.tr() - planet.vel.tr();
         if let Some(orbit) = SparseOrbit::from_pv((pos, vel), planet.body, Nanotime::zero()) {
-            let mut iso = Isometry2d::new(planet.pos.tr(), 0.0).offset(orbit.center());
-            iso.rotation = orbit.arg_periapsis;
-            let dims = DVec2::new(orbit.semi_major_axis, orbit.semi_minor_axis()) * 2.0;
-            draw_ellipse(d, iso, dims, Color::ORANGE);
+            draw_orbit(d, planet.pos.tr(), &orbit);
         }
     }
 }
@@ -401,6 +408,8 @@ pub fn draw_world(
     draw_ping_particles(&mut c, &world.particles, world.ticks);
 
     draw_radio_transmissions(&mut c, &world.transmissions);
+
+    draw_transmission_rx_locations(&mut c, &client.transmissions);
 
     // draw_isometry_axes(&mut c, world.camera.isometry, "CAM", Vec2::splat(5.0));
     // draw_isometry_axes(&mut c, world.target_camera.isometry, "", Vec2::splat(5.0));
@@ -788,12 +797,18 @@ fn draw_selected_grid_info(
         .map(|s| format!("Orbiting {s}"))
         .unwrap_or_default();
 
+    let username_label = grid
+        .controlled_by.as_ref()
+        .map(|s| format!("Controlled by {s}"))
+        .unwrap_or_default();
+
     let hx = screen_dims.x / 2.0;
 
     let labels = [
-        (title_label, hx, 120.0),
-        (parts_label, hx, 160.0),
-        (orbital_label, hx, 200.0),
+        (title_label, hx, 50.0),
+        (parts_label, hx, 80.0),
+        (orbital_label, hx, 110.0),
+        (username_label, hx, 140.0),
         (pos_label, hx, screen_dims.y - 50.0),
         (vel_label, hx + 300.0, screen_dims.y - 50.0),
         (acc_label, hx - 300.0, screen_dims.y - 50.0),
@@ -1085,7 +1100,7 @@ pub fn draw_parts(
             if draw_layer == PartLayer::Plumbing {
                 let is_shown = focus_layer == Some(PartLayer::Plumbing) || focus_layer.is_none();
                 let alpha = if is_shown { 1.0 } else { 0.2 };
-                _ = draw_pipes_for_grid(d, &world, *grid_id, assets, alpha);
+                // _ = draw_pipes_for_grid(d, &world, *grid_id, assets, alpha);
             }
         }
     }
@@ -1195,9 +1210,20 @@ fn draw_radio_transmissions(
             Color::RED
         };
 
-        let alpha = (tr.received_power() / 200.0).clamp(0.0, 0.5) + 0.5;
+        let alpha = (tr.remaining_range() / 2000.0).clamp(0.0, 0.8);
 
         draw_circle(d, tr.origin(), tr.radius(), color.alpha(alpha as f32));
+    }
+}
+
+fn draw_transmission_rx_locations(
+    d: &mut RaylibDrawHandle,
+    rts: &Components<ReceivedTransmission>,
+) {
+    for rt in rts.values() {
+        draw_circle(d, rt.received_location, 50.0, Color::RED);
+        draw_circle(d, rt.original.origin(), 50.0, Color::GREEN);
+        draw_line(d, rt.received_location, rt.original.origin(), Color::TEAL);
     }
 }
 

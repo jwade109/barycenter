@@ -1,0 +1,22 @@
+#
+
+- !LoadBlueprint ["remora", 0]
+- !LoadBlueprint ["pollux", 0]
+
+- !SpawnPlanet
+    name: Lado
+    pos:
+      translation: [0, 0]
+      rotation: 0
+    vel:
+      translation: [0, 0]
+      rotation: 0
+    radius: 10000
+    mass: 300000000000000000
+
+- !SpawnShip [["remora", 0], "Abbott", { translation: [10000.0, 4000.0], rotation: 0.3 }]
+- !SetVelocity { translation: [-18.0, 42.0], rotation: 0.02 }
+
+- !SpawnShip [["pollux", 0], "Costello", { translation: [15000.0, 7000.0], rotation: 2.0 }]
+- !SetVelocity { translation: [-19, 29], rotation: 0 }
+- !BindPlayerToGrid { username: "kim_mcbudget" }
