@@ -7,6 +7,7 @@ pub enum Scene {
     ListSaves,
     Kicked,
     Settings,
+    Pilot(Ent),
     Editor(Ent),
     Free,
     Part(Ent),
@@ -28,6 +29,21 @@ impl PartFocusState {
 }
 
 #[derive(Debug)]
+pub struct PilotingState {
+    pub ownship: Ent,
+    pub target: Option<Ent>,
+}
+
+impl PilotingState {
+    pub fn new(ownship: Ent) -> Self {
+        Self {
+            ownship,
+            target: None,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum SceneGraph {
     MainMenu,
     ListSaves,
@@ -35,10 +51,24 @@ pub enum SceneGraph {
     Settings,
     Editor(EditorState),
     Free(FreeFlying),
+    Piloting(PilotingState),
     Part(PartFocusState),
 }
 
 impl SceneGraph {
+    pub fn should_draw_world(&self) -> bool {
+        match self {
+            SceneGraph::MainMenu => false,
+            SceneGraph::ListSaves => false,
+            SceneGraph::Kicked => false,
+            SceneGraph::Settings => false,
+            SceneGraph::Editor(..) => true,
+            SceneGraph::Free(..) => true,
+            SceneGraph::Piloting(..) => true,
+            SceneGraph::Part(..) => true,
+        }
+    }
+
     pub fn handle_navigation(&mut self, nav: Scene) {
         *self = match (&self, nav) {
             (_, Scene::ListSaves) => Self::ListSaves,
@@ -50,6 +80,7 @@ impl SceneGraph {
                 };
                 Self::Free(free)
             }
+            (_, Scene::Pilot(id)) => Self::Piloting(PilotingState::new(id)),
             (_, Scene::Free) => Self::Free(FreeFlying::new()),
             (_, Scene::MainMenu) => Self::MainMenu,
             (_, Scene::Kicked) => Self::Kicked,

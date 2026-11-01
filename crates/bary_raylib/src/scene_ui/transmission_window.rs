@@ -15,7 +15,7 @@ pub fn make_transmission_ui(ui: &mut UiBuilder, trs: &Components<ReceivedTransmi
 
 fn make_transmission_window(ui: &mut UiBuilder, id: Ent, tr: &ReceivedTransmission) {
     ui.window(id.0, |ui| {
-        ui.text(format!("Transmission {id}"));
+        ui.heading(format!("Transmission {id}"));
         ui.text(format!("{:#?}", tr));
         ui.button(UiMessage::AckTransmission(id), "Acknowledge");
         ui.button(UiMessage::ClearTransmissions, "Clear All");

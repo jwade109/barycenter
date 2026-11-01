@@ -33,9 +33,8 @@ pub fn debug_lines(
         };
 
         ui.text(format!(
-            " {}/{} {} {:0.1} {}",
+            " {} {} {:0.1} {}",
             timers.ticks,
-            client.tick_rate,
             world.ticks,
             apparent_elapsed_time(world.ticks).as_secs_f64(),
             apparent_datetime(world.ticks).format("%b %d %Y %I:%M:%S %p"),

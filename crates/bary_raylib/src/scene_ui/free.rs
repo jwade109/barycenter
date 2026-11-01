@@ -20,16 +20,15 @@ pub fn make_part_info_gui(
         occ.to_array()
     );
 
-    ui.begin_window("part_info_window");
-    ui.text(s);
+    ui.window("part_info_window", |ui| {
+        ui.text(s);
 
-    for (_, part_id) in occ.iter() {
-        ui.sep();
-        ui.button(Scene::Part(part_id), format!("Go to Part {}", part_id));
-        get_part_info_modal(ui, part_id, world, assets, None);
-    }
-
-    ui.end_window();
+        for (_, part_id) in occ.iter() {
+            ui.sep();
+            ui.button(Scene::Part(part_id), format!("Go to Part {}", part_id));
+            get_part_info_modal(ui, part_id, world, assets, None);
+        }
+    });
 }
 
 pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World, assets: &Assets) {
@@ -62,6 +61,10 @@ pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World,
             let point_north = make_instr(Instruction::HoldAttitude(Rotation::North.into()));
             let point_west = make_instr(Instruction::HoldAttitude(Rotation::West.into()));
             let point_south = make_instr(Instruction::HoldAttitude(Rotation::South.into()));
+
+            ui.sep();
+
+            ui.button(Scene::Pilot(loc.grid_id), "Pilot Ship");
 
             ui.sep();
 

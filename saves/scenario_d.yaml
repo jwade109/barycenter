@@ -16,7 +16,7 @@
 
 - !SpawnShip [["remora", 0], "Abbott", { translation: [10000.0, 4000.0], rotation: 0.3 }]
 - !SetVelocity { translation: [-18.0, 42.0], rotation: 0.02 }
+- !BindPlayerToGrid { username: "kim_mcbudget" }
 
 - !SpawnShip [["pollux", 0], "Costello", { translation: [15000.0, 7000.0], rotation: 2.0 }]
 - !SetVelocity { translation: [-19, 29], rotation: 0 }
-- !BindPlayerToGrid { username: "kim_mcbudget" }

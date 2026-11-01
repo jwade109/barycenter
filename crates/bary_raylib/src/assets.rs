@@ -46,6 +46,23 @@ impl Raylib {
         Self { handle, thread }
     }
 
+    pub fn init() -> Self {
+        let (mut handle, thread) = raylib::init()
+            .size(1080, 700)
+            .title("Barycenter")
+            .log_level(TraceLogLevel::LOG_WARNING)
+            .msaa_4x()
+            .resizable()
+            .build();
+
+        handle.set_target_fps(1000);
+        handle.maximize_window();
+        handle.set_exit_key(None);
+        handle.hide_cursor();
+
+        Self { handle, thread }
+    }
+
     pub fn draw(&mut self, func: impl FnMut(RaylibDrawHandle)) {
         self.handle.draw(&self.thread, func);
     }

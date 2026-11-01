@@ -217,8 +217,6 @@ fn draw_grid_far_indicators(
     camera: &Camera2D,
     assets: &Assets,
 ) {
-    let free = some_or_return!(client.scene_graph.free());
-
     if camera.zoom > ZOOM_NEAR_FAR_THRESHOLD {
         return;
     }
@@ -288,18 +286,20 @@ fn draw_grid_far_indicators(
             d.draw_triangle(v1, v2, v3, color);
         }
 
-        let is_hovered = Some(id) == free.hovered_vehicle.map(|g| g.grid_id);
+        if let Some(free) = client.scene_graph.free() {
+            let is_hovered = Some(id) == free.hovered_vehicle.map(|g| g.grid_id);
 
-        if !name.is_empty() {
-            let color = if is_hovered {
-                Color::WHITE
-            } else if is_controllable && client.input.is_key_pressed(rdev::Key::ShiftLeft) {
-                Color::WHITE.alpha(0.4)
-            } else {
-                Color::WHEAT.alpha(0.0)
-            };
-            let q = q - Vector2::new(0.0, 35.0);
-            draw_text_centered(d, &font, &name, q, 30, color);
+            if !name.is_empty() {
+                let color = if is_hovered {
+                    Color::WHITE
+                } else if is_controllable && client.input.is_key_pressed(rdev::Key::ShiftLeft) {
+                    Color::WHITE.alpha(0.4)
+                } else {
+                    Color::WHEAT.alpha(0.0)
+                };
+                let q = q - Vector2::new(0.0, 35.0);
+                draw_text_centered(d, &font, &name, q, 30.0, color);
+            }
         }
     }
 }
@@ -645,7 +645,7 @@ pub fn draw_text_centered(
     font: &Font,
     text: &str,
     pos: Vector2,
-    font_size: i32,
+    font_size: f32,
     color: Color,
 ) {
     if text.is_empty() {
@@ -653,17 +653,10 @@ pub fn draw_text_centered(
     }
 
     let spacing = 0.0;
-    let dims = font.measure_text(&text, font_size as f32, spacing);
+    let dims = font.measure_text(&text, font_size, spacing);
     let text_origin = Vector2::new(pos.x - dims.x / 2.0, pos.y - dims.y / 2.0);
 
-    d.draw_text_ex(
-        font,
-        &text,
-        text_origin,
-        font_size as f32,
-        spacing as f32,
-        color,
-    );
+    d.draw_text_ex(font, &text, text_origin, font_size, spacing as f32, color);
 }
 
 pub fn draw_text_centered_weak(
@@ -779,7 +772,7 @@ fn draw_selected_grid_info(
     let grid_id = some_or_return!(client.focused_grid_id());
     let grid = ok_or_return!(world.grids.try_get(grid_id));
 
-    let font_size = 26;
+    let font_size = 26.0;
 
     let parts_label = format!("{} parts - {}", grid.parts.len(), grid.parts_mass);
     let title_label = if let Some(bp) = &grid.blueprint {
@@ -798,7 +791,8 @@ fn draw_selected_grid_info(
         .unwrap_or_default();
 
     let username_label = grid
-        .controlled_by.as_ref()
+        .controlled_by
+        .as_ref()
         .map(|s| format!("Controlled by {s}"))
         .unwrap_or_default();
 
@@ -942,7 +936,7 @@ pub fn draw_editor_rename_field(
 
     let pos = glam_to_raylib(client.screen_dims / 2.0);
 
-    let font_size = 48;
+    let font_size = 48.0;
     let spacing = 0.0;
     let padding = 20;
 
@@ -2071,6 +2065,8 @@ fn draw_node(
     let is_clicked = state.active_path() == Some(node.path());
     let is_hovered = state.hot_path() == Some(node.path());
 
+    let font_size = node.font_size();
+
     match node.kind() {
         NodeType::Button(text, _msg) => {
             let (color, scale) = if is_clicked {
@@ -2085,12 +2081,12 @@ fn draw_node(
             draw_ui_aabb(d, aabb, color, false);
 
             let p = glam_to_raylib(aabb.center);
-            let font_size = (UI_FONT_SIZE as f32 * scale) as i32;
+            let font_size = UI_FONT_SIZE as f32 * scale;
             draw_text_centered(d, font, &text, p, font_size, Color::WHITE);
         }
         NodeType::Text(text) => {
             let p = glam_to_raylib(aabb.center);
-            draw_text_centered(d, font, &text, p, UI_FONT_SIZE, Color::WHITE);
+            draw_text_centered(d, font, &text, p, font_size, Color::WHITE);
         }
         NodeType::DragHandle(_) => {
             let color = if is_clicked {

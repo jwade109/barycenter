@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 pub struct UiBuilder {
     font: Rc<Font>,
+    pub heading_font_size: f32,
     pub font_size: f32,
     active_node: Option<(Node<UiMessage>, Vec2)>,
     input: InputState,
@@ -19,6 +20,7 @@ impl UiBuilder {
     pub fn new(font: Rc<Font>, input: InputState, state: UiInteractionState) -> Self {
         Self {
             font,
+            heading_font_size: UI_FONT_SIZE as f32 * 1.4,
             font_size: UI_FONT_SIZE as f32,
             active_node: None,
             input,
@@ -93,12 +95,20 @@ impl UiBuilder {
         self.add_to_active(Node::structural(Size::Grow, 2, "separator"));
     }
 
+    pub fn heading(&mut self, s: impl Into<String>) {
+        let s = s.into();
+        let dims = self.font.measure_text(&s, self.heading_font_size, 0.0);
+        let w = dims.x;
+        let h = dims.y;
+        self.add_to_active(Node::text(w, h, s).with_font_size(self.heading_font_size))
+    }
+
     pub fn text(&mut self, s: impl Into<String>) {
         let s = s.into();
         let dims = self.font.measure_text(&s, self.font_size, 0.0);
         let w = dims.x;
         let h = dims.y;
-        self.add_to_active(Node::text(w, h, s))
+        self.add_to_active(Node::text(w, h, s).with_font_size(self.font_size))
     }
 
     pub fn button(&mut self, msg: impl Into<UiMessage>, s: impl Into<String>) {

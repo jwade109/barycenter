@@ -102,6 +102,7 @@ pub struct NodeStyle {
     enabled_color: [f32; 4],
     disabled_color: [f32; 4],
     text_justify: TextJustify,
+    font_size: f32,
 }
 
 pub trait UiMsg: std::fmt::Debug + Clone {}
@@ -163,6 +164,7 @@ impl<T: UiMsg> Node<T> {
                 enabled_color: [0.6, 0.3, 0.0, 0.8],
                 disabled_color: [0.2, 0.2, 0.2, 0.8],
                 text_justify: TextJustify::Center,
+                font_size: 12.0,
             },
             path: IdSalt(0),
             id_salt: id_salt.into(),
@@ -525,6 +527,15 @@ impl<T: UiMsg> Node<T> {
             .flat_map(|n| n.iter().flat_map(|e| e.iter()))
             .collect::<Vec<_>>();
         self_iter.chain(child_iters)
+    }
+
+    pub fn with_font_size(mut self, font_size: f32) -> Self {
+        self.style.font_size = font_size;
+        self
+    }
+
+    pub fn font_size(&self) -> f32 {
+        self.style.font_size
     }
 }
 

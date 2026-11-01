@@ -86,25 +86,12 @@ impl ClientApp {
             .env()
             .init();
 
-        let (mut handle, thread) = raylib::init()
-            .size(1080, 700)
-            .title("Barycenter")
-            .log_level(TraceLogLevel::LOG_WARNING)
-            .msaa_4x()
-            .resizable()
-            .build();
-
-        handle.set_target_fps(1000);
-        handle.maximize_window();
-        handle.set_exit_key(None);
-        handle.hide_cursor();
-
-        let mut raylib = Raylib::new(handle, thread);
+        let mut raylib = Raylib::init();
 
         let mut assets = Assets::default();
         load_assets(&mut assets, &mut raylib);
 
-        let update_timer = WallTimer::with_dur(Duration::from_millis(20));
+        let update_timer = WallTimer::hz(50);
         let ui_state = UiInteractionState::default();
 
         let username = args.username.clone();
@@ -231,7 +218,14 @@ impl ClientApp {
 
     fn on_sim_event(&mut self, sim: SimulationEvent) {
         let id = self.client.spawner.spawn();
-        self.client.transmissions.spawn(id, sim.transmission);
+        match sim {
+            SimulationEvent::Transmission(rt) => {
+                self.client.transmissions.spawn(id, rt);
+            }
+            SimulationEvent::Piloting(id, username) => {
+                info!("{username} is piloting {id}");
+            }
+        }
     }
 
     fn exit(&mut self) {
@@ -424,6 +418,9 @@ fn make_gui(
             make_part_info_gui(&mut ui, app.backend.world(), &app.client, &app.assets);
             make_transmission_ui(&mut ui, &app.client.transmissions);
         }
+        SceneGraph::Piloting(piloting) => {
+            make_piloting_ui(&mut ui, piloting);
+        },
         SceneGraph::Editor(editor) => {
             make_editor_ui(&mut ui, editor, app.backend.world());
         }
@@ -492,10 +489,7 @@ fn server_thread(args: Args) {
 fn draw(mut d: &mut RaylibDrawHandle, app: &ClientApp, ui: Tree<UiMessage>) {
     d.clear_background(Color::BLACK);
 
-    if matches!(
-        app.client.scene_graph,
-        SceneGraph::Editor(..) | SceneGraph::Free(..) | SceneGraph::Part(..)
-    ) {
+    if app.client.scene_graph.should_draw_world() {
         draw_world(app.backend.world(), &app.client, &app.assets, &mut d);
     }
 

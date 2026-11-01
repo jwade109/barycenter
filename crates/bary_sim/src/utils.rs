@@ -933,8 +933,9 @@ pub fn update_world(world: &mut World) -> WorldUpdate {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct SimulationEvent {
-    pub transmission: ReceivedTransmission,
+pub enum SimulationEvent {
+    Transmission(ReceivedTransmission),
+    Piloting(String, Ent),
 }
 
 pub fn update_world_with_user_controls(
@@ -1473,7 +1474,7 @@ fn sys_update_transmissions(world: &mut World, events: &mut Sender<SimulationEve
                         received_by: *grid_id,
                     };
 
-                    let event = SimulationEvent { transmission: rt };
+                    let event = SimulationEvent::Transmission(rt);
                     events.send(event);
 
                     let new_tr = RadioTransmission::new(p)

@@ -6,6 +6,7 @@ mod kicked;
 mod list_saves;
 mod main_menu;
 mod part_info;
+mod piloting;
 mod settings;
 mod transmission_window;
 
@@ -17,5 +18,6 @@ pub use kicked::*;
 pub use list_saves::*;
 pub use main_menu::*;
 pub use part_info::*;
+pub use piloting::*;
 pub use settings::*;
 pub use transmission_window::*;
