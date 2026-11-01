@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 rdev = { version = "0.5.3", features = ["serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
 
 [[bin]]
 name = "kb"

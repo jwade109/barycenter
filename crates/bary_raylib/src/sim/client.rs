@@ -19,15 +19,18 @@ pub struct FreeFlying {
     pub hovered_chunk: Option<TerrainSelectionInfo>,
     pub waypoint_widget: Option<DVec2>,
 
+    pub camera: Camera,
+    pub target_camera: Camera,
+
     // for docking
     pub offset: PartCoord,
     pub rotation: Rotation,
 }
 
 impl FreeFlying {
-    pub fn new() -> Self {
+    pub fn new(camera: Camera, follow_vehicle: Option<Ent>) -> Self {
         Self {
-            follow_vehicle: None,
+            follow_vehicle,
             lock_rotation: false,
             hovered_vehicle: None,
             selected_vehicles: Vec::new(),
@@ -35,7 +38,19 @@ impl FreeFlying {
             hovered_chunk: None,
             offset: PartCoord::ZERO,
             rotation: Rotation::East,
+            camera,
+            target_camera: camera,
         }
+    }
+
+    pub fn at_zero() -> Self {
+        Self::new(
+            Camera {
+                zoom: 0.1,
+                ..Camera::default()
+            },
+            None,
+        )
     }
 
     pub fn docking_interface(&self) -> Option<DockingInterface> {
@@ -73,8 +88,8 @@ pub struct ClientSpecificInfo {
     pub username: String,
     pub ticks: u64,
     pub chat: Chat,
-    pub camera: Camera,
-    pub target_camera: Camera,
+    // pub camera: Camera,
+    // pub target_camera: Camera,
     pub mouse_screen_position: Option<Vec2>,
     pub screen_dims: Vec2,
     pub scene_graph: SceneGraph,
@@ -92,15 +107,6 @@ impl ClientSpecificInfo {
             username,
             ticks: 0,
             chat: Chat::default(),
-            // camera info
-            camera: Camera {
-                zoom: 0.1,
-                ..Camera::default()
-            },
-            target_camera: Camera {
-                zoom: 8.0,
-                ..Camera::default()
-            },
             mouse_screen_position: None,
             screen_dims: Vec2::new(1500.0, 900.0),
             scene_graph: SceneGraph::MainMenu,
@@ -116,12 +122,7 @@ impl ClientSpecificInfo {
         let SceneGraph::Editor(editor) = &self.scene_graph else {
             return false;
         };
-
-        self.scene_graph = SceneGraph::Free(FreeFlying {
-            follow_vehicle: Some(editor.vehicle),
-            ..FreeFlying::new()
-        });
-
+        self.scene_graph = SceneGraph::Free(FreeFlying::new(editor.camera, Some(editor.vehicle)));
         self.chat.log("Left ship editor");
         true
     }
@@ -158,6 +159,7 @@ impl ClientSpecificInfo {
         match &self.scene_graph {
             SceneGraph::Editor(e) => Some(e.vehicle),
             SceneGraph::Free(f) => f.selected_vehicles.first().map(|s| s.grid_id),
+            SceneGraph::Piloting(p) => Some(p.ownship),
             _ => None,
         }
     }

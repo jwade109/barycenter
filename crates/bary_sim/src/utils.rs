@@ -919,7 +919,7 @@ pub fn insert_pipe(
 
 #[derive(Debug, Clone, Default)]
 pub struct ExternalControls {
-    pub user_controls: BTreeMap<String, VehicleControl>,
+    pub controls: Components<VehicleControl>,
 }
 
 pub struct WorldUpdate {

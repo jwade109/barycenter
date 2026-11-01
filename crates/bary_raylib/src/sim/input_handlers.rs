@@ -69,12 +69,14 @@ pub fn editor_copy_on_control_c(world: &World, client: &mut ClientSpecificInfo) 
     client.chat.log(s);
 }
 
-pub fn apply_scroll_wheel_to_camera_target(delta_y: i64, target: &mut Camera) {
-    let scale = 1.15;
-    if delta_y > 0 {
-        target.zoom *= scale;
-    } else if delta_y < 0 {
-        target.zoom /= scale;
+pub fn apply_scroll_wheel_to_camera_target(delta_y: i64, client: &mut ClientSpecificInfo) {
+    if let Some(free) = client.scene_graph.free_mut() {
+        let scale = 1.15;
+        if delta_y > 0 {
+            free.target_camera.zoom *= scale;
+        } else if delta_y < 0 {
+            free.target_camera.zoom /= scale;
+        }
     }
 }
 
@@ -104,25 +106,6 @@ pub fn toggle_following_on_key_f(client: &mut ClientSpecificInfo) {
     }
 }
 
-pub fn reset_camera_on_ctrl_r(client: &mut ClientSpecificInfo) {
-    if client.input.is_key_pressed(Key::ControlLeft) {
-        debug!("Reset camera");
-        client.target_camera.isometry.translation = DVec2::ZERO;
-        client.target_camera.isometry.rotation = 0.0;
-        client.target_camera.zoom = 8.0;
-    }
-}
-
-pub fn lock_rotation_on_key_r(client: &mut ClientSpecificInfo) {
-    if client.input.is_key_pressed(Key::ControlLeft) {
-        return;
-    }
-    if let SceneGraph::Free(fly) = &mut client.scene_graph {
-        debug!("Toggle lock rotation");
-        fly.lock_rotation ^= true;
-    }
-}
-
 pub fn enter_ship_editor(
     world: &World,
     client: &mut ClientSpecificInfo,
@@ -134,7 +117,7 @@ pub fn enter_ship_editor(
 
     let centroid = grid.centroid();
 
-    client.scene_graph = SceneGraph::Editor(EditorState {
+    let mut state = EditorState {
         vehicle: grid_id,
         target_coord: PartCoord::ZERO,
         actual_offset: centroid.as_vec2(),
@@ -145,9 +128,13 @@ pub fn enter_ship_editor(
         select_start: None,
         hovered: None,
         vehicle_name_field: None,
-    });
+        camera: free.camera,
+        target_camera: free.target_camera,
+    };
 
-    client.target_camera.zoom = client.target_camera.zoom.max(40.0);
+    state.target_camera.zoom = free.target_camera.zoom.max(40.0);
+
+    client.scene_graph = SceneGraph::Editor(state);
 
     client.chat.log("Switched to ship editor");
     sounds.push(SoundEffect::OpenEditor);

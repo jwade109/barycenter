@@ -88,15 +88,11 @@ pub fn sys_update_thrusters(
 
         let mut thruster_changed = false;
 
-        let ctrl = if let Some(ctrl) = grid
-            .controlled_by
-            .as_ref()
-            .and_then(|username| controls.user_controls.get(username))
-        {
-            *ctrl
-        } else {
-            *cpu.get_current_control()
-        };
+        let ctrl = controls
+            .controls
+            .get(*grid_id)
+            .cloned()
+            .unwrap_or(*cpu.get_current_control());
 
         for thruster_id in &grid.thrusters {
             let Ok(thruster) = thrusters.try_get_mut(*thruster_id) else {

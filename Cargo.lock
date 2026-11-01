@@ -516,6 +516,7 @@ name = "bary_input"
 version = "0.1.0"
 dependencies = [
  "rdev",
+ "serde",
 ]
 
 [[package]]

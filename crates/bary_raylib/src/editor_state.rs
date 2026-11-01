@@ -1,8 +1,9 @@
 use bary_core::prelude::*;
 use bary_input::InputState;
 use bary_parts::BlueprintId;
-use bary_sim::{World, WorldDelta};
+use bary_sim::{Camera, Sender, World, WorldDelta};
 use early_returns::*;
+use rdev::Button;
 
 #[derive(Debug, Clone, Copy)]
 pub enum EditorCommand {
@@ -10,7 +11,7 @@ pub enum EditorCommand {
     SetProto(Ent),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct EditorState {
     pub vehicle: Ent,
     pub target_coord: PartCoord,
@@ -21,6 +22,9 @@ pub struct EditorState {
     pub layer: Option<PartLayer>,
     pub select_start: Option<PartCoord>,
     pub hovered: Option<PartCoord>,
+
+    pub camera: Camera,
+    pub target_camera: Camera,
 
     pub vehicle_name_field: Option<(EditableText, bool)>,
 }
@@ -33,6 +37,59 @@ impl EditorState {
             }
             EditorCommand::SetProto(id) => {
                 self.prototype_id = Some(id);
+            }
+        }
+    }
+
+    fn editor_on_left_click(&mut self, world: &World) -> Option<WorldDelta> {
+        let coord = self.hovered?;
+
+        self.select_start = None;
+
+        if let Some(proto_id) = self.prototype_id {
+            let proto = world.prototypes.try_get(proto_id).ok()?;
+
+            Some(WorldDelta::InsertPart {
+                grid_id: self.vehicle,
+                name: proto.name.clone(),
+                coord,
+                rotation: self.part_rotation,
+                layer: proto.layer,
+            })
+        } else {
+            self.select_start = Some(coord);
+            None
+        }
+    }
+
+    fn editor_on_release_left_click(&mut self) -> Option<WorldDelta> {
+        let src = self.select_start?;
+        let dst = self.hovered?;
+
+        self.select_start = None;
+
+        if self.layer != Some(PartLayer::Plumbing) {
+            return None;
+        }
+
+        let delta = WorldDelta::InsertPipe {
+            grid_id: self.vehicle,
+            src,
+            dst,
+        };
+
+        Some(delta)
+    }
+
+    pub fn update(&mut self, input: &InputState, world: &World, deltas: &mut Sender<WorldDelta>) {
+        if input.just_pressed(Button::Left) {
+            if let Some(delta) = self.editor_on_left_click(world) {
+                deltas.send(delta);
+            }
+        }
+        if input.just_released(Button::Left) {
+            if let Some(d) = self.editor_on_release_left_click() {
+                deltas.send(d);
             }
         }
     }
@@ -72,6 +129,15 @@ impl EditorState {
             select_start: None,
             hovered: None,
             vehicle_name_field: None,
+
+            camera: Camera {
+                zoom: 0.1,
+                ..Camera::default()
+            },
+            target_camera: Camera {
+                zoom: 8.0,
+                ..Camera::default()
+            },
         }
     }
 

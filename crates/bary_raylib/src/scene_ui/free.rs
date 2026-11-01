@@ -52,46 +52,7 @@ pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World,
 
             ui.sep();
 
-            let make_instr =
-                |instr: Instruction| WorldDelta::SetGridInstruction(loc.grid_id, instr.into());
-
-            let adrift = make_instr(Instruction::Drift);
-
-            let point_east = make_instr(Instruction::HoldAttitude(Rotation::East.into()));
-            let point_north = make_instr(Instruction::HoldAttitude(Rotation::North.into()));
-            let point_west = make_instr(Instruction::HoldAttitude(Rotation::West.into()));
-            let point_south = make_instr(Instruction::HoldAttitude(Rotation::South.into()));
-
-            ui.sep();
-
             ui.button(Scene::Pilot(loc.grid_id), "Pilot Ship");
-
-            ui.sep();
-
-            ui.text("Orientation Commands");
-
-            ui.button(point_east, "point_east");
-            ui.button(point_north, "point_north");
-            ui.button(point_west, "point_west");
-            ui.button(point_south, "point_south");
-
-            let rcs_forward = make_instr(Instruction::rcs_forward());
-            let rcs_backward = make_instr(Instruction::rcs_backward());
-            let rcs_right = make_instr(Instruction::rcs_right());
-            let rcs_left = make_instr(Instruction::rcs_left());
-
-            ui.sep();
-
-            ui.text("RCS Commands");
-
-            ui.button(rcs_forward, "Forward");
-            ui.button(rcs_backward, "Backward");
-            ui.button(rcs_right, "Right");
-            ui.button(rcs_left, "Left");
-
-            ui.sep();
-
-            ui.button(adrift, "Set Adrift");
 
             ui.sep();
 

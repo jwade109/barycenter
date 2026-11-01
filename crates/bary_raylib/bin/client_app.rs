@@ -10,7 +10,8 @@ use bary_ui::*;
 use clap::Parser;
 use log::*;
 use raylib::prelude::*;
-use std::{collections::BTreeMap, rc::Rc, time::Duration};
+use rdev::{Button, Key};
+use std::{rc::Rc, time::Duration};
 
 mod backend;
 mod mp_backend;
@@ -32,25 +33,32 @@ pub struct ClientApp {
     show_debug_text: bool,
 }
 
-fn keyboard_control_law(input: &InputState) -> VehicleControl {
+#[derive(Debug, Clone, Copy)]
+struct PilotingKeybinds {
+    left: Key,
+    right: Key,
+    forward: Key,
+    backward: Key,
+    mode: Button,
+}
+
+fn keyboard_control_law(input: &InputState, keybinds: PilotingKeybinds) -> VehicleControl {
     let mut ctrl = VehicleControl::NULLOPT;
 
-    use rdev::Key;
-
-    let docking_mode = input.is_key_pressed(Key::ControlLeft);
+    let docking_mode = input.is_key_pressed(keybinds.mode);
 
     if docking_mode {
-        ctrl.plus_x.throttle = input.is_key_pressed(Key::UpArrow) as u8 as f32;
-        ctrl.plus_y.throttle = input.is_key_pressed(Key::RightArrow) as u8 as f32;
-        ctrl.neg_x.throttle = input.is_key_pressed(Key::DownArrow) as u8 as f32;
-        ctrl.neg_y.throttle = input.is_key_pressed(Key::LeftArrow) as u8 as f32;
+        ctrl.plus_x.throttle = input.is_key_pressed(keybinds.forward) as u8 as f32;
+        ctrl.plus_y.throttle = input.is_key_pressed(keybinds.right) as u8 as f32;
+        ctrl.neg_x.throttle = input.is_key_pressed(keybinds.backward) as u8 as f32;
+        ctrl.neg_y.throttle = input.is_key_pressed(keybinds.left) as u8 as f32;
     } else {
-        ctrl.plus_x.throttle = input.is_key_pressed(Key::UpArrow) as u8 as f32;
-        ctrl.neg_x.throttle = input.is_key_pressed(Key::DownArrow) as u8 as f32;
+        ctrl.plus_x.throttle = input.is_key_pressed(keybinds.forward) as u8 as f32;
+        ctrl.neg_x.throttle = input.is_key_pressed(keybinds.backward) as u8 as f32;
 
-        ctrl.attitude = if input.is_key_pressed(Key::LeftArrow) {
+        ctrl.attitude = if input.is_key_pressed(keybinds.left) {
             10.0
-        } else if input.is_key_pressed(Key::RightArrow) {
+        } else if input.is_key_pressed(keybinds.right) {
             -10.0
         } else {
             0.0
@@ -121,11 +129,22 @@ impl ClientApp {
     fn update_in_world(&mut self) {
         let deltas = pre_simulation_update(self.backend.world(), &mut self.client);
 
-        let ctrl = keyboard_control_law(&self.client.input);
-
-        let controls = ExternalControls {
-            user_controls: BTreeMap::from([(self.client.username.clone(), ctrl)]),
+        let keybinds = PilotingKeybinds {
+            left: Key::KeyA,
+            right: Key::KeyD,
+            forward: Key::KeyW,
+            backward: Key::KeyS,
+            mode: Button::Middle,
         };
+
+        let mut controls = Components::default();
+
+        if let SceneGraph::Piloting(pilot) = &self.client.scene_graph {
+            let ctrl = keyboard_control_law(&self.client.input, keybinds);
+            controls.spawn(pilot.ownship, ctrl);
+        }
+
+        let controls = ExternalControls { controls };
 
         for msg in self.backend.update(&controls) {
             self.on_rcv_server_msg(msg);
@@ -137,7 +156,7 @@ impl ClientApp {
             self.terminal.is_focused(),
         );
 
-        for delta in deltas.into_iter().chain(post_deltas) {
+        for delta in deltas.take().into_iter().chain(post_deltas.take()) {
             self.backend.request_delta(delta);
         }
 
@@ -193,7 +212,7 @@ impl ClientApp {
                 self.client.chat.log(s);
             }
             ServerMessage::TransactionComplete => {
-                self.client.scene_graph = SceneGraph::Free(FreeFlying::new());
+                self.client.scene_graph = SceneGraph::Free(FreeFlying::at_zero());
             }
             ServerMessage::SyncFrame(frame) => {
                 debug!("Got frame: {:?}", frame);
@@ -419,8 +438,8 @@ fn make_gui(
             make_transmission_ui(&mut ui, &app.client.transmissions);
         }
         SceneGraph::Piloting(piloting) => {
-            make_piloting_ui(&mut ui, piloting);
-        },
+            make_piloting_ui(&mut ui, piloting, app.backend.world());
+        }
         SceneGraph::Editor(editor) => {
             make_editor_ui(&mut ui, editor, app.backend.world());
         }

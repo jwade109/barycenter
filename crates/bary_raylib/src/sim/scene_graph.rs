@@ -1,5 +1,8 @@
 use crate::{EditorState, FreeFlying};
 use bary_core::prelude::*;
+use bary_input::InputState;
+use bary_sim::Camera;
+use rdev::Key;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Scene {
@@ -32,6 +35,9 @@ impl PartFocusState {
 pub struct PilotingState {
     pub ownship: Ent,
     pub target: Option<Ent>,
+    pub camera: Camera,
+    pub target_rotation: f64,
+    pub target_zoom: f32,
 }
 
 impl PilotingState {
@@ -39,7 +45,43 @@ impl PilotingState {
         Self {
             ownship,
             target: None,
+            camera: Camera {
+                isometry: Isometry2d::ZERO,
+                zoom: 0.03,
+            },
+            target_rotation: 0.0,
+            target_zoom: 0.03,
         }
+    }
+
+    pub fn step(&mut self, input: &InputState) {
+        let scale = 1.15;
+        for event in input.events() {
+            if let rdev::EventType::Wheel {
+                delta_x: _,
+                delta_y,
+            } = event.event_type
+            {
+                if delta_y > 0 {
+                    self.target_zoom *= scale;
+                } else if delta_y < 0 {
+                    self.target_zoom /= scale;
+                }
+            }
+        }
+
+        let angular_speed = 2.5f64.to_radians();
+
+        if input.is_key_pressed(Key::KeyQ) {
+            self.target_rotation += angular_speed;
+        }
+        if input.is_key_pressed(Key::KeyE) {
+            self.target_rotation -= angular_speed;
+        }
+
+        self.camera.isometry.rotation +=
+            (self.target_rotation - self.camera.isometry.rotation) * 0.25;
+        self.camera.zoom += (self.target_zoom - self.camera.zoom) * 0.25;
     }
 }
 
@@ -74,14 +116,13 @@ impl SceneGraph {
             (_, Scene::ListSaves) => Self::ListSaves,
             (_, Scene::Editor(id)) => Self::Editor(EditorState::new(id, Vec2::ZERO)),
             (Self::Editor(state), Scene::Free) => {
-                let free = FreeFlying {
-                    follow_vehicle: Some(state.vehicle),
-                    ..FreeFlying::new()
-                };
-                Self::Free(free)
+                Self::Free(FreeFlying::new(state.camera, Some(state.vehicle)))
             }
             (_, Scene::Pilot(id)) => Self::Piloting(PilotingState::new(id)),
-            (_, Scene::Free) => Self::Free(FreeFlying::new()),
+            (SceneGraph::Piloting(pilot), Scene::Free) => {
+                Self::Free(FreeFlying::new(pilot.camera, Some(pilot.ownship)))
+            }
+            (_, Scene::Free) => Self::Free(FreeFlying::at_zero()),
             (_, Scene::MainMenu) => Self::MainMenu,
             (_, Scene::Kicked) => Self::Kicked,
             (_, Scene::Settings) => Self::Settings,
@@ -131,6 +172,19 @@ impl SceneGraph {
         match self {
             Self::Editor(e) => Some(e),
             _ => None,
+        }
+    }
+
+    pub fn camera(&self) -> Option<Camera> {
+        match self {
+            SceneGraph::MainMenu => None,
+            SceneGraph::ListSaves => None,
+            SceneGraph::Kicked => None,
+            SceneGraph::Settings => None,
+            SceneGraph::Editor(editor) => Some(editor.camera),
+            SceneGraph::Free(free) => Some(free.camera),
+            SceneGraph::Piloting(piloting) => Some(piloting.camera),
+            SceneGraph::Part(..) => None,
         }
     }
 }

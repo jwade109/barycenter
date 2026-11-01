@@ -104,13 +104,13 @@ fn update_actual_hover_part_info(client: &mut ClientSpecificInfo, grids: &Compon
     if let Some(free) = client.scene_graph.free_mut() {
         free.hovered_vehicle = None;
         let screen_pos = some_or_return!(mouse_screen_position);
-        let world_pos = screen_to_world(&client.camera, screen_pos, screen_dims);
+        let world_pos = screen_to_world(&free.camera, screen_pos, screen_dims);
         let (grid_id, offset) = some_or_return!(get_closest_grid(grids, world_pos, None));
         let dist = offset.length();
         let grid = ok_or_return!(grids.try_get(grid_id));
 
         let grid_pos = grid.centroid_isometry().tr();
-        let grid_screen = get_world_to_screen(&client.camera, grid_pos, screen_dims);
+        let grid_screen = get_world_to_screen(&free.camera, grid_pos, screen_dims);
         let d_screen = grid_screen.distance(screen_pos);
 
         if 20.0 * (grid.bounding_radius() as f64) < dist && d_screen > 80.0 {
@@ -123,7 +123,7 @@ fn update_actual_hover_part_info(client: &mut ClientSpecificInfo, grids: &Compon
         editor.hovered = None;
         let grid = ok_or_return!(grids.try_get(editor.vehicle));
         let screen_pos = some_or_return!(mouse_screen_position);
-        let world_pos = screen_to_world(&client.camera, screen_pos, screen_dims);
+        let world_pos = screen_to_world(&editor.camera, screen_pos, screen_dims);
         // TODO(cleanup) completely unnecessary. shouldn't need to get the world coordinates
         // or the grid's coordinates to get this vector. just ask how far the camera is from
         // the grid in question!
@@ -197,49 +197,6 @@ fn select_hovered_grid_loc_on_click(client: &mut ClientSpecificInfo) {
     }
 }
 
-fn editor_on_release_left_click(client: &mut ClientSpecificInfo) -> Option<WorldDelta> {
-    let e = client.scene_graph.editor_mut()?;
-
-    let src = e.select_start?;
-    let dst = e.hovered?;
-
-    e.select_start = None;
-
-    if e.layer != Some(PartLayer::Plumbing) {
-        return None;
-    }
-
-    let delta = WorldDelta::InsertPipe {
-        grid_id: e.vehicle,
-        src,
-        dst,
-    };
-
-    Some(delta)
-}
-
-fn editor_on_left_click(world: &World, client: &mut ClientSpecificInfo) -> Option<WorldDelta> {
-    let e = client.scene_graph.editor_mut()?;
-    let coord = e.hovered?;
-
-    e.select_start = None;
-
-    if let Some(proto_id) = e.prototype_id {
-        let proto = world.prototypes.try_get(proto_id).ok()?;
-
-        Some(WorldDelta::InsertPart {
-            grid_id: e.vehicle,
-            name: proto.name.clone(),
-            coord,
-            rotation: e.part_rotation,
-            layer: proto.layer,
-        })
-    } else {
-        e.select_start = Some(coord);
-        None
-    }
-}
-
 pub fn process_event(world: &World, client: &mut ClientSpecificInfo, on_gui: bool) {
     let events: Vec<_> = client.input.events().cloned().collect();
 
@@ -252,10 +209,6 @@ pub fn process_event(world: &World, client: &mut ClientSpecificInfo, on_gui: boo
                     }
                 }
                 Key::KeyF => input_handlers::toggle_following_on_key_f(client),
-                Key::KeyR => {
-                    input_handlers::reset_camera_on_ctrl_r(client);
-                    input_handlers::lock_rotation_on_key_r(client);
-                }
                 Key::KeyC => {
                     input_handlers::editor_copy_on_control_c(world, client);
                 }
@@ -279,10 +232,7 @@ pub fn process_event(world: &World, client: &mut ClientSpecificInfo, on_gui: boo
                 delta_x: _,
                 delta_y,
             } => {
-                input_handlers::apply_scroll_wheel_to_camera_target(
-                    delta_y,
-                    &mut client.target_camera,
-                );
+                input_handlers::apply_scroll_wheel_to_camera_target(delta_y, client);
             }
             _ => (),
         }
@@ -294,7 +244,7 @@ fn update_terrain_selection_info(client: &mut ClientSpecificInfo, asteroids: &Co
     free.hovered_chunk = None;
 
     let screen_pos = some_or_return!(client.mouse_screen_position);
-    let world_pos = screen_to_world(&client.camera, screen_pos, client.screen_dims);
+    let world_pos = screen_to_world(&free.camera, screen_pos, client.screen_dims);
 
     for (rock_id, rock) in asteroids.iter() {
         let d = world_pos.distance(rock.iso.translation);
@@ -328,8 +278,9 @@ fn explode_at_mouseover(client: &ClientSpecificInfo) -> Option<WorldDelta> {
 }
 
 fn ping_on_alt_left_click(client: &ClientSpecificInfo) -> Option<WorldDelta> {
+    let camera = client.scene_graph.camera()?;
     let screen_pos = client.mouse_screen_position?;
-    let pos = screen_to_world(&client.camera, screen_pos, client.screen_dims);
+    let pos = screen_to_world(&camera, screen_pos, client.screen_dims);
     Some(WorldDelta::Ping(pos))
 }
 
@@ -343,7 +294,7 @@ fn destroy_top_layer_part_at_mouseover(client: &ClientSpecificInfo) -> Option<Wo
 }
 
 #[must_use]
-pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> Vec<WorldDelta> {
+pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> Sender<WorldDelta> {
     client.ticks += 1;
 
     update_actual_hover_part_info(client, &world.grids);
@@ -356,24 +307,26 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
 
     if client.input.just_pressed_debounced(Button::Right) {
         if let Some(mouse_pos) = client.mouse_screen_position {
-            if let Some(free) = client.scene_graph.free_mut() {
-                let world_pos = screen_to_world(&client.camera, mouse_pos, client.screen_dims);
-                free.waypoint_widget = Some(world_pos);
+            if let Some(camera) = client.scene_graph.camera() {
+                if let Some(free) = client.scene_graph.free_mut() {
+                    let world_pos = screen_to_world(&camera, mouse_pos, client.screen_dims);
+                    free.waypoint_widget = Some(world_pos);
+                }
             }
         }
     }
 
-    let mut deltas = Vec::new();
+    let mut deltas = Sender::new();
 
     if client.input.just_pressed_debounced(Key::KeyT) {
         if let Some(d) = toggle_tracking_for_selected_grid(client) {
-            deltas.push(d);
+            deltas.send(d);
         }
     }
 
     if client.input.just_pressed_debounced(Key::KeyC) {
         if let Some(d) = explode_at_mouseover(client) {
-            deltas.push(d);
+            deltas.send(d);
         }
     }
 
@@ -381,19 +334,19 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
         && client.input.is_key_pressed(Key::ControlLeft)
     {
         if let Some(d) = ping_on_alt_left_click(client) {
-            deltas.push(d);
+            deltas.send(d);
         }
     }
 
     if client.input.just_pressed(Button::Right) {
         if let Some(d) = destroy_top_layer_part_at_mouseover(client) {
-            deltas.push(d);
+            deltas.send(d);
         }
     }
 
     if client.input.just_pressed_debounced(Key::Return) {
         if let Some(d) = drive_ship_on_enter(client, world) {
-            deltas.push(d);
+            deltas.send(d);
         }
     }
 
@@ -401,7 +354,7 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
         if let Some(free) = client.scene_graph.free() {
             if let Some(p) = free.waypoint_widget {
                 if let Some(mouse_pos) = client.mouse_screen_position {
-                    let q = screen_to_world(&client.camera, mouse_pos, client.screen_dims);
+                    let q = screen_to_world(&free.camera, mouse_pos, client.screen_dims);
                     deltas.extend(input_handlers::command_selected_ships_to_waypoint(
                         client, p, q,
                     ));
@@ -424,10 +377,10 @@ fn zoom_in_on_key_v(client: &mut ClientSpecificInfo) {
 
     let grid_id = some_or_return!(client.focused_grid_id());
     let free = some_or_return!(client.scene_graph.free_mut());
-    if client.target_camera.zoom < ZOOM_NEAR_VEHICLE {
-        client.target_camera.zoom = ZOOM_NEAR_VEHICLE;
+    if free.target_camera.zoom < ZOOM_NEAR_VEHICLE {
+        free.target_camera.zoom = ZOOM_NEAR_VEHICLE;
     } else {
-        client.target_camera.zoom = ZOOM_FAR_AWAY;
+        free.target_camera.zoom = ZOOM_FAR_AWAY;
     }
     free.follow_vehicle = Some(grid_id);
 }
@@ -462,54 +415,46 @@ pub fn post_simulation_update(
     world: &World,
     client: &mut ClientSpecificInfo,
     is_terminal_focused: bool,
-) -> Vec<WorldDelta> {
+) -> Sender<WorldDelta> {
     client.chat.drop_old_messages();
 
     zoom_in_on_key_v(client);
 
-    let mut deltas = Vec::new();
-
-    if client.input.just_pressed(Button::Left) {
-        if let Some(d) = editor_on_left_click(world, client) {
-            deltas.push(d);
-        }
-    }
-
-    if client.input.just_released(Button::Left) {
-        if let Some(d) = editor_on_release_left_click(client) {
-            deltas.push(d);
-        }
-    }
+    let mut deltas = Sender::new();
 
     match &mut client.scene_graph {
         SceneGraph::Free(fly) => {
             if let Some(docking) = fly.docking_interface() {
-                set_target_camera_if_docking(world, &docking, &mut client.target_camera);
+                set_target_camera_if_docking(world, &docking, &mut fly.target_camera);
             } else {
                 set_target_camera_if_following(
                     fly.follow_vehicle,
                     fly.lock_rotation,
                     &world.grids,
-                    &mut client.target_camera,
-                    &mut client.camera,
+                    &mut fly.target_camera,
+                    &mut fly.camera,
                 );
             }
 
             if !is_terminal_focused {
                 camera_moves_with_wasd(
                     &client.input,
-                    &mut client.target_camera,
+                    &mut fly.target_camera,
                     &mut fly.follow_vehicle,
                     &mut fly.lock_rotation,
                     &mut client.sounds,
                 );
 
-                camera_zooms_with_plus_minus(&client.input, &mut client.target_camera);
+                camera_zooms_with_plus_minus(&client.input, &mut fly.target_camera);
             }
+
+            animate_camera_towards_target(&fly.target_camera, &mut fly.camera);
         }
         SceneGraph::Editor(editor) => {
+            editor.update(&client.input, world, &mut deltas);
+
             if !is_terminal_focused {
-                camera_zooms_with_plus_minus(&client.input, &mut client.target_camera);
+                camera_zooms_with_plus_minus(&client.input, &mut editor.target_camera);
             }
 
             editor_actual_offset_smooth_animation(editor.target_coord, &mut editor.actual_offset);
@@ -518,18 +463,21 @@ pub fn post_simulation_update(
                 editor.vehicle,
                 &world.grids,
                 editor.actual_offset,
-                &mut client.target_camera,
-                &mut client.camera,
+                &mut editor.target_camera,
+                &mut editor.camera,
             );
+
+            animate_camera_towards_target(&editor.target_camera, &mut editor.camera);
+        }
+        SceneGraph::Piloting(pilot) => {
+            if let Some(grid) = world.grids.get(pilot.ownship) {
+                pilot.camera.isometry.translation = grid.centroid_isometry().tr();
+            }
+
+            pilot.step(&client.input);
         }
         _ => (),
     }
-
-    if client.target_camera.zoom > VIEWPORT_MAX_ZOOM {
-        client.target_camera.zoom = VIEWPORT_MAX_ZOOM;
-    }
-
-    animate_camera_towards_target(&client.target_camera, &mut client.camera);
 
     deltas
 }

@@ -138,4 +138,15 @@ impl UiBuilder {
         func(self);
         self.end_window();
     }
+
+    pub fn window_at(
+        &mut self,
+        id_salt: impl Into<IdSalt>,
+        pos: Vec2,
+        func: impl FnOnce(&mut UiBuilder) -> (),
+    ) {
+        self.begin_window_at(pos, id_salt);
+        func(self);
+        self.end_window();
+    }
 }

@@ -50,7 +50,7 @@ pub fn debug_lines(
 
         ui.text(format!("FPS:       {}", fps));
         ui.text(format!("Memory:    {:0.3} KB", size as f64 / 1000.0));
-        ui.text(format!("Zoom:      {:0.3}", client.camera.zoom));
+        ui.text(format!("Camera:    {:?}", client.scene_graph.camera()));
 
         ui.text(format!(
             "Update:    {:0.2} Hz / {:0.2} Hz ",

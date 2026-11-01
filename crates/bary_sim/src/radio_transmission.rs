@@ -114,6 +114,10 @@ impl<T> Sender<T> {
         }
     }
 
+    pub fn extend(&mut self, elem: Vec<T>) {
+        self.messages.extend(elem);
+    }
+
     pub fn send(&mut self, elem: T) {
         self.messages.push(elem);
     }

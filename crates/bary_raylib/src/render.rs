@@ -1,5 +1,3 @@
-use std::num::FpCategory::Nan;
-
 use crate::UiInteractionState;
 use crate::UiMessage;
 use crate::assets::*;
@@ -18,7 +16,6 @@ use bary_sim::*;
 use bary_terminal::*;
 use bary_ui::*;
 use early_returns::*;
-use log::info;
 use raylib::prelude::*;
 
 pub fn to_raylib_camera(camera: &Camera, screen_dims: Vec2) -> Camera2D {
@@ -340,9 +337,11 @@ pub fn draw_world(
     assets: &Assets,
     d: &mut RaylibDrawHandle,
 ) {
-    draw_stars(d, &world.stars, &client.camera, client.screen_dims);
+    let camera = some_or_return!(client.scene_graph.camera());
 
-    let raylib_camera = to_raylib_camera(&client.camera, client.screen_dims);
+    draw_stars(d, &world.stars, &camera, client.screen_dims);
+
+    let raylib_camera = to_raylib_camera(&camera, client.screen_dims);
 
     // this apparently is incredibly slow; curious
     let mut c = d.begin_mode2D(raylib_camera);
@@ -372,7 +371,7 @@ pub fn draw_world(
         &world.computers,
         &world.lights,
         world.ticks as u32,
-        &client.camera,
+        &client,
     );
 
     draw_thruster_plumes(
@@ -380,7 +379,7 @@ pub fn draw_world(
         &world.grids,
         &world.parts,
         &world.thrusters,
-        &client.camera,
+        &client,
     );
 
     draw_trackers(&mut c, &world.tracking, client.alt_mode);
@@ -399,7 +398,7 @@ pub fn draw_world(
     draw_mouse_world_position(
         &mut c,
         client.mouse_screen_position,
-        &client.camera,
+        &camera,
         client.screen_dims,
     );
 
@@ -1254,7 +1253,7 @@ fn draw_waypoint_widget(d: &mut RaylibDrawHandle, client: &ClientSpecificInfo) {
     }
     let start = some_or_return!(free.waypoint_widget);
     let screen_pos = some_or_return!(client.mouse_screen_position);
-    let end = screen_to_world(&client.camera, screen_pos, client.screen_dims);
+    let end = screen_to_world(&free.camera, screen_pos, client.screen_dims);
     draw_line(d, start, end, Color::GRAY);
 
     let n_ships = free.selected_vehicles.len();
@@ -1268,7 +1267,7 @@ fn draw_waypoint_widget(d: &mut RaylibDrawHandle, client: &ClientSpecificInfo) {
 
         let p = start.lerp(end, s);
 
-        draw_circle(d, p, 10.0 / client.camera.zoom, Color::GRAY)
+        draw_circle(d, p, 10.0 / free.camera.zoom, Color::GRAY)
     }
 }
 
@@ -1607,8 +1606,10 @@ fn draw_thruster_plumes(
     grids: &Components<VehicleGrid>,
     parts: &Components<Part>,
     thrusters: &Components<Thruster>,
-    camera: &Camera,
+    client: &ClientSpecificInfo,
 ) {
+    let camera = some_or_return!(client.scene_graph.camera());
+
     if camera.zoom < 2.0 {
         return;
     }
@@ -1647,8 +1648,10 @@ fn draw_lights(
     computers: &Components<Computer>,
     lights: &Components<Light>,
     ticks: u32,
-    camera: &Camera,
+    client: &ClientSpecificInfo,
 ) {
+    let camera = some_or_return!(client.scene_graph.camera());
+
     if camera.zoom < 2.0 {
         return;
     }
@@ -1786,22 +1789,24 @@ fn draw_terrain_chunk(
 }
 
 fn is_chunk_onscreen(rock_iso: Isometry2d, chunk: ChunkIndex, client: &ClientSpecificInfo) -> bool {
-    let dims = client.screen_dims;
-    let bb = chunk.bb();
-    for corner in bb.corners().iter().chain(&[bb.center]) {
-        let w = rock_iso * Isometry2d::from_pos(*corner);
-        let s = get_world_to_screen(&client.camera, w.translation, dims);
-        if s.min_element() > 0.0 && s.y < dims.y && s.x < dims.x {
-            return true;
+    if let Some(camera) = client.scene_graph.camera() {
+        let dims = client.screen_dims;
+        let bb = chunk.bb();
+        for corner in bb.corners().iter().chain(&[bb.center]) {
+            let w = rock_iso * Isometry2d::from_pos(*corner);
+            let s = get_world_to_screen(&camera, w.translation, dims);
+            if s.min_element() > 0.0 && s.y < dims.y && s.x < dims.x {
+                return true;
+            }
         }
-    }
-    // TODO stopgap; implement better BB collisions
-    for corner in bb.corners().iter().chain(&[bb.center]) {
-        let corner = (corner - bb.center) * 0.5 + bb.center;
-        let w = rock_iso * Isometry2d::from_pos(corner);
-        let s = get_world_to_screen(&client.camera, w.translation, dims);
-        if s.min_element() > 0.0 && s.y < dims.y && s.x < dims.x {
-            return true;
+        // TODO stopgap; implement better BB collisions
+        for corner in bb.corners().iter().chain(&[bb.center]) {
+            let corner = (corner - bb.center) * 0.5 + bb.center;
+            let w = rock_iso * Isometry2d::from_pos(corner);
+            let s = get_world_to_screen(&camera, w.translation, dims);
+            if s.min_element() > 0.0 && s.y < dims.y && s.x < dims.x {
+                return true;
+            }
         }
     }
     false
@@ -1814,6 +1819,8 @@ fn draw_asteroid(
     world: &World,
     client: &ClientSpecificInfo,
 ) {
+    let camera = some_or_return!(client.scene_graph.camera());
+
     let spritesheet = assets
         .terrain_spritesheet
         .as_ref()
@@ -1831,12 +1838,12 @@ fn draw_asteroid(
 
     let mut chunks_to_draw = Vec::new();
 
-    if client.camera.zoom > 1.4 {
+    if camera.zoom > 1.4 {
         let camera_bb = AABB::from_arbitrary(Vec2::ZERO, client.screen_dims);
         let mut bounds: Option<(ChunkIndex, ChunkIndex)> = None;
 
         for corner in camera_bb.corners() {
-            let w = screen_to_world(&client.camera, corner, client.screen_dims);
+            let w = screen_to_world(&camera, corner, client.screen_dims);
             let wrt_asteroid = in_frame(rock.iso, w);
             let chunk_index = ChunkIndex(vfloor_f64(wrt_asteroid / TERRAIN_CHUNK_WIDTH_METERS));
 
@@ -1887,7 +1894,7 @@ fn draw_asteroid(
         draw_line(d, o, x, Color::RED);
         draw_line(d, o, y, Color::GREEN);
 
-        let t = 0.4 / client.camera.zoom;
+        let t = 0.4 / camera.zoom;
 
         for (chunk_index, id) in chunks_to_draw {
             let chunk = ok_or_continue!(world.terrain_chunks.try_get(id));
