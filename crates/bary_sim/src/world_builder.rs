@@ -31,6 +31,7 @@ enum WorldBuilderCommand {
     BindPlayerToGrid {
         username: String,
     },
+    LoadInstruction(TimedInstruction),
 }
 
 pub struct WorldBuilder {
@@ -312,6 +313,11 @@ impl WorldBuilder {
                 WorldBuilderCommand::BindPlayerToGrid { username } => {
                     if let Some(grid_id) = self.cursor_grid {
                         set_controlling_player(&mut world, grid_id, username);
+                    }
+                }
+                WorldBuilderCommand::LoadInstruction(ti) => {
+                    if let Some(grid_id) = self.cursor_grid {
+                        _ = enqueue_grid_instruction(&mut world, grid_id, ti);
                     }
                 }
             }

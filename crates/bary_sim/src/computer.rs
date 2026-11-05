@@ -12,7 +12,8 @@ pub enum Instruction {
     HoldAttitude(Angle),
     PointAt(Vec2),
     Drift,
-    DeltaV(Vec2),
+    DeltaV(DVec2),
+    HoldRelativePosition(Ent, DVec2),
 }
 
 impl Instruction {
@@ -58,6 +59,9 @@ impl std::fmt::Display for Instruction {
             }
             Instruction::DeltaV(dv) => {
                 write!(f, "DV {:0.2}", dv)
+            }
+            Instruction::HoldRelativePosition(id, rel) => {
+                write!(f, "REL {} {:0.2}", id, rel)
             }
         }
     }
@@ -114,6 +118,15 @@ impl std::fmt::Display for TimedInstruction {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum ControllerState {
+    Idle,
+    DeltaV {
+        initial_odometry: DVec2,
+        final_odometry: DVec2,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Computer {
     on: bool,
     status: MachineStatus,
@@ -124,6 +137,8 @@ pub struct Computer {
     vehicle_control: VehicleControl,
     prototype: Ent,
     instructions: VecDeque<TimedInstruction>,
+    thruster_odometry: DVec2,
+    controller_state: ControllerState,
 }
 
 impl Computer {
@@ -132,12 +147,14 @@ impl Computer {
             on: true,
             status: MachineStatus::Off,
             ticks_this_cycle: 0,
-            ticks_per_cycle: 5,
+            ticks_per_cycle: 1,
             fired_this_tick: false,
             ticks: 0,
             vehicle_control: VehicleControl::NULLOPT,
             prototype,
             instructions: VecDeque::new(),
+            thruster_odometry: DVec2::ZERO,
+            controller_state: ControllerState::Idle,
         }
     }
 
@@ -155,6 +172,10 @@ impl Computer {
 
     pub fn ticks(&self) -> u64 {
         self.ticks
+    }
+
+    pub fn odometry(&self) -> DVec2 {
+        self.thruster_odometry
     }
 
     pub fn get_current_control(&self) -> &VehicleControl {
@@ -250,7 +271,7 @@ impl Computer {
         }
     }
 
-    pub fn delta_v(&self) -> Option<Vec2> {
+    pub fn delta_v(&self) -> Option<DVec2> {
         let cmd = self.current_instruction()?;
         match cmd {
             Instruction::DeltaV(dv) => Some(dv),
@@ -258,11 +279,10 @@ impl Computer {
         }
     }
 
-    pub fn delta_v_mut(&mut self) -> Option<&mut Vec2> {
-        let cmd = self.current_instruction_mut()?;
-        match cmd {
-            Instruction::DeltaV(dv) => Some(dv),
-            _ => None,
+    pub fn report_dv(&mut self, applied_dv: DVec2) {
+        self.thruster_odometry += applied_dv;
+        if let Some(Instruction::DeltaV(delta_v)) = self.current_instruction_mut() {
+            *delta_v -= applied_dv;
         }
     }
 

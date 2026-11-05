@@ -191,6 +191,16 @@ pub fn sys_update_grid_acceleration_c(
     }
 }
 
+pub fn sys_report_acceleration_to_cpus(world: &mut World) {
+    for grid in world.grids.values() {
+        let cpu_id = some_or_continue!(grid.computers.first());
+        let cpu = ok_or_continue!(world.computers.try_get_mut(*cpu_id));
+        let dv_body = NOMINAL_DT * grid.body_frame_forces.tr() / grid.parts_mass().to_kg_f64();
+        let dv_world = rotate_f64(dv_body, grid.particle_location.rotation);
+        cpu.report_dv(dv_world);
+    }
+}
+
 pub fn update_grid_physical_props_by_id(
     grid_id: Ent,
     grids: &mut Components<VehicleGrid>,
@@ -611,6 +621,16 @@ pub fn set_cpu_instruction(world: &mut World, cpu_id: Ent, ti: TimedInstruction)
     Ok(())
 }
 
+pub fn enqueue_cpu_instruction(
+    world: &mut World,
+    cpu_id: Ent,
+    ti: TimedInstruction,
+) -> BaryResult<()> {
+    let cpu = world.computers.try_get_mut(cpu_id)?;
+    cpu.enqueue_instruction(ti);
+    Ok(())
+}
+
 pub fn set_grid_instruction(
     world: &mut World,
     grid_id: Ent,
@@ -618,6 +638,15 @@ pub fn set_grid_instruction(
 ) -> BaryResult<()> {
     let cpu_id = get_primary_cpu_id(grid_id, &world.grids)?;
     set_cpu_instruction(world, cpu_id, ti)
+}
+
+pub fn enqueue_grid_instruction(
+    world: &mut World,
+    grid_id: Ent,
+    ti: TimedInstruction,
+) -> BaryResult<()> {
+    let cpu_id = get_primary_cpu_id(grid_id, &world.grids)?;
+    enqueue_cpu_instruction(world, cpu_id, ti)
 }
 
 /// Turns the primary computer of the given grid on or off,
@@ -967,6 +996,7 @@ pub fn update_world_with_user_controls(
         sys_propagate_planets(&mut world.planets);
         sys_propagate_grid_rigid_bodies(&mut world.grids);
         sys_propagate_n_body_accel(&mut world.grids, &world.planets);
+        sys_report_acceleration_to_cpus(world);
     }
 
     {

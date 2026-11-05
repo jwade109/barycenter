@@ -438,7 +438,7 @@ fn make_gui(
             make_transmission_ui(&mut ui, &app.client.transmissions);
         }
         SceneGraph::Piloting(piloting) => {
-            make_piloting_ui(&mut ui, piloting, app.backend.world());
+            make_piloting_ui(&mut ui, piloting, app.backend.world(), &app.assets);
         }
         SceneGraph::Editor(editor) => {
             make_editor_ui(&mut ui, editor, app.backend.world());

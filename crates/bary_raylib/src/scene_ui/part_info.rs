@@ -102,6 +102,7 @@ fn computer_info_str(cpu: &Computer) -> String {
         format!("On: {}", cpu.is_on()),
         format!("\nStatus: {:?}", cpu.status()),
         format!("\nTicks: {}", cpu.ticks()),
+        format!("\nOdometry: {}", cpu.odometry()),
     ];
 
     for cmd in cpu.instructions() {

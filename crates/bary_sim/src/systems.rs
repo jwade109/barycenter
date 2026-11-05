@@ -283,8 +283,7 @@ pub fn sys_update_computers(
             let (ctrl, _status) = attitude_control_law(target.as_rad() as f64, &pid, &body);
 
             computer.set_current_control(ctrl);
-        } else if let Some(dv) = computer.delta_v_mut() {
-            *dv -= Vec2::splat(0.1);
+        } else if let Some(dv) = computer.delta_v() {
             let Ok(part) = parts.try_get(*cpu_id) else {
                 continue;
             };
@@ -299,9 +298,19 @@ pub fn sys_update_computers(
                 angle: grid.particle_location.rotation as f64,
                 angular_velocity: grid.velocity.rotation as f64,
             };
-            let (ctrl, _status) = attitude_control_law(target as f64, &pid, &body);
 
-            computer.set_current_control(ctrl);
+            let ctrl_law = || {
+                let (mut ctrl, _status) = attitude_control_law(target as f64, &pid, &body);
+
+                if ctrl.attitude.abs() < 0.01 && dv.length() > 2.0 {
+                    ctrl.plus_x.throttle = 0.3;
+                    ctrl.plus_x.use_rcs = true;
+                }
+
+                ctrl
+            };
+
+            computer.set_current_control(ctrl_law());
         }
     }
 }

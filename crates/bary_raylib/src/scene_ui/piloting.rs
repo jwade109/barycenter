@@ -1,8 +1,13 @@
-use crate::{PilotingState, Scene, UiBuilder};
+use crate::{Assets, PilotingState, Scene, UiBuilder, get_part_info_modal};
 use bary_core::prelude::{Rotation, Vec2};
 use bary_sim::{Instruction, World, WorldDelta};
 
-pub fn make_piloting_ui(ui: &mut UiBuilder, piloting: &mut PilotingState, world: &World) {
+pub fn make_piloting_ui(
+    ui: &mut UiBuilder,
+    piloting: &mut PilotingState,
+    world: &World,
+    assets: &Assets,
+) {
     let grid_id = piloting.ownship;
 
     ui.window_at("piloting", Vec2::splat(40.0), |ui| {
@@ -50,5 +55,11 @@ pub fn make_piloting_ui(ui: &mut UiBuilder, piloting: &mut PilotingState, world:
         ui.sep();
 
         ui.button(adrift, "Set Adrift");
+
+        ui.sep();
+
+        if let Some(cpu_id) = grid.computers.first() {
+            get_part_info_modal(ui, *cpu_id, world, assets, None);
+        }
     })
 }
