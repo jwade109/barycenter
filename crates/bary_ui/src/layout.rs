@@ -42,19 +42,22 @@ pub enum Size {
     Grow,
     Fit,
     Fixed(f32),
+    Atleast(f32),
 }
 
 impl Size {
     fn as_fixed(&self) -> Option<f32> {
         match self {
             Size::Fixed(s) => Some(*s),
+            Size::Atleast(s) => Some(*s),
             _ => None,
         }
     }
 
-    fn is_grow(&self) -> bool {
+    fn wants_to_grow(&self) -> bool {
         match self {
             Size::Grow => true,
+            Size::Atleast(_) => true,
             _ => false,
         }
     }
@@ -682,8 +685,8 @@ pub fn populate_grow_sizes<T: UiMsg>(root: &mut Node<T>) {
     if let Some(children) = root.children() {
         for c in children {
             let dim = match root.style.bary_ui {
-                LayoutDir::LeftToRight => c.desired_width.is_grow(),
-                LayoutDir::TopToBottom => c.desired_height.is_grow(),
+                LayoutDir::LeftToRight => c.desired_width.wants_to_grow(),
+                LayoutDir::TopToBottom => c.desired_height.wants_to_grow(),
             } as u32;
             n_to_grow += dim;
         }
@@ -719,10 +722,10 @@ pub fn populate_grow_sizes<T: UiMsg>(root: &mut Node<T>) {
 
     root.children_mut().iter_mut().for_each(|mut c| {
         c.iter_mut().for_each(|c| {
-            if c.desired_width.is_grow() {
+            if c.desired_width.wants_to_grow() {
                 c.calculated_width = Some(w);
             }
-            if c.desired_height.is_grow() {
+            if c.desired_height.wants_to_grow() {
                 c.calculated_height = Some(h);
             }
             populate_grow_sizes(c)

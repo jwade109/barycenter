@@ -2084,8 +2084,8 @@ fn draw_node(
                 (color, 1.0)
             };
             let aabb = aabb.scale_about_center(scale);
-            draw_ui_aabb(d, aabb, color.lerp(Color::BLACK, 0.6).alpha(0.4), true);
-            draw_ui_aabb(d, aabb, color, false);
+            draw_ui_aabb(d, aabb, color.lerp(Color::BLACK, 0.2).alpha(0.4), true);
+            // draw_ui_aabb(d, aabb, color, false);
 
             let p = glam_to_raylib(aabb.center);
             let font_size = UI_FONT_SIZE as f32 * scale;

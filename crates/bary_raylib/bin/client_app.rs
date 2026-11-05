@@ -508,6 +508,16 @@ fn server_thread(args: Args) {
 fn draw(mut d: &mut RaylibDrawHandle, app: &ClientApp, ui: Tree<UiMessage>) {
     d.clear_background(Color::BLACK);
 
+    if let Some(blob) = &app.assets.blob {
+        d.draw_texture_ex(
+            blob,
+            Vector2::new(100.0, 100.0),
+            0.0,
+            0.5,
+            Color::WHITE.alpha(0.3),
+        );
+    }
+
     if app.client.scene_graph.should_draw_world() {
         draw_world(app.backend.world(), &app.client, &app.assets, &mut d);
     }

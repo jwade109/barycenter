@@ -1,5 +1,5 @@
 use crate::{UI_FONT_SIZE, UiInteractionState, UiMessage, UiRef};
-use bary_core::prelude::Vec2;
+use bary_core::prelude::{BColor, Vec2};
 use bary_input::InputState;
 use bary_ui::*;
 use rand::random_range;
@@ -115,9 +115,9 @@ impl UiBuilder {
         let s = s.into();
         let dims = self.font.measure_text(&s, self.font_size, 0.0);
         let w = dims.x + 36.0;
-        let h = dims.y + 7.0;
+        let h = dims.y + 14.0;
         let id_salt = format!("button_{}", s.replace(" ", "_"));
-        self.add_to_active(Node::button(s, msg, w, h, id_salt));
+        self.add_to_active(Node::button(s, msg, Size::Atleast(w), h, id_salt));
     }
 
     pub fn sprite(&mut self, s: impl Into<String>, texture: &Texture2D) {

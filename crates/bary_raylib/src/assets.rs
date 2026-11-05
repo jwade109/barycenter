@@ -18,6 +18,7 @@ pub struct Assets {
     pub animation: MaybeTexture,
     pub terrain_spritesheet: MaybeTexture,
     pub pipe_tilemap: MaybeTexture,
+    pub blob: MaybeTexture,
     pub ship_names: Vec<String>,
     pub keybinds: GlobalKeybinds,
 }
@@ -100,5 +101,10 @@ pub fn load_assets(assets: &mut Assets, raylib: &mut Raylib) {
     assets.pipe_tilemap = raylib
         .handle
         .load_texture(&raylib.thread, "assets/pipe.png")
+        .ok();
+
+    assets.blob = raylib
+        .handle
+        .load_texture(&raylib.thread, "assets/lado.png")
         .ok();
 }
