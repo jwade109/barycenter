@@ -106,19 +106,19 @@ pub fn zero_gravity_velocity_control_law(
     if vel_error.length() > 0.05 && vel_error.length() < 6.0 {
         let body_frame_error = rotate_f64(vel_error, -body.angle);
         if body_frame_error.x < -0.02 {
-            ctrl.plus_x.throttle = 1.0;
+            ctrl.plus_x.throttle = 0.03;
             ctrl.plus_x.use_rcs = true;
         }
         if body_frame_error.x > 0.02 {
-            ctrl.neg_x.throttle = 1.0;
+            ctrl.neg_x.throttle = 0.03;
             ctrl.neg_x.use_rcs = true;
         }
         if body_frame_error.y > 0.02 {
-            ctrl.plus_y.throttle = 1.0;
+            ctrl.plus_y.throttle = 0.03;
             ctrl.plus_y.use_rcs = true;
         }
         if body_frame_error.y < -0.02 {
-            ctrl.neg_y.throttle = 1.0;
+            ctrl.neg_y.throttle = 0.03;
             ctrl.neg_y.use_rcs = true;
         }
     }

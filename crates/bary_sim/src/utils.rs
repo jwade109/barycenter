@@ -70,10 +70,10 @@ pub fn get_grid_physical_props(
 /// Sets the state of a given thruster.
 /// Does not modify the corresponding grid's acceleration,
 /// but returns the ID of the grid that the thruster belongs to.
-pub fn set_thruster_state(thruster_id: Ent, world: &mut World, new_state: bool) -> BaryResult<Ent> {
+pub fn set_thruster_state(thruster_id: Ent, world: &mut World, throttle: f32) -> BaryResult<Ent> {
     let part = world.parts.try_get(thruster_id)?;
     let thruster = world.thrusters.try_get_mut(thruster_id)?;
-    thruster.set_state(new_state, None);
+    thruster.set_state(throttle, None);
     Ok(part.grid_id)
 }
 
@@ -166,7 +166,7 @@ pub fn update_single_grid_acceleration(
         let center_of_thrust = part.region.center_isometry().translation;
         let rotation = part.region.rot();
         let wrench = body_frame_wrench(
-            thruster.thrust(),
+            thruster.current_thrust(),
             center_of_thrust,
             rotation,
             grid.center_of_mass,
@@ -610,7 +610,7 @@ pub fn set_cpu_state(
 pub fn set_grid_as_drifting(world: &mut World, cpu_id: Ent) -> BaryResult<()> {
     let part = world.parts.try_get(cpu_id)?;
     set_cpu_state(&mut world.computers, cpu_id, false)?;
-    set_all_thrusters(part.grid_id, false, world)?;
+    set_all_thrusters(part.grid_id, 0.0, world)?;
     Ok(())
 }
 
@@ -1414,7 +1414,8 @@ pub fn get_sum_linear_forces(
     for part_id in &grid.thrusters {
         let thruster = thrusters.try_get(*part_id)?;
         let part = parts.try_get(*part_id)?;
-        let thrust = rotate(Vec2::X, part.region.rot().to_angle() as f32) * thruster.thrust();
+        let thrust =
+            rotate(Vec2::X, part.region.rot().to_angle() as f32) * thruster.current_thrust();
         sum += thrust;
     }
     Ok(sum)

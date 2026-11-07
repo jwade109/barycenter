@@ -195,8 +195,8 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             set_machine_state(world, machine_id, state)?;
             Ok(())
         }
-        WorldDelta::SetThrusterState(thruster_id, state) => {
-            let grid_id = set_thruster_state(thruster_id, world, state)?;
+        WorldDelta::SetThrusterThrottle(thruster_id, throttle) => {
+            let grid_id = set_thruster_state(thruster_id, world, throttle)?;
             update_single_grid_acceleration(
                 grid_id,
                 &mut world.grids,

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Thruster {
-    is_on: bool,
+    throttle: f32,
     is_rcs: bool,
     thrust: f32,
     /// the entity that last modified this thruster's state
@@ -14,7 +14,7 @@ pub struct Thruster {
 impl Thruster {
     pub fn from_proto(proto: &ThrusterPrototype) -> Self {
         Thruster {
-            is_on: false,
+            throttle: 0.0,
             is_rcs: proto.is_rcs,
             // TODO(gross)
             thrust: proto.thrust as f32,
@@ -24,7 +24,7 @@ impl Thruster {
 
     pub fn rcs(thrust: f32) -> Self {
         Self {
-            is_on: false,
+            throttle: 0.0,
             is_rcs: true,
             thrust,
             last_controlled_by: None,
@@ -33,7 +33,7 @@ impl Thruster {
 
     pub fn linear(thrust: f32) -> Self {
         Self {
-            is_on: false,
+            throttle: 0.0,
             is_rcs: false,
             thrust,
             last_controlled_by: None,
@@ -45,16 +45,25 @@ impl Thruster {
     }
 
     pub fn is_on(&self) -> bool {
-        self.is_on
+        self.throttle > 0.0
     }
 
-    pub fn thrust(&self) -> f32 {
+    pub fn throttle(&self) -> f32 {
+        self.throttle
+    }
+
+    pub fn current_thrust(&self) -> f32 {
+        self.thrust * self.throttle
+    }
+
+    pub fn max_thrust(&self) -> f32 {
         self.thrust
     }
 
-    pub fn set_state(&mut self, is_on: bool, identity: Option<Ent>) -> bool {
-        let changed = self.is_on == is_on;
-        self.is_on = is_on;
+    pub fn set_state(&mut self, throttle: f32, identity: Option<Ent>) -> bool {
+        let throttle = throttle.clamp(0.0, 1.0);
+        let changed = self.throttle == throttle;
+        self.throttle = throttle;
         self.last_controlled_by = identity;
         changed
     }

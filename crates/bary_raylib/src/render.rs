@@ -795,6 +795,8 @@ fn draw_selected_grid_info(
         .map(|s| format!("Controlled by {s}"))
         .unwrap_or_default();
 
+    let rpm_label = format!("{:0.1} deg/s", grid.velocity.rotation * 2.0 * PI_64);
+
     let hx = screen_dims.x / 2.0;
 
     let labels = [
@@ -805,6 +807,7 @@ fn draw_selected_grid_info(
         (pos_label, hx, screen_dims.y - 50.0),
         (vel_label, hx + 300.0, screen_dims.y - 50.0),
         (acc_label, hx - 300.0, screen_dims.y - 50.0),
+        (rpm_label, hx, screen_dims.y - 80.0),
     ];
 
     let font = assets.ui_font();
@@ -852,7 +855,7 @@ pub fn draw_thruster_classification(
             let thruster = ok_or_continue!(thrusters.try_get(*thruster_id));
             let part_iso = part.region.center_isometry();
             let wrench = body_frame_wrench(
-                thruster.thrust(),
+                thruster.max_thrust(),
                 part_iso.translation,
                 part.region.rot(),
                 grid.center_of_mass,
@@ -1632,7 +1635,7 @@ fn draw_thruster_plumes(
         let mut iso = part_isometry(origin, part.region);
         let mut dims = part.region.part_aligned_dims().to_meters().as_dvec2();
         let p = iso.translation + iso.local_y() * dims.y / 2.0;
-        dims.x *= 2.0;
+        dims.x *= 2.0 * t.throttle() as f64;
         let offset = iso.local_x() * dims.x;
         iso.translation -= offset;
 

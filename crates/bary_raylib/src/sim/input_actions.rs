@@ -221,9 +221,7 @@ pub fn process_event(world: &World, client: &mut ClientSpecificInfo, on_gui: boo
                         Button::Left => {
                             select_hovered_grid_loc_on_click(client);
                         }
-                        Button::Right => (),
-                        Button::Middle => (),
-                        Button::Unknown(_) => (),
+                        _ => (),
                     }
                 }
             }

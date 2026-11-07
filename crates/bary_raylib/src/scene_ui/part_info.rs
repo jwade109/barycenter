@@ -34,7 +34,7 @@ pub fn get_part_info_modal(
     }
     if let Ok(thruster) = world.thrusters.try_get(part_id) {
         let s = format!("{:#?}", thruster);
-        let msg = WorldDelta::SetThrusterState(part_id, !thruster.is_on());
+        let msg = WorldDelta::SetThrusterThrottle(part_id, 1.0 - thruster.throttle());
         ui.button(msg, turn_on_off_text(thruster.is_on()));
         ui.text(s);
     }
@@ -102,7 +102,10 @@ fn computer_info_str(cpu: &Computer) -> String {
         format!("On: {}", cpu.is_on()),
         format!("\nStatus: {:?}", cpu.status()),
         format!("\nTicks: {}", cpu.ticks()),
-        format!("\nOdometry: {}", cpu.odometry()),
+        format!("\nOdometry: {:0.1}", cpu.odometry()),
+        cpu.current_instruction()
+            .map(|ti| format!("\n{}", ti))
+            .unwrap_or_default(),
     ];
 
     for cmd in cpu.instructions() {

@@ -90,7 +90,7 @@ pub enum WorldDelta {
     RenameGrid(Ent, String),
     SetGridBlueprint(Ent, Option<BlueprintId>),
     SetMachineState(Ent, bool),
-    SetThrusterState(Ent, bool),
+    SetThrusterThrottle(Ent, f32),
     SetComputerState(Ent, bool),
     SetGridInstruction(Ent, TimedInstruction),
 }

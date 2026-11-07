@@ -1,7 +1,6 @@
 use crate::Planet;
 use crate::*;
 use bary_core::prelude::*;
-use bary_orbital::*;
 use early_returns::some_or_continue;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -114,7 +113,7 @@ pub fn sys_update_thrusters(
             let center_of_thrust = isometry.translation;
             let rotation = part.region.rot();
             let wrench = body_frame_wrench(
-                thruster.thrust(),
+                thruster.current_thrust(),
                 center_of_thrust,
                 rotation,
                 grid.center_of_mass,
@@ -125,9 +124,15 @@ pub fn sys_update_thrusters(
                 let is_torque =
                     can_torque && wrench.rotation.signum() as f64 == ctrl.attitude.signum();
                 let is_linear = tac.throttle > 0.0 && tac.use_rcs;
-                thruster.set_state(is_linear || is_torque, Some(*cpu_id))
+                let throttle = if is_linear || is_torque {
+                    tac.throttle.max(ctrl.attitude.abs() as f32)
+                } else {
+                    0.0
+                };
+                thruster.set_state(throttle, Some(*cpu_id))
             } else {
-                thruster.set_state(!tac.use_rcs && tac.throttle > 0.0, Some(*cpu_id))
+                let throttle = if !tac.use_rcs { tac.throttle } else { 0.0 };
+                thruster.set_state(throttle, Some(*cpu_id))
             };
 
             thruster_changed |= changed;
@@ -229,89 +234,16 @@ pub fn sys_update_computers(
     grids: &Components<VehicleGrid>,
 ) {
     for (cpu_id, computer) in computers.iter_mut() {
-        computer.tick_forward();
-
-        if !computer.fired_this_tick() {
+        let Ok(part) = parts.try_get(*cpu_id) else {
             continue;
-        }
+        };
 
-        if let Some(ctrl) = computer.control_from_instruction() {
-            computer.set_current_control(ctrl);
-        } else if let Some(target_pose) = computer.current_waypoint() {
-            let Ok(part) = parts.try_get(*cpu_id) else {
-                continue;
-            };
+        let Ok(grid) = grids.try_get(part.grid_id) else {
+            continue;
+        };
 
-            let Ok(grid) = grids.try_get(part.grid_id) else {
-                continue;
-            };
-
-            let pose = grid.particle_location;
-
-            let target = PV::from_f64(target_pose.translation, Vec2::ZERO);
-            let actual = PV::from_f64(pose.translation, grid.velocity.translation);
-
-            let body = RigidBody {
-                pv: actual,
-                angle: pose.rotation as f64,
-                angular_velocity: grid.velocity.rotation as f64,
-            };
-
-            let (ctrl, _status) =
-                position_hold_control_law(target, target_pose.rotation as f64, &body, DVec2::ZERO);
-
-            computer.set_current_control(ctrl);
-        } else if let Some(target) = computer.current_angle() {
-            let Ok(part) = parts.try_get(*cpu_id) else {
-                continue;
-            };
-
-            let Ok(grid) = grids.try_get(part.grid_id) else {
-                continue;
-            };
-
-            let actual = Angle::radians(grid.particle_location.rotation);
-
-            let body = RigidBody {
-                pv: PV::ZERO,
-                angle: actual.as_rad() as f64,
-                angular_velocity: grid.velocity.rotation as f64,
-            };
-
-            let pid = PDCtrl::new(20.0, 50.0);
-
-            let (ctrl, _status) = attitude_control_law(target.as_rad() as f64, &pid, &body);
-
-            computer.set_current_control(ctrl);
-        } else if let Some(dv) = computer.delta_v() {
-            let Ok(part) = parts.try_get(*cpu_id) else {
-                continue;
-            };
-
-            let Ok(grid) = grids.try_get(part.grid_id) else {
-                continue;
-            };
-            let target = dv.to_angle();
-            let pid = PDCtrl::new(20.0, 50.0);
-            let body = RigidBody {
-                pv: PV::ZERO,
-                angle: grid.particle_location.rotation as f64,
-                angular_velocity: grid.velocity.rotation as f64,
-            };
-
-            let ctrl_law = || {
-                let (mut ctrl, _status) = attitude_control_law(target as f64, &pid, &body);
-
-                if ctrl.attitude.abs() < 0.01 && dv.length() > 2.0 {
-                    ctrl.plus_x.throttle = 0.3;
-                    ctrl.plus_x.use_rcs = true;
-                }
-
-                ctrl
-            };
-
-            computer.set_current_control(ctrl_law());
-        }
+        computer.update_grid_info(grid);
+        computer.update();
     }
 }
 
@@ -338,11 +270,11 @@ pub fn apparent_datetime(ticks: u64) -> NaiveDateTime {
     epoch + dur
 }
 
-pub fn set_all_thrusters(grid_id: Ent, new_state: bool, world: &mut World) -> BaryResult<()> {
+pub fn set_all_thrusters(grid_id: Ent, throttle: f32, world: &mut World) -> BaryResult<()> {
     let grid = world.grids.try_get(grid_id)?;
     for thruster_id in &grid.thrusters {
         let thruster = world.thrusters.try_get_mut(*thruster_id)?;
-        thruster.set_state(new_state, None);
+        thruster.set_state(throttle, None);
     }
     update_single_grid_acceleration(
         grid_id,
@@ -728,8 +660,8 @@ mod tests {
         assert_eq!(a_id, expected_id + 1);
         assert_eq!(b_id, expected_id + 2);
 
-        let r1 = set_thruster_state(a_id, &mut world, true);
-        let r2 = set_thruster_state(b_id, &mut world, true);
+        let r1 = set_thruster_state(a_id, &mut world, 1.0);
+        let r2 = set_thruster_state(b_id, &mut world, 1.0);
 
         update_single_grid_acceleration(
             grid_id,
@@ -755,8 +687,8 @@ mod tests {
             DVec2::new(400000.0, 320000.0)
         );
 
-        let r1 = set_thruster_state(a_id, &mut world, false);
-        let r2 = set_thruster_state(b_id, &mut world, true);
+        let r1 = set_thruster_state(a_id, &mut world, 0.0);
+        let r2 = set_thruster_state(b_id, &mut world, 1.0);
 
         update_single_grid_acceleration(
             grid_id,
@@ -776,8 +708,8 @@ mod tests {
             DVec2::new(0.0, 320000.0)
         );
 
-        let r1 = set_thruster_state(a_id, &mut world, false);
-        let r2 = set_thruster_state(b_id, &mut world, false);
+        let r1 = set_thruster_state(a_id, &mut world, 0.0);
+        let r2 = set_thruster_state(b_id, &mut world, 0.0);
 
         update_single_grid_acceleration(
             grid_id,
@@ -912,7 +844,7 @@ mod tests {
         assert_eq!(com, expected_com);
 
         // obviously, turn the main thruster on
-        let r = set_thruster_state(thruster_id, &mut world, true);
+        let r = set_thruster_state(thruster_id, &mut world, 1.0);
         assert_eq!(r, Ok(grid_id));
 
         update_single_grid_acceleration(
@@ -1000,7 +932,7 @@ mod tests {
 
         let thruster_id = insert_part(grid_id, &mut world, &instance, true).unwrap();
 
-        _ = set_thruster_state(thruster_id, &mut world, true);
+        _ = set_thruster_state(thruster_id, &mut world, 1.0);
 
         update_single_grid_acceleration(
             grid_id,
