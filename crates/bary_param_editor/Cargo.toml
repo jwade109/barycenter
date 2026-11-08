@@ -1,0 +1,10 @@
+[package]
+name = "bary_param_editor"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+
+[dependencies]
+eframe = "0.33.3"
+egui = "0.33.3"
+bary_ipc = { path = "../bary_ipc" }

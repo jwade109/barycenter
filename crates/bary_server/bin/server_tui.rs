@@ -21,6 +21,8 @@ pub struct Args {
     server_port: u16,
     #[arg(long, short)]
     savefile: Option<String>,
+    #[arg(long)]
+    use_tui: bool,
 }
 
 struct List {
@@ -118,6 +120,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(path) = args.savefile {
         app.load_world(path);
+    }
+
+    if !args.use_tui {
+        simple_logger::init_with_level(log::Level::Debug).unwrap();
+
+        loop {
+            app.update();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
 
     ratatui::run(

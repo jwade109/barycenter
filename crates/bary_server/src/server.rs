@@ -84,6 +84,7 @@ pub struct BaryServer {
     md5_sync_timer: WallTimer,
     queued_deltas: Vec<WorldDelta>,
     transactions: HashMap<ClientId, PaginatedTransaction>,
+    params: BTreeMap<String, ParamValue>,
 }
 
 impl BaryServer {
@@ -103,6 +104,11 @@ impl BaryServer {
             md5_sync_timer: WallTimer::hz(2),
             queued_deltas: Vec::new(),
             transactions: HashMap::new(),
+            params: BTreeMap::from([
+                ("foo.bar".to_string(), ParamValue::Float(34.0)),
+                ("foo.baz".to_string(), ParamValue::Integer(17)),
+                ("foo.hoo".to_string(), ParamValue::String("hello".into())),
+            ]),
         })
     }
 
@@ -146,15 +152,22 @@ impl BaryServer {
         self.node.broadcast(msg);
     }
 
-    fn send_tlm_ack(&mut self) {
-        self.node.broadcast(ServerMessage::Ack);
+    fn send_param_update(&mut self, id: ClientId) {
+        let params = ServerMessage::Parameters(self.params.clone());
+        self.node.send(id, params);
     }
 
+    fn send_tlm_ack(&mut self, id: ClientId) {
+        self.node.send(id, ServerMessage::Ack);
+    }
+
+    #[allow(unused)]
     fn send_tlm_server_info(&mut self) {
         self.node
             .broadcast(ServerMessage::ServerStatistics(self.get_statistics()));
     }
 
+    #[allow(unused)]
     fn send_md5_sync_packet(&mut self) {
         let frame = sync_frame_from_world(&self.world);
         let msg = ServerMessage::SyncFrame(frame);
@@ -193,7 +206,7 @@ impl BaryServer {
 
     fn on_accept_message(&mut self, client_id: ClientId, msg: ClientMessage) {
         debug!("Got a command: {:?}", msg);
-        self.send_tlm_ack();
+        self.send_tlm_ack(client_id);
 
         match msg {
             ClientMessage::Introduction { username } => {
@@ -226,8 +239,23 @@ impl BaryServer {
             ClientMessage::LoadSave(path) => {
                 self.load_world(path);
             }
-            ClientMessage::BeginAsyncWorldDownload => self.begin_async_world_download(client_id),
-            _ => self.on_unsupported_message(),
+            ClientMessage::BeginAsyncWorldDownload => {
+                self.begin_async_world_download(client_id);
+            }
+            ClientMessage::SetParam(name, value) => {
+                self.params.insert(name, value);
+                self.send_tlm_ack(client_id);
+            }
+            ClientMessage::PushParams(params) => {
+                self.params = params;
+            }
+            ClientMessage::RequestParams => {
+                self.send_param_update(client_id);
+            }
+            e => {
+                let e = format!("{e:?}");
+                self.on_unsupported_message(e);
+            }
         }
     }
 
@@ -264,9 +292,9 @@ impl BaryServer {
         info!("Started async world download for {client}");
     }
 
-    fn on_unsupported_message(&mut self) {
+    fn on_unsupported_message(&mut self, desc: String) {
         warn!("Unsupported message type!");
-        self.node.broadcast(ServerMessage::Unsupported);
+        self.node.broadcast(ServerMessage::Unsupported(desc));
     }
 
     pub fn load_world(&mut self, path: impl AsRef<Path>) {
@@ -374,9 +402,9 @@ impl BaryServer {
         }
 
         if self.md5_sync_timer.tick() {
-            self.send_md5_sync_packet();
+            // self.send_md5_sync_packet();
             self.send_driver_packet();
-            self.send_tlm_server_info();
+            // self.send_tlm_server_info();
         }
 
         for msg in self.node.update() {

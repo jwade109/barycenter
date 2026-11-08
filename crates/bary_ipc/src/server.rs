@@ -147,8 +147,6 @@ impl ServerNode {
 
 #[cfg(test)]
 mod tests {
-    use bary_core::prelude::TableIdent;
-
     use super::super::*;
     use std::time::Duration;
 
