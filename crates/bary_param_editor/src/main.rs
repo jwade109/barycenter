@@ -1,12 +1,12 @@
-use bary_ipc::{ClientMessage, ClientNode, ParamValue, ServerMessage};
+use bary_core::prelude::ParamValue;
+use bary_ipc::{ClientMessage, ClientNode, ServerMessage};
 use eframe::egui;
-use parameters::DynamicParams;
+use log::{Level, info};
 use std::collections::BTreeMap;
 use std::sync::mpsc::*;
 use std::time::Duration;
 
 mod backend_handle;
-mod parameters;
 
 struct ParamEditorApp {
     sender: Sender<ClientMessage>,
@@ -77,10 +77,14 @@ impl ParamEditorApp {
                 // explicitly ignoring these messages
             }
             ServerMessage::Parameters(params) => {
+                info!("Got new parameters: {params:?}");
                 for (key, value) in params {
                     self.text_fields
                         .entry(key)
-                        .and_modify(|f| f.value = value.clone())
+                        .and_modify(|f| {
+                            f.value = value.clone();
+                            f.field = value.to_string();
+                        })
                         .or_insert(ParameterField {
                             field: value.to_string(),
                             value: value,
@@ -89,7 +93,7 @@ impl ParamEditorApp {
                 }
             }
             e => {
-                println!("{e:?}");
+                info!("{e:?}");
             }
         }
     }
@@ -139,7 +143,7 @@ impl eframe::App for ParamEditorApp {
             ui.separator();
 
             if let Some((key, val)) = response {
-                let msg = ClientMessage::SetParam(key, val);
+                let msg = ClientMessage::SetParameters([(key, val)].into());
                 _ = self.sender.send(msg);
             }
 
@@ -152,14 +156,15 @@ impl eframe::App for ParamEditorApp {
                 for (key, field) in &self.text_fields {
                     params.insert(key.clone(), field.value.clone());
                 }
-
-                _ = self.sender.send(ClientMessage::PushParams(params));
+                _ = self.sender.send(ClientMessage::SetParameters(params));
             }
         });
     }
 }
 
 fn main() -> eframe::Result {
+    _ = simple_logger::init_with_level(Level::Info);
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_maximized(true)

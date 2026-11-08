@@ -3,6 +3,7 @@ pub use crate::components::*;
 pub use crate::entity::*;
 pub use crate::grid_location::*;
 pub use crate::math::*;
+pub use crate::params::*;
 pub use crate::part_layer::*;
 pub use crate::pid::*;
 pub use crate::plants::Plant;

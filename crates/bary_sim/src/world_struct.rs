@@ -38,6 +38,8 @@ pub struct World {
 
     // TODO might move this to assets.
     pub ship_names: Vec<String>,
+
+    pub parameters: DynamicParams,
 }
 
 impl std::fmt::Debug for World {

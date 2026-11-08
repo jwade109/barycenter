@@ -992,7 +992,7 @@ pub fn update_world_with_user_controls(
 
         world.grid_acceleration_updates += dirty_set.len() as u64;
         sys_update_grid_acceleration_c(dirty_set, &mut world.grids, &world.thrusters, &world.parts);
-        sys_update_computers(&mut world.computers, &world.parts, &world.grids);
+        sys_update_computers(world);
         sys_propagate_planets(&mut world.planets);
         sys_propagate_grid_rigid_bodies(&mut world.grids);
         sys_propagate_n_body_accel(&mut world.grids, &world.planets);

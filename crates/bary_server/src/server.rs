@@ -84,7 +84,6 @@ pub struct BaryServer {
     md5_sync_timer: WallTimer,
     queued_deltas: Vec<WorldDelta>,
     transactions: HashMap<ClientId, PaginatedTransaction>,
-    params: BTreeMap<String, ParamValue>,
 }
 
 impl BaryServer {
@@ -104,11 +103,6 @@ impl BaryServer {
             md5_sync_timer: WallTimer::hz(2),
             queued_deltas: Vec::new(),
             transactions: HashMap::new(),
-            params: BTreeMap::from([
-                ("foo.bar".to_string(), ParamValue::Float(34.0)),
-                ("foo.baz".to_string(), ParamValue::Integer(17)),
-                ("foo.hoo".to_string(), ParamValue::String("hello".into())),
-            ]),
         })
     }
 
@@ -153,7 +147,7 @@ impl BaryServer {
     }
 
     fn send_param_update(&mut self, id: ClientId) {
-        let params = ServerMessage::Parameters(self.params.clone());
+        let params = ServerMessage::Parameters(self.world.parameters.inner().clone());
         self.node.send(id, params);
     }
 
@@ -242,12 +236,10 @@ impl BaryServer {
             ClientMessage::BeginAsyncWorldDownload => {
                 self.begin_async_world_download(client_id);
             }
-            ClientMessage::SetParam(name, value) => {
-                self.params.insert(name, value);
-                self.send_tlm_ack(client_id);
-            }
-            ClientMessage::PushParams(params) => {
-                self.params = params;
+            ClientMessage::SetParameters(params) => {
+                for (k, v) in params {
+                    self.world.parameters.insert(k, v);
+                }
             }
             ClientMessage::RequestParams => {
                 self.send_param_update(client_id);
@@ -314,8 +306,7 @@ impl BaryServer {
     }
 
     fn on_accept_ping(&mut self, id: ClientId) -> Option<()> {
-        self.ensure_client_is_connected(id)?;
-        self.node.broadcast(ServerMessage::Pong);
+        self.node.send(id, ServerMessage::Pong);
         Some(())
     }
 

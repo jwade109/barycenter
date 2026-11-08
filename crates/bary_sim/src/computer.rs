@@ -6,7 +6,7 @@ use bary_orbital::*;
 use log::info;
 use serde::{Deserialize, Serialize};
 
-use crate::VehicleGrid;
+use crate::{DynamicParams, VehicleGrid};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum Instruction {
@@ -279,7 +279,7 @@ impl Computer {
         self.instructions.iter()
     }
 
-    fn tick(&mut self) {
+    fn tick(&mut self, params: &mut DynamicParams) {
         let Some(info) = self.grid_info else {
             return;
         };
@@ -295,7 +295,7 @@ impl Computer {
         if let Some(ctrl) = self.control_from_instruction() {
             self.set_current_control(ctrl);
         } else if let Some(target_pose) = self.current_waypoint() {
-            self.do_waypoint_navigation(info.pos, info.vel, target_pose);
+            self.do_waypoint_navigation(info.pos, info.vel, target_pose, params);
         } else if let Some(target) = self.current_angle() {
             let actual = Angle::radians(info.pos.rotation);
 
@@ -313,7 +313,7 @@ impl Computer {
         }
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self, params: &mut DynamicParams) {
         self.status = match self.on {
             true => MachineStatus::Running,
             false => MachineStatus::Off,
@@ -325,7 +325,7 @@ impl Computer {
             if self.fired_this_tick {
                 self.ticks_this_cycle = 0;
                 self.ticks += 1;
-                self.tick();
+                self.tick(params);
             }
         } else {
             self.fired_this_tick = false;
@@ -369,7 +369,13 @@ impl Computer {
         }
     }
 
-    fn do_waypoint_navigation(&mut self, ego: Isometry2d, ego_vel: Isometry2d, target: Isometry2d) {
+    fn do_waypoint_navigation(
+        &mut self,
+        ego: Isometry2d,
+        ego_vel: Isometry2d,
+        target: Isometry2d,
+        params: &mut DynamicParams,
+    ) {
         let target_pv = PV::from_f64(target.translation, Vec2::ZERO);
         let actual_pv = PV::from_f64(ego.translation, ego_vel.translation);
 
@@ -379,8 +385,13 @@ impl Computer {
             angular_velocity: ego_vel.rotation as f64,
         };
 
+        let attitude = PDCtrl::new(
+            params.get_float("attitude_kp", 50.0),
+            params.get_float("attitude_kd", 250.0),
+        );
+
         let (ctrl, _status) =
-            position_hold_control_law(target_pv, target.rotation, &body, DVec2::ZERO);
+            position_hold_control_law(target_pv, target.rotation, &body, DVec2::ZERO, &attitude);
 
         self.set_current_control(ctrl);
     }

@@ -794,9 +794,12 @@ dependencies = [
 name = "bary_param_editor"
 version = "0.1.0"
 dependencies = [
+ "bary_core",
  "bary_ipc",
  "eframe",
  "egui",
+ "log",
+ "simple_logger",
 ]
 
 [[package]]

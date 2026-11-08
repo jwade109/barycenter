@@ -8,3 +8,6 @@ rust-version.workspace = true
 eframe = "0.33.3"
 egui = "0.33.3"
 bary_ipc = { path = "../bary_ipc" }
+log = "0.4.31"
+simple_logger = "5.2.0"
+bary_core = { path = "../bary_core" }

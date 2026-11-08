@@ -1,6 +1,8 @@
-use bary_ipc::ParamValue;
+use bary_core::prelude::ParamValue;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct DynamicParams {
     inner: BTreeMap<String, ParamValue>,
 }
@@ -14,6 +16,10 @@ impl DynamicParams {
 
     pub fn inner(&self) -> &BTreeMap<String, ParamValue> {
         &self.inner
+    }
+
+    pub fn insert(&mut self, key: String, value: ParamValue) {
+        self.inner.insert(key, value);
     }
 
     pub fn get_int(&mut self, key: &str, default: i64) -> i64 {

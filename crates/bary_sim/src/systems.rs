@@ -228,22 +228,18 @@ pub fn get_excavator_tiles(
 
 /// Updates computers according to their current
 /// directive and the thruster state of the parent vehicle.
-pub fn sys_update_computers(
-    computers: &mut Components<Computer>,
-    parts: &Components<Part>,
-    grids: &Components<VehicleGrid>,
-) {
-    for (cpu_id, computer) in computers.iter_mut() {
-        let Ok(part) = parts.try_get(*cpu_id) else {
+pub fn sys_update_computers(world: &mut World) {
+    for (cpu_id, computer) in world.computers.iter_mut() {
+        let Ok(part) = world.parts.try_get(*cpu_id) else {
             continue;
         };
 
-        let Ok(grid) = grids.try_get(part.grid_id) else {
+        let Ok(grid) = world.grids.try_get(part.grid_id) else {
             continue;
         };
 
         computer.update_grid_info(grid);
-        computer.update();
+        computer.update(&mut world.parameters);
     }
 }
 
