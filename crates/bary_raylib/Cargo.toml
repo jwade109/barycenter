@@ -48,6 +48,10 @@ path = "bin/steam.rs"
 name = "traj"
 path = "bin/traj.rs"
 
+[[bin]]
+name = "keybinds_test"
+path = "bin/keybinds_test.rs"
+
 [dev-dependencies]
 criterion = "0.5.1"
 
