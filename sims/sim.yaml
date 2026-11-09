@@ -1,16 +1,16 @@
 ship_name: bellerophon
 instructions:
+  # - instruction: !HoldAttitude 0.3
+  #   duration: 1000
+
   - instruction: !HoldPosition
-      translation: [300, 100]
+      translation: [30, 10]
       rotation: 0
-    duration: 1000
+    duration: 50000
 
-  - instruction: !HoldAttitude 0.3
-    duration: 1000
-
-  - instruction: !PointAt
-     - 300
-     - 100
+  # - instruction: !PointAt
+  #    - 300
+  #    - 100
   
   # - instruction: !HoldPosition
   #     translation: [100, 600]
@@ -24,5 +24,5 @@ instructions:
   #     translation: [300, 600]
   #     rotation: 0
 
-steps: 3000
-ticks_per_epoch: 10
+steps: 30
+ticks_per_epoch: 3000

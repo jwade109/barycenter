@@ -40,19 +40,19 @@ impl MultiplayerBackend {
         let tlm = ClientTelemetry {
             ticks: self.world.ticks,
         };
-        self.node.send(ClientMessage::ClientTelemetry(tlm));
+        self.node.send(ServerRequest::ClientTelemetry(tlm));
     }
 
     fn send_ping(&mut self) {
-        self.node.send(ClientMessage::Ping);
+        self.node.send(ServerRequest::Ping);
     }
 
     fn set_sim_speed(&mut self, speed: u32) {
-        self.node.send(ClientMessage::SetSimSpeed(speed));
+        self.node.send(ServerRequest::SetSimSpeed(speed));
     }
 
     fn load_save(&mut self, path: impl Into<String>) {
-        self.node.send(ClientMessage::LoadSave(path.into()));
+        self.node.send(ServerRequest::LoadSave(path.into()));
     }
 
     fn on_driver_packet(&mut self, ticks: u64, deltas: Vec<WorldDelta>) {
@@ -72,7 +72,7 @@ impl MultiplayerBackend {
     }
 
     fn on_rcv_who_goes_there(&mut self) {
-        self.node.send(ClientMessage::Introduction {
+        self.node.send(ServerRequest::Introduction {
             username: self.username.clone(),
         });
     }
@@ -83,7 +83,7 @@ impl MultiplayerBackend {
     }
 
     fn on_rcv_have_new_save(&mut self) {
-        self.node.send(ClientMessage::BeginAsyncWorldDownload);
+        self.node.send(ServerRequest::BeginAsyncWorldDownload);
         self.async_world_download = Some(AsyncWorldDownload::new());
     }
 
@@ -105,7 +105,7 @@ impl MultiplayerBackend {
     }
 
     fn request_world_download(&mut self) {
-        self.node.send(ClientMessage::BeginAsyncWorldDownload);
+        self.node.send(ServerRequest::BeginAsyncWorldDownload);
         self.async_world_download = Some(AsyncWorldDownload::new());
     }
 

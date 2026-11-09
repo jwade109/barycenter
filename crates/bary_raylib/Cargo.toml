@@ -44,6 +44,10 @@ path = "bin/client_app.rs"
 name = "steam"
 path = "bin/steam.rs"
 
+[[bin]]
+name = "traj"
+path = "bin/traj.rs"
+
 [dev-dependencies]
 criterion = "0.5.1"
 

@@ -1,5 +1,5 @@
 use bary_core::prelude::ParamValue;
-use bary_ipc::{ClientMessage, ClientNode, ServerMessage};
+use bary_ipc::{ServerRequest, ClientNode, ServerMessage};
 use eframe::egui;
 use log::{Level, info};
 use std::collections::BTreeMap;
@@ -9,7 +9,7 @@ use std::time::Duration;
 mod backend_handle;
 
 struct ParamEditorApp {
-    sender: Sender<ClientMessage>,
+    sender: Sender<ServerRequest>,
     receiver: Receiver<ServerMessage>,
     text_fields: BTreeMap<String, ParameterField>,
 }
@@ -51,11 +51,11 @@ struct ParameterField {
 
 fn background_thread(
     mut client: ClientNode,
-    request_receiver: Receiver<ClientMessage>,
+    request_receiver: Receiver<ServerRequest>,
     response_sender: Sender<ServerMessage>,
 ) {
-    client.send(ClientMessage::Ping);
-    client.send(ClientMessage::RequestParams);
+    client.send(ServerRequest::Ping);
+    client.send(ServerRequest::RequestParams);
 
     loop {
         for msg in client.update() {
@@ -143,12 +143,12 @@ impl eframe::App for ParamEditorApp {
             ui.separator();
 
             if let Some((key, val)) = response {
-                let msg = ClientMessage::SetParameters([(key, val)].into());
+                let msg = ServerRequest::SetParameters([(key, val)].into());
                 _ = self.sender.send(msg);
             }
 
             if ui.button("Request New Params").clicked() {
-                _ = self.sender.send(ClientMessage::RequestParams);
+                _ = self.sender.send(ServerRequest::RequestParams);
             }
 
             if ui.button("Push Params").clicked() {
@@ -156,7 +156,7 @@ impl eframe::App for ParamEditorApp {
                 for (key, field) in &self.text_fields {
                     params.insert(key.clone(), field.value.clone());
                 }
-                _ = self.sender.send(ClientMessage::SetParameters(params));
+                _ = self.sender.send(ServerRequest::SetParameters(params));
             }
         });
     }

@@ -198,50 +198,50 @@ impl BaryServer {
             .retain(|_client, tr| tr.next_blob.is_some());
     }
 
-    fn on_accept_message(&mut self, client_id: ClientId, msg: ClientMessage) {
+    fn on_accept_message(&mut self, client_id: ClientId, msg: ServerRequest) {
         debug!("Got a command: {:?}", msg);
         self.send_tlm_ack(client_id);
 
         match msg {
-            ClientMessage::Introduction { username } => {
+            ServerRequest::Introduction { username } => {
                 self.on_accept_introduction(client_id, username);
             }
-            ClientMessage::ClientTelemetry(tlm) => {
+            ServerRequest::ClientTelemetry(tlm) => {
                 self.on_accept_client_tlm(client_id, tlm);
             }
-            ClientMessage::Ping => {
+            ServerRequest::Ping => {
                 self.on_accept_ping(client_id);
             }
-            ClientMessage::ClientSays(s) => {
+            ServerRequest::ClientSays(s) => {
                 self.on_accept_client_say(client_id, s);
             }
-            ClientMessage::SetSimSpeed(s) => {
+            ServerRequest::SetSimSpeed(s) => {
                 self.on_accept_set_sim_speed(client_id, s);
             }
-            ClientMessage::RequestServerStatistics => {
+            ServerRequest::RequestServerStatistics => {
                 self.on_accept_req_server_info(client_id);
             }
-            ClientMessage::ClientBlobRequest(table) => {
+            ServerRequest::ClientBlobRequest(table) => {
                 self.on_accept_client_blob_request(client_id, table);
             }
-            ClientMessage::ClientBlobRequestAll => {
+            ServerRequest::ClientBlobRequestAll => {
                 self.on_accept_client_blob_request_all(client_id);
             }
-            ClientMessage::RequestDelta(delta) => {
+            ServerRequest::RequestDelta(delta) => {
                 self.on_accept_world_delta(client_id, delta);
             }
-            ClientMessage::LoadSave(path) => {
+            ServerRequest::LoadSave(path) => {
                 self.load_world(path);
             }
-            ClientMessage::BeginAsyncWorldDownload => {
+            ServerRequest::BeginAsyncWorldDownload => {
                 self.begin_async_world_download(client_id);
             }
-            ClientMessage::SetParameters(params) => {
+            ServerRequest::SetParameters(params) => {
                 for (k, v) in params {
                     self.world.parameters.insert(k, v);
                 }
             }
-            ClientMessage::RequestParams => {
+            ServerRequest::RequestParams => {
                 self.send_param_update(client_id);
             }
             e => {

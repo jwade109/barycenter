@@ -1,9 +1,18 @@
+use bary_core::prelude::*;
+use bary_raylib::{Raylib, draw_circle};
+use bary_sim::*;
+use clap::Parser;
+use raylib::color::Color;
+use raylib::drawing::{RaylibDraw, RaylibDrawHandle};
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 
-use bary_core::prelude::*;
-use bary_sim::*;
-use serde::{Deserialize, Serialize};
+#[derive(Debug, Parser)]
+struct Args {
+    config: PathBuf,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SimSpec {
@@ -22,12 +31,13 @@ impl SimSpec {
     }
 }
 
-fn load_sim_file(filename: &str) -> Result<SimSpec, Box<dyn std::error::Error>> {
+fn load_sim_file(filename: impl AsRef<Path>) -> Result<SimSpec, Box<dyn std::error::Error>> {
     let s = std::fs::read_to_string(filename)?;
     let spec: SimSpec = serde_yaml::from_str(&s)?;
     Ok(spec)
 }
 
+#[derive(Debug)]
 struct SimEpoch {
     ticks: u64,
     pose: Isometry2d,
@@ -98,12 +108,28 @@ fn run_simulation(
     ret
 }
 
+fn draw_simulation(d: &mut RaylibDrawHandle, epochs: &Vec<SimEpoch>) {
+    let width = d.get_screen_width();
+    let height = d.get_screen_height();
+    let c = DVec2::new(width as f64 / 2.0, -height as f64 / 2.0);
+
+    for epoch in epochs {
+        if let Some(p) = epoch.target_position {
+            draw_circle(d, c + p * 10.0, 10.0, Color::RED);
+        }
+    }
+
+    for epoch in epochs {
+        draw_circle(d, c + epoch.pose.tr() * 10.0, 2.0, Color::WHITE);
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<_> = std::env::args().collect();
+    let args = Args::parse();
 
-    let filename = args.get(1).unwrap();
+    let mut raylib = Raylib::init();
 
-    let spec = load_sim_file(filename).unwrap();
+    let spec = load_sim_file(args.config).unwrap();
 
     let epochs = run_simulation(
         &spec.ship_name,
@@ -112,28 +138,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         spec.ticks_per_epoch,
     );
 
-    let mut file = File::create("sim.csv").unwrap();
-
-    write!(file, "ticks,x,y,a,vx,vy,va,tx,ty,ta,updates,thrusters\n")?;
-
-    for epoch in epochs {
-        write!(
-            file,
-            "{},{:0.3},{:0.3},{:0.3},{:0.3},{:0.3},{:0.3},{:0.3},{:0.3},{:0.3},{},{}\n",
-            epoch.ticks,
-            epoch.pose.translation.x,
-            epoch.pose.translation.y,
-            epoch.pose.rotation,
-            epoch.vel.translation.x,
-            epoch.vel.translation.y,
-            epoch.vel.rotation,
-            epoch.target_position.map(|t| t.x).unwrap_or(std::f64::NAN),
-            epoch.target_position.map(|t| t.y).unwrap_or(std::f64::NAN),
-            epoch.target_attitude.unwrap_or(std::f64::NAN),
-            epoch.acc_updates,
-            epoch.thrusters_firing,
-        )?;
+    for epoch in &epochs {
+        println!("{epoch:?}");
     }
 
-    Ok(())
+    loop {
+        raylib.draw(|mut handle| {
+            handle.clear_background(Color::LIGHTBLUE.brightness(-0.6));
+            draw_simulation(&mut handle, &epochs);
+        });
+    }
 }

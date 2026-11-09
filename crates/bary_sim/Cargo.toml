@@ -25,9 +25,5 @@ name = "ship2png"
 path = "bin/ship2png.rs"
 
 [[bin]]
-name = "traj"
-path = "bin/traj.rs"
-
-[[bin]]
 name = "generate_worlds"
 path = "bin/generate_worlds.rs"

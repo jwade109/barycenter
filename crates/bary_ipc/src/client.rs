@@ -176,7 +176,7 @@ impl ClientNode {
         messages
     }
 
-    pub fn send(&mut self, msg: impl Into<ClientMessage>) {
+    pub fn send(&mut self, msg: impl Into<ServerRequest>) {
         let msg = msg.into();
         let bytes = bincode::serialize(&msg).unwrap();
         self.client

@@ -1,4 +1,4 @@
-use crate::{ClientId, ClientMessage, ServerMessage};
+use crate::{ClientId, ServerRequest, ServerMessage};
 use log::{debug, info};
 pub use renet::DisconnectReason;
 use renet::*;
@@ -16,7 +16,7 @@ pub struct ClientInfo {
 pub enum ServerEvent {
     Connected(ClientId),
     Disconnected(ClientId, DisconnectReason),
-    Message(ClientId, ClientMessage),
+    Message(ClientId, ServerRequest),
 }
 
 pub struct ServerNode {
@@ -121,7 +121,7 @@ impl ServerNode {
                 .renet
                 .receive_message(client_id, DefaultChannel::ReliableOrdered)
             {
-                if let Ok(message) = bincode::deserialize::<ClientMessage>(&message) {
+                if let Ok(message) = bincode::deserialize::<ServerRequest>(&message) {
                     debug!("Received message from client {}: {:?}", client_id, message);
                     self.client_info
                         .entry(ClientId(client_id))
