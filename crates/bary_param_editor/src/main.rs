@@ -1,8 +1,9 @@
-use bary_core::prelude::ParamValue;
-use bary_ipc::{ServerRequest, ClientNode, ServerMessage};
+use bary_core::prelude::{ParamValue, randvec};
+use bary_ipc::{ClientNode, ServerRequest, ServerResponse};
+use bary_sim::WorldDelta;
 use eframe::egui;
 use log::{Level, info};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::mpsc::*;
 use std::time::Duration;
 
@@ -10,8 +11,10 @@ mod backend_handle;
 
 struct ParamEditorApp {
     sender: Sender<ServerRequest>,
-    receiver: Receiver<ServerMessage>,
+    receiver: Receiver<ServerResponse>,
     text_fields: BTreeMap<String, ParameterField>,
+    telemetry: BTreeMap<u8, ServerResponse>,
+    logs: VecDeque<ServerResponse>,
 }
 
 impl Default for ParamEditorApp {
@@ -29,6 +32,8 @@ impl Default for ParamEditorApp {
             sender: request_sender,
             receiver: response_receiver,
             text_fields: BTreeMap::new(),
+            telemetry: BTreeMap::new(),
+            logs: VecDeque::new(),
         }
     }
 }
@@ -52,7 +57,7 @@ struct ParameterField {
 fn background_thread(
     mut client: ClientNode,
     request_receiver: Receiver<ServerRequest>,
-    response_sender: Sender<ServerMessage>,
+    response_sender: Sender<ServerResponse>,
 ) {
     client.send(ServerRequest::Ping);
     client.send(ServerRequest::RequestParams);
@@ -71,12 +76,19 @@ fn background_thread(
 }
 
 impl ParamEditorApp {
-    fn on_server_msg(&mut self, msg: ServerMessage) {
+    fn on_server_msg(&mut self, msg: ServerResponse) {
+        let disc = msg.id();
+        self.telemetry.insert(disc, msg.clone());
+        self.logs.push_back(msg.clone());
+        if self.logs.len() > 300 {
+            self.logs.pop_front();
+        }
+
         match msg {
-            ServerMessage::Driver { .. } => {
+            ServerResponse::Driver { .. } => {
                 // explicitly ignoring these messages
             }
-            ServerMessage::Parameters(params) => {
+            ServerResponse::Parameters(params) => {
                 info!("Got new parameters: {params:?}");
                 for (key, value) in params {
                     self.text_fields
@@ -142,6 +154,41 @@ impl eframe::App for ParamEditorApp {
 
             ui.separator();
 
+            ui.horizontal(|ui| {
+                if ui.button("Speed 0").clicked() {
+                    _ = self.sender.send(ServerRequest::SetSimSpeed(0));
+                }
+                if ui.button("Speed 1").clicked() {
+                    _ = self.sender.send(ServerRequest::SetSimSpeed(1));
+                }
+                if ui.button("Speed 2").clicked() {
+                    _ = self.sender.send(ServerRequest::SetSimSpeed(2));
+                }
+                if ui.button("Speed 4").clicked() {
+                    _ = self.sender.send(ServerRequest::SetSimSpeed(4));
+                }
+                if ui.button("Spawn Ship").clicked() {
+                    _ = self
+                        .sender
+                        .send(WorldDelta::Ping(randvec(100.0, 1000.0).into()).into());
+                }
+                if ui.button("Say Hello").clicked() {
+                    _ = self
+                        .sender
+                        .send(ServerRequest::ClientSays("Hello there!".into()));
+                }
+                if ui.button("Load World").clicked() {
+                    _ = self
+                        .sender
+                        .send(ServerRequest::LoadSave("saves/scenario_c.yaml".into()));
+                }
+                if ui.button("Download World").clicked() {
+                    _ = self.sender.send(ServerRequest::BeginAsyncWorldDownload);
+                }
+            });
+
+            ui.separator();
+
             if let Some((key, val)) = response {
                 let msg = ServerRequest::SetParameters([(key, val)].into());
                 _ = self.sender.send(msg);
@@ -158,6 +205,31 @@ impl eframe::App for ParamEditorApp {
                 }
                 _ = self.sender.send(ServerRequest::SetParameters(params));
             }
+
+            ui.separator();
+
+            egui::ScrollArea::vertical()
+                .id_salt("telemetry")
+                .show(ui, |ui| {
+                    egui::Grid::new("telemetry").num_columns(2).show(ui, |ui| {
+                        for (id, log) in &self.telemetry {
+                            ui.label(format!("{id}"));
+                            ui.label(format!("{log:?}"));
+                            ui.end_row();
+                        }
+                    });
+                });
+
+            ui.separator();
+
+            egui::ScrollArea::vertical()
+                .id_salt("logs")
+                .stick_to_bottom(true)
+                .show(ui, |ui| {
+                    for log in &self.logs {
+                        ui.label(format!("{:?}", log));
+                    }
+                });
         });
     }
 }

@@ -200,35 +200,34 @@ impl ClientApp {
         }
     }
 
-    pub fn on_rcv_server_msg(&mut self, msg: ServerMessage) {
+    pub fn on_rcv_server_msg(&mut self, msg: ServerResponse) {
         let s = format!("{:?}", msg);
         self.terminal.log_debug(s);
 
         debug!("{msg:?}");
 
         match msg {
-            ServerMessage::ChatMessage(id, text) => {
+            ServerResponse::ChatMessage(id, text) => {
                 let s = format!("[{id}]: {text}");
                 self.client.chat.log(s);
             }
-            ServerMessage::TransactionComplete => {
+            ServerResponse::TransactionComplete => {
                 self.client.scene_graph = SceneGraph::Free(FreeFlying::at_zero());
             }
-            ServerMessage::SyncFrame(frame) => {
+            ServerResponse::SyncFrame(frame) => {
                 debug!("Got frame: {:?}", frame);
                 let our_frame = sync_frame_from_world(self.backend.world());
                 debug!("Our frame: {:?}", our_frame);
             }
-            ServerMessage::PlayerConnected(username) => {
+            ServerResponse::PlayerConnected(username) => {
                 self.client.chat.log(format!("{username} just connected."));
             }
-            ServerMessage::PlayerDisconnected(username) => {
+            ServerResponse::PlayerDisconnected(username) => {
                 self.client
                     .chat
                     .log(format!("{username} just disconnected."));
             }
-            ServerMessage::ServerStatistics(_) => (),
-            ServerMessage::Simulation(sim) => {
+            ServerResponse::Simulation(sim) => {
                 self.on_sim_event(sim);
             }
             _ => error!("Unsupported message from server: {:?}", msg),

@@ -7,7 +7,7 @@ use log::*;
 pub struct SinglePlayerBackend {
     world: World,
     sim_speed: u32,
-    events: Vec<ServerMessage>,
+    events: Vec<ServerResponse>,
     step_timer: WallTimer,
 }
 
@@ -21,7 +21,7 @@ impl SinglePlayerBackend {
         }
     }
 
-    fn append_event(&mut self, msg: impl Into<ServerMessage>) {
+    fn append_event(&mut self, msg: impl Into<ServerResponse>) {
         self.events.push(msg.into());
     }
 }
@@ -44,8 +44,8 @@ impl Backend for SinglePlayerBackend {
                 error!("Failed to load world: {e}");
             }
         }
-        self.append_event(ServerMessage::HaveNewSave);
-        self.append_event(ServerMessage::TransactionComplete);
+        self.append_event(ServerResponse::HaveNewSave);
+        self.append_event(ServerResponse::TransactionComplete);
     }
 
     fn set_sim_speed(&mut self, speed: u32) {
@@ -62,14 +62,14 @@ impl Backend for SinglePlayerBackend {
         None
     }
 
-    fn update(&mut self, controls: &ExternalControls) -> Vec<ServerMessage> {
+    fn update(&mut self, controls: &ExternalControls) -> Vec<ServerResponse> {
         if self.step_timer.tick() {
             for _ in 0..self.sim_speed {
                 let response = update_world_with_user_controls(&mut self.world, controls);
                 let events = response.events.take();
                 if !events.is_empty() {
                     self.events
-                        .extend(events.into_iter().map(|s| ServerMessage::Simulation(s)));
+                        .extend(events.into_iter().map(|s| ServerResponse::Simulation(s)));
                     // self.sim_speed = 1;
                     // break;
                 }

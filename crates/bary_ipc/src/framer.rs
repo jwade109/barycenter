@@ -1,5 +1,6 @@
 use crate::{Packet, PacketParseError};
 
+#[derive(Debug, Clone, Default)]
 pub struct Framer {
     data: Vec<u8>,
 }

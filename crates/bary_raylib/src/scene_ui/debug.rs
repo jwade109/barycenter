@@ -63,8 +63,6 @@ pub fn debug_lines(
         if let Some(network) = network {
             ui.text(format!("Connected: {}", network.is_connected()));
             ui.text(format!("Address:   {}", network.server_addr()));
-            ui.text(format!("RX:        {}", network.rx_count()));
-            ui.text(format!("TX:        {}", network.tx_count()));
             ui.text(format!("Errors:    {}", network.errors()));
             ui.sep();
         }

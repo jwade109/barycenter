@@ -1,6 +1,6 @@
 use crate::*;
 use bary_core::prelude::WallTimer;
-use bary_ipc::{Blob, ClientNode, ClientTelemetry, ServerMessage};
+use bary_ipc::{Blob, ClientNode, ClientTelemetry, ServerResponse};
 use bary_raylib::AsyncWorldDownload;
 use bary_sim::{World, WorldDelta, apply_delta, timedelta_from_delta_ticks, update_world};
 use log::{error, warn};
@@ -78,7 +78,6 @@ impl MultiplayerBackend {
     }
 
     fn on_rcv_kicked(&mut self) {
-        self.node.disconnect();
         self.world = World::empty();
     }
 
@@ -113,7 +112,7 @@ impl MultiplayerBackend {
         self.server_handshake_complete = true;
     }
 
-    fn update(&mut self) -> Vec<ServerMessage> {
+    fn update(&mut self) -> Vec<ServerResponse> {
         if self.server_ping_timer.tick() {
             if self.server_handshake_complete {
                 self.send_ping();
@@ -127,8 +126,9 @@ impl MultiplayerBackend {
         let mut propagated = Vec::new();
         for msg in self.node.update() {
             let e = match msg.clone() {
-                ServerMessage::Driver {
+                ServerResponse::Driver {
                     ticks,
+                    speed,
                     deltas,
                     players,
                 } => {
@@ -136,28 +136,28 @@ impl MultiplayerBackend {
                     self.world.players = players;
                     continue;
                 }
-                ServerMessage::Kicked => {
+                ServerResponse::Kicked => {
                     self.on_rcv_kicked();
                     propagated.push(msg);
                     continue;
                 }
-                ServerMessage::WhoGoesThere => {
+                ServerResponse::WhoGoesThere => {
                     self.on_rcv_who_goes_there();
                     continue;
                 }
-                ServerMessage::HaveNewSave => {
+                ServerResponse::HaveNewSave => {
                     self.on_rcv_have_new_save();
                     continue;
                 }
-                ServerMessage::BlobResponse(blob) => {
+                ServerResponse::BlobResponse(blob) => {
                     self.on_rcv_blob(blob);
                     continue;
                 }
-                ServerMessage::TakeYourHatOff => {
+                ServerResponse::TakeYourHatOff => {
                     self.on_rcv_take_your_hat_off();
                     continue;
                 }
-                ServerMessage::MultiBlobResponse(ent, ticks, blobs) => {
+                ServerResponse::MultiBlobResponse(ent, ticks, blobs) => {
                     let delta = ticks as i64 - self.world.ticks as i64;
                     warn!(
                         "Delta ticks: {} AKA {:0.3}",
@@ -171,10 +171,10 @@ impl MultiplayerBackend {
                     }
                     continue;
                 }
-                ServerMessage::Ack => {
+                ServerResponse::Ack => {
                     continue;
                 }
-                ServerMessage::Pong => {
+                ServerResponse::Pong => {
                     continue;
                 }
                 e => e,
@@ -215,7 +215,7 @@ impl Backend for MultiplayerBackend {
         Some(&self.username)
     }
 
-    fn update(&mut self, _controls: &ExternalControls) -> Vec<ServerMessage> {
+    fn update(&mut self, _controls: &ExternalControls) -> Vec<ServerResponse> {
         self.update()
     }
 }

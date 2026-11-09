@@ -2,6 +2,7 @@ use bary_core::prelude::{distance_str_v, velocity_str_v};
 use bary_server::BaryServer;
 use bary_sim::{World, apparent_datetime};
 use clap::Parser;
+use log::info;
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{KeyCode, *};
@@ -90,10 +91,10 @@ fn server_loop(
     debug_lines.push(format!("World time: {}", apparent_datetime(app.ticks())));
     debug_lines.push(format!("Save file: {:?}", app.save_file()));
 
-    debug_lines.push("CLIENTS".to_string());
-    for (id, info) in app.clients() {
-        debug_lines.push(format!("{}: {:?}", id, info));
-    }
+    // debug_lines.push("CLIENTS".to_string());
+    // for (id, info) in app.clients() {
+    //     debug_lines.push(format!("{}: {:?}", id, info));
+    // }
 
     let text = debug_lines.join("\n");
 
@@ -114,7 +115,11 @@ fn server_loop(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    simple_logger::init_with_level(log::Level::Debug).unwrap();
+
     let args = Args::parse();
+
+    info!("{args:?}");
 
     let mut app = BaryServer::new(args.server_port, 1)?;
 
@@ -123,8 +128,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if !args.use_tui {
-        simple_logger::init_with_level(log::Level::Debug).unwrap();
-
         loop {
             app.update();
             std::thread::sleep(std::time::Duration::from_millis(10));

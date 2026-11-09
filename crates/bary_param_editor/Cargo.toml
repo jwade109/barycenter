@@ -11,3 +11,4 @@ bary_ipc = { path = "../bary_ipc" }
 log = "0.4.31"
 simple_logger = "5.2.0"
 bary_core = { path = "../bary_core" }
+bary_sim = { path = "../bary_sim" }

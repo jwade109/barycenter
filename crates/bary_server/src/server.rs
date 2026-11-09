@@ -88,6 +88,8 @@ pub struct BaryServer {
 
 impl BaryServer {
     pub fn new(port: u16, speed: u32) -> BaryResult<Self> {
+        info!("Creating a new server node on port {port}");
+
         let node = ServerNode::new(port);
 
         let world = World::empty();
@@ -100,7 +102,7 @@ impl BaryServer {
             tick_rate: speed,
             node,
             update_timer: WallTimer::hz(TICKS_PER_SECOND as u32),
-            md5_sync_timer: WallTimer::hz(2),
+            md5_sync_timer: WallTimer::hz(1),
             queued_deltas: Vec::new(),
             transactions: HashMap::new(),
         })
@@ -118,28 +120,15 @@ impl BaryServer {
         &self.world
     }
 
-    pub fn clients(&self) -> impl Iterator<Item = (&ClientId, &ClientInfo)> {
-        self.node.client_info()
-    }
-
     pub fn client_telemetry(&self) -> &HashMap<ClientId, ClientTelemetry> {
         &self.client_telemetry
     }
 
-    pub fn get_statistics(&self) -> ServerStatistics {
-        let mut clients = Vec::new();
-        for client in self.node.renet().clients_id_iter() {
-            if let Ok(info) = self.node.renet().network_info(client) {
-                clients.push((client, info.into()));
-            }
-        }
-        ServerStatistics { clients }
-    }
-
     fn send_driver_packet(&mut self) {
         let deltas = std::mem::take(&mut self.queued_deltas);
-        let msg = ServerMessage::Driver {
+        let msg = ServerResponse::Driver {
             ticks: self.world.ticks,
+            speed: self.tick_rate,
             deltas,
             players: self.world.players.clone(),
         };
@@ -147,24 +136,22 @@ impl BaryServer {
     }
 
     fn send_param_update(&mut self, id: ClientId) {
-        let params = ServerMessage::Parameters(self.world.parameters.inner().clone());
+        let params = ServerResponse::Parameters(self.world.parameters.inner().clone());
         self.node.send(id, params);
     }
 
-    fn send_tlm_ack(&mut self, id: ClientId) {
-        self.node.send(id, ServerMessage::Ack);
+    fn ack(&mut self, id: ClientId) {
+        self.node.send(id, ServerResponse::Ack);
     }
 
-    #[allow(unused)]
-    fn send_tlm_server_info(&mut self) {
-        self.node
-            .broadcast(ServerMessage::ServerStatistics(self.get_statistics()));
+    fn nack(&mut self, id: ClientId) {
+        self.node.send(id, ServerResponse::Nack);
     }
 
     #[allow(unused)]
     fn send_md5_sync_packet(&mut self) {
         let frame = sync_frame_from_world(&self.world);
-        let msg = ServerMessage::SyncFrame(frame);
+        let msg = ServerResponse::SyncFrame(frame);
         self.node.broadcast(msg);
     }
 
@@ -180,7 +167,7 @@ impl BaryServer {
             if let Some(next) = tr.next_blob {
                 debug!("Sending blob {next} to {client}");
                 if let Some(blob) = tr.blobs.remove(&next) {
-                    let kind = ServerMessage::BlobResponse(blob);
+                    let kind = ServerResponse::BlobResponse(blob);
                     self.node.send(*client, kind);
                 }
                 tr.next_blob = tr.next_blob.map(|t| t.next()).flatten();
@@ -189,7 +176,7 @@ impl BaryServer {
 
             if tr.next_blob.is_none() {
                 info!("Finished transaction!");
-                let msg = ServerMessage::TransactionComplete;
+                let msg = ServerResponse::TransactionComplete;
                 self.node.send(*client, msg);
             }
         }
@@ -200,7 +187,6 @@ impl BaryServer {
 
     fn on_accept_message(&mut self, client_id: ClientId, msg: ServerRequest) {
         debug!("Got a command: {:?}", msg);
-        self.send_tlm_ack(client_id);
 
         match msg {
             ServerRequest::Introduction { username } => {
@@ -217,9 +203,6 @@ impl BaryServer {
             }
             ServerRequest::SetSimSpeed(s) => {
                 self.on_accept_set_sim_speed(client_id, s);
-            }
-            ServerRequest::RequestServerStatistics => {
-                self.on_accept_req_server_info(client_id);
             }
             ServerRequest::ClientBlobRequest(table) => {
                 self.on_accept_client_blob_request(client_id, table);
@@ -240,6 +223,7 @@ impl BaryServer {
                 for (k, v) in params {
                     self.world.parameters.insert(k, v);
                 }
+                self.ack(client_id);
             }
             ServerRequest::RequestParams => {
                 self.send_param_update(client_id);
@@ -251,15 +235,15 @@ impl BaryServer {
         }
     }
 
-    fn on_accept_world_delta(&mut self, id: ClientId, delta: WorldDelta) -> Option<()> {
-        self.ensure_client_is_connected(id)?;
+    fn on_accept_world_delta(&mut self, id: ClientId, delta: WorldDelta) {
         if let Err(e) = apply_delta(&mut self.world, delta.clone()) {
             error!("Failed to apply delta: {e}");
+            self.nack(id);
         } else {
             debug!("Successfully applied delta: {delta:?}");
             self.queued_deltas.push(delta.clone());
+            self.send_driver_packet();
         }
-        Some(())
     }
 
     fn on_accept_introduction(&mut self, id: ClientId, username: String) {
@@ -267,26 +251,28 @@ impl BaryServer {
             info!("Client {id} has introduced themselves as {username}");
             self.usernames.insert(id, username.clone());
             self.node
-                .broadcast(ServerMessage::PlayerConnected(username));
-            self.node.send(id, ServerMessage::TakeYourHatOff);
+                .broadcast(ServerResponse::PlayerConnected(username));
+            self.node.send(id, ServerResponse::TakeYourHatOff);
         } else {
-            error!("Client {id} has reintroduced themselves")
+            error!("Client {id} has reintroduced themselves");
+            self.nack(id);
         }
     }
 
-    fn begin_async_world_download(&mut self, client: ClientId) {
-        if self.transactions.contains_key(&client) {
-            error!("Transaction already underway for client {client}");
+    fn begin_async_world_download(&mut self, id: ClientId) {
+        if self.transactions.contains_key(&id) {
+            error!("Transaction already underway for client {id}");
+            self.nack(id);
             return;
         }
         let tr = PaginatedTransaction::from_world(&self.world);
-        self.transactions.insert(client, tr);
-        info!("Started async world download for {client}");
+        self.transactions.insert(id, tr);
+        info!("Started async world download for {id}");
     }
 
     fn on_unsupported_message(&mut self, desc: String) {
         warn!("Unsupported message type!");
-        self.node.broadcast(ServerMessage::Unsupported(desc));
+        self.node.broadcast(ServerResponse::Unsupported(desc));
     }
 
     pub fn load_world(&mut self, path: impl AsRef<Path>) {
@@ -297,7 +283,7 @@ impl BaryServer {
                 self.world = world;
                 self.save_file = Some(path.to_path_buf());
                 info!("Loaded {}", path.display());
-                self.node.broadcast(ServerMessage::HaveNewSave);
+                self.node.broadcast(ServerResponse::HaveNewSave);
             }
             Err(e) => {
                 error!("Failed to load world: {e}");
@@ -306,13 +292,14 @@ impl BaryServer {
     }
 
     fn on_accept_ping(&mut self, id: ClientId) -> Option<()> {
-        self.node.send(id, ServerMessage::Pong);
+        self.node.send(id, ServerResponse::Pong);
         Some(())
     }
 
-    fn ensure_client_is_connected(&self, id: ClientId) -> Option<()> {
+    fn ensure_client_is_connected(&mut self, id: ClientId) -> Option<()> {
         if !self.usernames.contains_key(&id) {
             error!("Client {id} is not connected!");
+            self.node.send(id, ServerResponse::Nack);
             return None;
         }
         Some(())
@@ -324,30 +311,23 @@ impl BaryServer {
     }
 
     fn on_accept_client_say(&mut self, id: ClientId, s: String) -> Option<()> {
-        self.ensure_client_is_connected(id)?;
-        self.node.broadcast(ServerMessage::ChatMessage(id, s));
+        self.node.broadcast(ServerResponse::ChatMessage(id, s));
         Some(())
     }
 
     fn on_accept_set_sim_speed(&mut self, id: ClientId, speed: u32) -> Option<()> {
-        self.ensure_client_is_connected(id)?;
         self.tick_rate = speed;
-        self.node.send(id, ServerMessage::Ack);
+        self.node.send(id, ServerResponse::Ack);
         Some(())
-    }
-
-    fn on_accept_req_server_info(&mut self, id: ClientId) {
-        self.node
-            .send(id, ServerMessage::ServerStatistics(self.get_statistics()));
     }
 
     fn on_accept_client_blob_request(&mut self, client: ClientId, table: TableIdent) {
         info!("Responding to blob request for {table} from {client}");
         if let Some(blob) = get_blob(&self.world, table) {
-            let msg = ServerMessage::BlobResponse(blob);
+            let msg = ServerResponse::BlobResponse(blob);
             self.node.send(client, msg);
         } else {
-            let msg = ServerMessage::ServerSays(format!("Failed to serialize table: {:?}", table));
+            let msg = ServerResponse::ServerSays(format!("Failed to serialize table: {:?}", table));
             self.node.send(client, msg);
         }
     }
@@ -359,7 +339,7 @@ impl BaryServer {
 
         match blobs {
             Ok(blobs) => {
-                let kind = ServerMessage::MultiBlobResponse(
+                let kind = ServerResponse::MultiBlobResponse(
                     self.world.spawner.next(),
                     self.world.ticks,
                     blobs,
@@ -368,7 +348,7 @@ impl BaryServer {
             }
             Err(err) => {
                 let msg =
-                    ServerMessage::ServerSays(format!("Failed to serialize table: {:?}", err));
+                    ServerResponse::ServerSays(format!("Failed to serialize table: {:?}", err));
                 self.node.send(client, msg);
             }
         }
@@ -376,15 +356,26 @@ impl BaryServer {
 
     fn on_client_connect(&mut self, id: ClientId) {
         info!("Client {id} connected");
-        self.node.send(id, ServerMessage::WhoGoesThere);
+        self.node.send(id, ServerResponse::WhoGoesThere);
     }
 
-    fn on_client_disconnect(&mut self, id: ClientId, reason: DisconnectReason) {
-        info!("Client {id} disconnected: {reason}");
+    fn on_client_disconnect(&mut self, id: ClientId) {
+        info!("Client {id} disconnected");
         if let Some(username) = self.usernames.remove(&id) {
             self.node
-                .broadcast(ServerMessage::PlayerDisconnected(username));
+                .broadcast(ServerResponse::PlayerDisconnected(username));
         }
+    }
+
+    fn send_info_packet(&mut self) {
+        let info = ServerResponse::Info {
+            grids: self.world.grids.len(),
+            planets: self.world.planets.len(),
+            thrusters: self.world.thrusters.len(),
+            parts: self.world.parts.len(),
+            blueprints: self.world.blueprints.len(),
+        };
+        self.node.broadcast(info);
     }
 
     pub fn update(&mut self) {
@@ -395,6 +386,7 @@ impl BaryServer {
         if self.md5_sync_timer.tick() {
             // self.send_md5_sync_packet();
             self.send_driver_packet();
+            self.send_info_packet();
             // self.send_tlm_server_info();
         }
 
@@ -403,8 +395,8 @@ impl BaryServer {
                 ServerEvent::Connected(id) => {
                     self.on_client_connect(id);
                 }
-                ServerEvent::Disconnected(id, reason) => {
-                    self.on_client_disconnect(id, reason);
+                ServerEvent::Disconnected(id) => {
+                    self.on_client_disconnect(id);
                 }
                 ServerEvent::Message(id, msg) => {
                     self.on_accept_message(id, msg);

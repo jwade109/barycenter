@@ -1,9 +1,9 @@
 use crate::ClientId;
 use crate::*;
-use renet::*;
-use renet_netcode::*;
+use log::{info, trace, warn};
+use std::io::{Read, Write};
 use std::net::*;
-use std::time::Instant;
+use std::time::{Duration, SystemTime};
 
 const CLIENT_BIND_ADDRESS: &'static str = "0.0.0.0:0";
 
@@ -23,11 +23,14 @@ pub struct ClientNode {
     id: ClientId,
     errors: usize,
     server_addr: SocketAddr,
-    client: RenetClient,
-    transport: NetcodeClientTransport,
-    last_updated: Instant,
-    rx_count: usize,
-    tx_count: usize,
+    framer: Framer,
+    socket: Option<TcpStream>,
+}
+
+fn get_current_time() -> Duration {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
 }
 
 impl ClientNode {
@@ -36,33 +39,24 @@ impl ClientNode {
     }
 
     fn from_addr(server_addr: SocketAddr) -> Self {
-        let client = RenetClient::new(ConnectionConfig::default());
+        info!("Connecting on {server_addr}");
+
+        let new_socket = TcpStream::connect_timeout(&server_addr, Duration::from_millis(100)).ok();
+
+        if let Some(socket) = new_socket.as_ref() {
+            socket.set_nonblocking(true).unwrap();
+        }
+
+        info!("New socket: {new_socket:?}");
 
         let client_id = (get_current_time().as_micros() % 1000000000) as u64;
-
-        let socket = UdpSocket::bind(CLIENT_BIND_ADDRESS).unwrap();
-        let current_time = get_current_time();
-
-        let authentication = ClientAuthentication::Unsecure {
-            server_addr,
-            client_id,
-            user_data: None,
-            protocol_id: 0,
-        };
-
-        let transport = NetcodeClientTransport::new(current_time, authentication, socket).unwrap();
-
-        let last_updated = Instant::now();
 
         Self {
             id: ClientId(client_id),
             errors: 0,
             server_addr,
-            client,
-            transport,
-            last_updated,
-            tx_count: 0,
-            rx_count: 0,
+            socket: new_socket,
+            framer: Framer::new(),
         }
     }
 
@@ -84,93 +78,45 @@ impl ClientNode {
         self.errors
     }
 
-    pub fn rx_count(&self) -> usize {
-        self.rx_count
-    }
-
-    pub fn tx_count(&self) -> usize {
-        self.tx_count
-    }
-
-    pub fn reconnect(&mut self) {
-        if self.is_connected() {
-            return;
-        }
-
-        let client = RenetClient::new(ConnectionConfig::default());
-
-        let socket = UdpSocket::bind(CLIENT_BIND_ADDRESS).unwrap();
-        let current_time = get_current_time();
-
-        let authentication = ClientAuthentication::Unsecure {
-            server_addr: self.server_addr,
-            client_id: self.id.0,
-            user_data: None,
-            protocol_id: 0,
-        };
-
-        let transport = NetcodeClientTransport::new(current_time, authentication, socket).unwrap();
-
-        let last_updated = Instant::now();
-
-        *self = Self {
-            id: self.id,
-            errors: self.errors,
-            server_addr: self.server_addr,
-            client,
-            transport,
-            last_updated,
-            tx_count: self.tx_count,
-            rx_count: self.rx_count,
-        }
-    }
-
     pub fn is_connected(&self) -> bool {
-        self.client.is_connected()
+        self.socket.is_some()
     }
 
     pub fn server_addr(&self) -> SocketAddr {
         self.server_addr
     }
 
-    pub fn stats(&self) -> ClientStatistics {
-        let is_connected = self.client.is_connected();
-        let info = self.client.network_info();
-
-        ClientStatistics {
-            is_connected,
-            rtt: info.rtt,
-            packet_loss: info.packet_loss,
-            bytes_sent_per_second: info.bytes_sent_per_second,
-            bytes_received_per_second: info.bytes_received_per_second,
-            tx_count: self.tx_count,
-            rx_count: self.rx_count,
-        }
-    }
-
     #[must_use]
-    pub fn update(&mut self) -> Vec<ServerMessage> {
-        let now = Instant::now();
-        let duration = now - self.last_updated;
-        self.last_updated = now;
-
-        self.client.update(duration);
-
-        if self.transport.update(duration, &mut self.client).is_err() {
-            self.errors += 1;
-            return Vec::new();
-        }
-
+    pub fn update(&mut self) -> Vec<ServerResponse> {
         let mut messages = Vec::new();
 
-        while let Some(bytes) = self.client.receive_message(DefaultChannel::ReliableOrdered) {
-            let msg: ServerMessage = bincode::deserialize(&bytes).unwrap();
-            self.rx_count += 1;
-            messages.push(msg);
+        let mut buf = [0; 4096];
+
+        if let Some(socket) = self.socket.as_mut() {
+            loop {
+                match socket.read(&mut buf) {
+                    Ok(0) => {
+                        // disconnect
+                        break;
+                    }
+                    Ok(n) => {
+                        self.framer.push(&buf[..n]);
+                    }
+                    Err(e) => {
+                        // I don't care
+                        break;
+                    }
+                }
+            }
         }
 
-        if let Err(_) = self.transport.send_packets(&mut self.client) {
-            self.errors += 1;
+        for packet in self.framer.parse() {
+            if let Ok(response) = bincode::deserialize::<ServerResponse>(packet.payload()) {
+                info!("Got a response: {response:?}");
+                messages.push(response);
+            } else {
+                warn!("Unable to parse packet as response");
+            }
         }
 
         messages
@@ -179,12 +125,8 @@ impl ClientNode {
     pub fn send(&mut self, msg: impl Into<ServerRequest>) {
         let msg = msg.into();
         let bytes = bincode::serialize(&msg).unwrap();
-        self.client
-            .send_message(DefaultChannel::ReliableOrdered, bytes);
-        self.tx_count += 1;
-    }
-
-    pub fn disconnect(&mut self) {
-        self.client.disconnect();
+        let packet = Packet::new(bytes.clone());
+        trace!("Sending: {packet:?}");
+        self.socket.as_mut().map(|s| s.write(&packet.to_bytes()));
     }
 }

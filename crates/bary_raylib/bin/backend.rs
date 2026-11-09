@@ -1,4 +1,4 @@
-use bary_ipc::{ClientNode, ServerMessage};
+use bary_ipc::{ClientNode, ServerResponse};
 use bary_sim::{ExternalControls, World, WorldDelta};
 
 pub trait Backend {
@@ -16,5 +16,5 @@ pub trait Backend {
 
     fn username(&self) -> Option<&str>;
 
-    fn update(&mut self, controls: &ExternalControls) -> Vec<ServerMessage>;
+    fn update(&mut self, controls: &ExternalControls) -> Vec<ServerResponse>;
 }
