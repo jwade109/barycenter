@@ -2,19 +2,22 @@ use bary_core::prelude::{ParamValue, randvec};
 use bary_ipc::{ClientNode, ServerRequest, ServerResponse};
 use bary_sim::WorldDelta;
 use eframe::egui;
+use egui_plot::*;
 use log::{Level, info};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::mpsc::*;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 mod backend_handle;
 
 struct ParamEditorApp {
+    start: Instant,
     sender: Sender<ServerRequest>,
     receiver: Receiver<ServerResponse>,
     text_fields: BTreeMap<String, ParameterField>,
     telemetry: BTreeMap<u8, ServerResponse>,
     logs: VecDeque<ServerResponse>,
+    plots: BTreeMap<String, Vec<PlotPoint>>,
 }
 
 impl Default for ParamEditorApp {
@@ -29,11 +32,13 @@ impl Default for ParamEditorApp {
         });
 
         Self {
+            start: Instant::now(),
             sender: request_sender,
             receiver: response_receiver,
             text_fields: BTreeMap::new(),
             telemetry: BTreeMap::new(),
             logs: VecDeque::new(),
+            plots: BTreeMap::new(),
         }
     }
 }
@@ -76,6 +81,18 @@ fn background_thread(
 }
 
 impl ParamEditorApp {
+    fn add_plot_point(&mut self, key: &str, x: f64, y: f64) {
+        let p = PlotPoint { x, y };
+        if let Some(plot) = self.plots.get_mut(key) {
+            plot.push(p);
+            if plot.len() > 100 {
+                plot.remove(0);
+            }
+        } else {
+            self.plots.insert(key.to_string(), vec![p]);
+        }
+    }
+
     fn on_server_msg(&mut self, msg: ServerResponse) {
         let disc = msg.id();
         self.telemetry.insert(disc, msg.clone());
@@ -85,8 +102,15 @@ impl ParamEditorApp {
         }
 
         match msg {
-            ServerResponse::Driver { .. } => {
-                // explicitly ignoring these messages
+            ServerResponse::Driver { ticks, .. } => {
+                let x = (Instant::now() - self.start).as_secs_f64();
+                let y = ticks as f64;
+                self.add_plot_point("server_ticks", x, y);
+            }
+            ServerResponse::Info { clients, .. } => {
+                let x = (Instant::now() - self.start).as_secs_f64();
+                let y = clients as f64;
+                self.add_plot_point("clients", x, y);
             }
             ServerResponse::Parameters(params) => {
                 info!("Got new parameters: {params:?}");
@@ -137,15 +161,36 @@ fn render_params(
         });
 }
 
+fn draw_plot(ui: &mut egui::Ui, plots: &BTreeMap<String, Vec<PlotPoint>>) {
+    let legend = Legend::default().title("Legendary");
+    Plot::new("my_plot")
+        .height(300.0)
+        // .width(1200.0)
+        .legend(legend)
+        .show_crosshair(false)
+        .show_grid([false, false])
+        .show(ui, |plot_ui| {
+            for (name, data) in plots {
+                let points = Points::new(name, data.as_slice()).radius(3.0);
+                plot_ui.points(points);
+                let series = Line::new(name, data.as_slice());
+                plot_ui.line(series);
+            }
+        });
+}
+
 impl eframe::App for ParamEditorApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn logic(&mut self, _ctx: &egui::Context, _frame: &mut eframe::Frame) {
         for msg in self.receiver.try_iter().collect::<Vec<_>>() {
             self.on_server_msg(msg);
         }
+    }
 
-        ctx.request_repaint();
-        ctx.set_zoom_factor(1.5);
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        ui.request_repaint();
+        ui.set_zoom_factor(1.5);
+
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.separator();
 
             let mut response = None;
@@ -154,7 +199,14 @@ impl eframe::App for ParamEditorApp {
 
             ui.separator();
 
+            draw_plot(ui, &self.plots);
+
+            ui.separator();
+
             ui.horizontal(|ui| {
+                if ui.button("Clear Plots").clicked() {
+                    self.plots.clear();
+                }
                 if ui.button("Speed 0").clicked() {
                     _ = self.sender.send(ServerRequest::SetSimSpeed(0));
                 }

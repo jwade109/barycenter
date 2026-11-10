@@ -86,6 +86,10 @@ impl ServerNode {
         }
     }
 
+    pub fn client_count(&self) -> usize {
+        self.clients.len()
+    }
+
     pub fn broadcast(&mut self, msg: ServerResponse) {
         for client in self.clients.values_mut() {
             _ = client.send(msg.clone());

@@ -128,12 +128,10 @@ impl MultiplayerBackend {
             let e = match msg.clone() {
                 ServerResponse::Driver {
                     ticks,
-                    speed,
+                    speed: _,
                     deltas,
-                    players,
                 } => {
                     self.on_driver_packet(ticks, deltas);
-                    self.world.players = players;
                     continue;
                 }
                 ServerResponse::Kicked => {

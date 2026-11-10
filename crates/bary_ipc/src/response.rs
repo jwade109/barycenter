@@ -28,10 +28,10 @@ pub enum ServerResponse {
         ticks: u64,
         speed: u32,
         deltas: Vec<WorldDelta>,
-        players: Components<Player>,
     },
     /// General server info sent at 1 Hz
     Info {
+        clients: usize,
         grids: usize,
         planets: usize,
         thrusters: usize,

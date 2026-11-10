@@ -130,7 +130,6 @@ impl BaryServer {
             ticks: self.world.ticks,
             speed: self.tick_rate,
             deltas,
-            players: self.world.players.clone(),
         };
         self.node.broadcast(msg);
     }
@@ -369,6 +368,7 @@ impl BaryServer {
 
     fn send_info_packet(&mut self) {
         let info = ServerResponse::Info {
+            clients: self.node.client_count(),
             grids: self.world.grids.len(),
             planets: self.world.planets.len(),
             thrusters: self.world.thrusters.len(),
