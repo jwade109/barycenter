@@ -293,6 +293,7 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_maximized(true)
             .with_resizable(true),
+        renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
 

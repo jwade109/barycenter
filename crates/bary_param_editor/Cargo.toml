@@ -5,7 +5,7 @@ edition = "2024"
 rust-version.workspace = true
 
 [dependencies]
-eframe = "0.37.0"
+eframe = { version = "0.37", features = ["glow", "default_fonts"] }
 egui = "0.37.0"
 bary_ipc = { path = "../bary_ipc" }
 log = "0.4.31"
