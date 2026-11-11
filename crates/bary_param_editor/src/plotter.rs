@@ -20,7 +20,7 @@ impl Plotter {
         let p = PlotPoint { x, y };
         if let Some(plot) = self.plots.get_mut(key) {
             plot.push(p);
-            if plot.len() > 1000 {
+            if plot.len() > 50 * 120 {
                 plot.remove(0);
             }
         } else {
@@ -38,7 +38,6 @@ impl Plotter {
         };
         plot.legend(legend)
             .show_crosshair(false)
-            .show_grid([false, false])
             .show(ui, |plot_ui| {
                 for (name, data) in &self.plots {
                     let points = Points::new(name, data.as_slice()).radius(1.0);

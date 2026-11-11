@@ -1,5 +1,5 @@
-use bary_core::prelude::{Components, DVec2, Ent, Isometry2d, ParamValue};
-use bary_sim::{Player, SimulationEvent, WorldDelta};
+use bary_core::prelude::{Ent, Isometry2d, ParamValue};
+use bary_sim::{SimulationEvent, WorldDelta};
 use enum_discriminant::discriminant;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -39,10 +39,9 @@ pub enum ServerResponse {
         blueprints: usize,
     },
     /// Grid-specific info
-    Grid {
+    Grids {
         tick: u64,
-        grid: Ent,
-        iso: Isometry2d,
+        grids: BTreeMap<Ent, (String, String, Isometry2d)>,
     },
     /// Thruster-specific info
     Thrusters {

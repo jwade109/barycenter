@@ -188,6 +188,7 @@ pub struct Computer {
     thruster_odometry: DVec2,
     controller: Controller,
     grid_info: Option<GridInfo>,
+    attitude_pd: PDCtrl,
 }
 
 impl Computer {
@@ -205,6 +206,7 @@ impl Computer {
             thruster_odometry: DVec2::ZERO,
             controller: Controller::idle(),
             grid_info: None,
+            attitude_pd: PDCtrl::new(30.0, 50.0),
         }
     }
 
@@ -215,6 +217,11 @@ impl Computer {
         };
 
         self.grid_info = Some(info);
+    }
+
+    pub fn set_attitude_pd_coeffs(&mut self, kp: f64, kd: f64) {
+        self.attitude_pd.kp = kp;
+        self.attitude_pd.kd = kd;
     }
 
     pub fn is_on(&self) -> bool {
@@ -295,7 +302,7 @@ impl Computer {
         if let Some(ctrl) = self.control_from_instruction() {
             self.set_current_control(ctrl);
         } else if let Some(target_pose) = self.current_waypoint() {
-            self.do_waypoint_navigation(info.pos, info.vel, target_pose, params);
+            self.do_waypoint_navigation(info.pos, info.vel, target_pose);
         } else if let Some(target) = self.current_angle() {
             let actual = Angle::radians(info.pos.rotation);
 
@@ -369,13 +376,7 @@ impl Computer {
         }
     }
 
-    fn do_waypoint_navigation(
-        &mut self,
-        ego: Isometry2d,
-        ego_vel: Isometry2d,
-        target: Isometry2d,
-        params: &mut DynamicParams,
-    ) {
+    fn do_waypoint_navigation(&mut self, ego: Isometry2d, ego_vel: Isometry2d, target: Isometry2d) {
         let target_pv = PV::from_f64(target.translation, Vec2::ZERO);
         let actual_pv = PV::from_f64(ego.translation, ego_vel.translation);
 
@@ -385,13 +386,13 @@ impl Computer {
             angular_velocity: ego_vel.rotation as f64,
         };
 
-        let attitude = PDCtrl::new(
-            params.get_float("attitude_kp", 30.0),
-            params.get_float("attitude_kd", 50.0),
+        let (ctrl, _status) = position_hold_control_law(
+            target_pv,
+            target.rotation,
+            &body,
+            DVec2::ZERO,
+            &self.attitude_pd,
         );
-
-        let (ctrl, _status) =
-            position_hold_control_law(target_pv, target.rotation, &body, DVec2::ZERO, &attitude);
 
         self.set_current_control(ctrl);
     }

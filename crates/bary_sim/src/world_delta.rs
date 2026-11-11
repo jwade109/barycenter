@@ -93,4 +93,5 @@ pub enum WorldDelta {
     SetThrusterThrottle(Ent, f32),
     SetComputerState(Ent, bool),
     SetGridInstruction(Ent, TimedInstruction),
+    SetGridAttitudePD(Ent, f64, f64),
 }

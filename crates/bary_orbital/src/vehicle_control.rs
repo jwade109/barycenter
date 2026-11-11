@@ -79,7 +79,7 @@ pub fn zero_gravity_velocity_control_law(
     desired_vel: DVec2,
     idle_angle: f64,
     body: &RigidBody,
-    attitude_controller: &PDCtrl,
+    attitude_pd: &PDCtrl,
 ) -> (VehicleControl, VehicleControlStatus) {
     let vel_error = body.pv.vel - desired_vel;
     let mut ctrl = VehicleControl::NULLOPT;
@@ -123,7 +123,7 @@ pub fn zero_gravity_velocity_control_law(
         }
     }
 
-    let (attitude, herror) = compute_attitude_control(body, target_angle, attitude_controller);
+    let (attitude, herror) = compute_attitude_control(body, target_angle, attitude_pd);
 
     ctrl.attitude = attitude;
 
@@ -140,7 +140,7 @@ pub fn zero_gravity_control_law(
     target: PV,
     target_angle: f64,
     body: &RigidBody,
-    attitude_controller: &PDCtrl,
+    attitude_pd: &PDCtrl,
 ) -> (VehicleControl, VehicleControlStatus) {
     let error = target - body.pv;
     let distance = error.pos.length();
@@ -165,7 +165,7 @@ pub fn zero_gravity_control_law(
 
     let desired_vel = target.vel + error_hat * desired_magnitude;
     let (ctrl, status) =
-        zero_gravity_velocity_control_law(desired_vel, desired_angle, body, attitude_controller);
+        zero_gravity_velocity_control_law(desired_vel, desired_angle, body, attitude_pd);
 
     let status = match status {
         VehicleControlStatus::VelocityHold { vel, hdg } => {
@@ -180,7 +180,7 @@ pub fn zero_gravity_control_law(
 fn compute_attitude_control(
     body: &RigidBody,
     target_angle: f64,
-    pid: &PDCtrl,
+    pd: &PDCtrl,
 ) -> (f64, SetpointError<f64>) {
     let attitude_error = wrap_pi_npi_f64(target_angle - body.angle);
 
@@ -194,7 +194,7 @@ fn compute_attitude_control(
     //     return (0.0, herror);
     // }
 
-    let x = pid.apply(attitude_error, body.angular_velocity);
+    let x = pd.apply(attitude_error, body.angular_velocity);
     // let x = if x.abs() > 1.0 { x } else { 0.0 };
 
     (x, herror)
@@ -271,12 +271,12 @@ pub fn position_hold_control_law(
     target_angle: f64,
     body: &RigidBody,
     gravity: DVec2,
-    attitude: &PDCtrl,
+    attitude_pd: &PDCtrl,
 ) -> (VehicleControl, VehicleControlStatus) {
     if gravity.length() > 0.0 {
         hover_control_law(target.pos, gravity, body)
     } else {
-        zero_gravity_control_law(target, target_angle, body, attitude)
+        zero_gravity_control_law(target, target_angle, body, attitude_pd)
     }
 }
 

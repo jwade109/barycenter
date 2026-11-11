@@ -1,17 +1,21 @@
-use bary_core::prelude::{ParamValue, randvec, wrap_pi_npi_f64};
+use bary_core::prelude::{Ent, Isometry2d, ParamValue, randvec, wrap_0_2pi_f64, wrap_pi_npi_f64};
 use bary_ipc::{ClientNode, ServerRequest, ServerResponse};
-use bary_sim::WorldDelta;
+use bary_sim::{Sender, WorldDelta};
 use eframe::egui;
-use egui::{AsId, Id, Ui, WidgetText};
+use egui::{Id, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
 use egui_plot::*;
 use log::{Level, info};
 use std::collections::{BTreeMap, VecDeque};
-use std::sync::mpsc::*;
-use std::time::{Duration, Instant};
+use std::sync::mpsc;
+use std::time::Duration;
 
 mod backend_handle;
+mod grid_commander;
 mod plotter;
+
+use crate::grid_commander::GridCommander;
+use crate::plotter::*;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 enum Tab {
@@ -19,6 +23,7 @@ enum Tab {
     HeadingPlot,
     ThrustersPlot,
     Buttons,
+    GridCommander,
 }
 
 impl std::fmt::Display for Tab {
@@ -28,12 +33,13 @@ impl std::fmt::Display for Tab {
             Tab::PositionPlot => "Position",
             Tab::ThrustersPlot => "Thrusters",
             Tab::Buttons => "Buttons",
+            Tab::GridCommander => "Grid Commander",
         };
         f.write_str(s)
     }
 }
 
-impl TabViewer for ParamEditorApp {
+impl TabViewer for App {
     // This associated type is used to attach some data to each tab.
     type Tab = Tab;
 
@@ -49,6 +55,8 @@ impl TabViewer for ParamEditorApp {
 
     // Defines the contents of a given `tab`.
     fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
+        let mut deltas = Sender::new();
+
         match tab {
             Tab::HeadingPlot => {
                 self.heading.draw(ui, "heading", None);
@@ -62,18 +70,24 @@ impl TabViewer for ParamEditorApp {
             Tab::Buttons => {
                 self.button_panel(ui);
             }
+            Tab::GridCommander => {
+                self.commander.draw(ui, &self.grid_info, &mut deltas);
+            }
+        }
+
+        for delta in deltas.take() {
+            _ = self.sender.send(delta.into());
         }
     }
 }
-
-use crate::plotter::*;
-
-struct ParamEditorApp {
-    sender: Sender<ServerRequest>,
-    receiver: Receiver<ServerResponse>,
+struct App {
+    sender: mpsc::Sender<ServerRequest>,
+    receiver: mpsc::Receiver<ServerResponse>,
     text_fields: BTreeMap<String, ParameterField>,
     telemetry: BTreeMap<u8, ServerResponse>,
     logs: VecDeque<ServerResponse>,
+
+    grid_info: BTreeMap<Ent, (String, String, Isometry2d)>,
 
     server_ticks: u64,
     n_clients: usize,
@@ -81,16 +95,17 @@ struct ParamEditorApp {
     pos: Plotter,
     heading: Plotter,
     thrusters: Plotter,
+    commander: GridCommander,
 
     dock_state: DockState<Tab>,
 }
 
-impl Default for ParamEditorApp {
+impl Default for App {
     fn default() -> Self {
         let client = ClientNode::localhost(5000);
 
-        let (request_sender, request_receiver) = channel();
-        let (response_sender, response_receiver) = channel();
+        let (request_sender, request_receiver) = mpsc::channel();
+        let (response_sender, response_receiver) = mpsc::channel();
 
         std::thread::spawn(|| {
             background_thread(client, request_receiver, response_sender);
@@ -105,8 +120,11 @@ impl Default for ParamEditorApp {
 
         // Insert "tab2" to the left of "tab1", where the width of "tab2"
         // is 20% of root node's width.
-        let [_old_node, _new_node] =
-            surface.split_left(NodeIndex::root(), 0.20, vec![Tab::Buttons]);
+        let [_old_node, _new_node] = surface.split_left(
+            NodeIndex::root(),
+            0.20,
+            vec![Tab::Buttons, Tab::GridCommander],
+        );
 
         Self {
             sender: request_sender,
@@ -119,7 +137,9 @@ impl Default for ParamEditorApp {
             pos: Plotter::new(),
             heading: Plotter::new(),
             thrusters: Plotter::new(),
+            commander: GridCommander::new(),
             dock_state,
+            grid_info: BTreeMap::new(),
         }
     }
 }
@@ -142,8 +162,8 @@ struct ParameterField {
 
 fn background_thread(
     mut client: ClientNode,
-    request_receiver: Receiver<ServerRequest>,
-    response_sender: Sender<ServerResponse>,
+    request_receiver: mpsc::Receiver<ServerRequest>,
+    response_sender: mpsc::Sender<ServerResponse>,
 ) {
     client.send(ServerRequest::Ping);
     client.send(ServerRequest::RequestParams);
@@ -161,7 +181,7 @@ fn background_thread(
     }
 }
 
-impl ParamEditorApp {
+impl App {
     fn button_panel(&mut self, ui: &mut egui::Ui) {
         if ui.button("Clear Plots").clicked() {
             self.pos.clear();
@@ -250,15 +270,17 @@ impl ParamEditorApp {
                     self.thrusters.add(&key, x, y);
                 }
             }
-            ServerResponse::Grid { tick, grid, iso } => {
-                let pos = iso.tr();
-                self.pos.add(&format!("pos_{}", grid), pos.x, pos.y);
-                let x = tick as f64;
-                let y = wrap_pi_npi_f64(iso.rotation);
-                self.heading.add(&format!("heading_{}", grid), x, y);
+            ServerResponse::Grids { tick, grids } => {
+                self.grid_info = grids.clone();
+                for (id, (name, _model, iso)) in grids {
+                    let pos = iso.tr();
+                    self.pos.add(&format!("pos_{}_{}", id, name), pos.x, pos.y);
+                    let x = tick as f64;
+                    let y = wrap_0_2pi_f64(iso.rotation).to_degrees();
+                    self.heading.add(&format!("heading_{}_{}", id, name), x, y);
+                }
             }
             ServerResponse::Parameters(params) => {
-                info!("Got new parameters: {params:?}");
                 for (key, value) in params {
                     self.text_fields
                         .entry(key)
@@ -277,6 +299,9 @@ impl ParamEditorApp {
                 self.pos.clear();
                 self.heading.clear();
                 self.thrusters.clear();
+            }
+            ServerResponse::Ack => {
+                // don't really care
             }
             e => {
                 info!("{e:?}");
@@ -327,7 +352,7 @@ fn draw_plot(ui: &mut egui::Ui, plots: &BTreeMap<String, Vec<PlotPoint>>, id: &s
         });
 }
 
-impl eframe::App for ParamEditorApp {
+impl eframe::App for App {
     fn logic(&mut self, _ctx: &egui::Context, _frame: &mut eframe::Frame) {
         for msg in self.receiver.try_iter().collect::<Vec<_>>() {
             self.on_server_msg(msg);
@@ -360,6 +385,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Server Debugger",
         options,
-        Box::new(|_| Ok(Box::<ParamEditorApp>::default())),
+        Box::new(|_| Ok(Box::<App>::default())),
     )
 }

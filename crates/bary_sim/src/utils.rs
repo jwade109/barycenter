@@ -640,6 +640,13 @@ pub fn set_grid_instruction(
     set_cpu_instruction(world, cpu_id, ti)
 }
 
+pub fn set_grid_attitude_pd(world: &mut World, grid_id: Ent, kp: f64, kd: f64) -> BaryResult<()> {
+    let cpu_id = get_primary_cpu_id(grid_id, &world.grids)?;
+    let cpu = world.computers.try_get_mut(cpu_id)?;
+    cpu.set_attitude_pd_coeffs(kp, kd);
+    Ok(())
+}
+
 pub fn enqueue_grid_instruction(
     world: &mut World,
     grid_id: Ent,

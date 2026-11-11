@@ -377,6 +377,8 @@ impl BaryServer {
         };
         self.node.broadcast(info);
 
+        let mut grids = BTreeMap::new();
+
         for (id, grid) in self.world.grids.iter() {
             let mut info = BTreeMap::new();
             for thruster_id in &grid.thrusters {
@@ -390,14 +392,19 @@ impl BaryServer {
                 thrusters: info,
             };
             self.node.broadcast(msg);
-
-            let msg = ServerResponse::Grid {
-                tick: self.world.ticks,
-                grid: *id,
-                iso: grid.particle_location,
-            };
-            self.node.broadcast(msg);
+            let model = grid
+                .blueprint
+                .as_ref()
+                .map(|bp| bp.0.clone())
+                .unwrap_or_default();
+            grids.insert(*id, (grid.name.clone(), model, grid.particle_location));
         }
+
+        let msg = ServerResponse::Grids {
+            tick: self.world.ticks,
+            grids,
+        };
+        self.node.broadcast(msg);
     }
 
     pub fn update(&mut self) {

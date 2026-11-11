@@ -213,5 +213,9 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             set_grid_instruction(world, grid_id, ti)?;
             Ok(())
         }
+        WorldDelta::SetGridAttitudePD(grid_id, kp, kd) => {
+            set_grid_attitude_pd(world, grid_id, kp, kd)?;
+            Ok(())
+        }
     }
 }

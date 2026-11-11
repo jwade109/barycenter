@@ -120,7 +120,7 @@ pub fn sys_update_thrusters(
             );
 
             let changed = if thruster.is_rcs() {
-                let can_torque = wrench.rotation.abs() > 0.5 && ctrl.attitude.abs() > 0.5;
+                let can_torque = wrench.rotation.abs() > 0.0 && ctrl.attitude.abs() > 0.0;
                 let is_torque =
                     can_torque && wrench.rotation.signum() as f64 == ctrl.attitude.signum();
                 let is_linear = tac.throttle > 0.0 && tac.use_rcs;
@@ -129,10 +129,6 @@ pub fn sys_update_thrusters(
                 } else {
                     0.0
                 };
-                // println!(
-                //     "{}: thr={}, ct={}, it={}, {}, {}",
-                //     thruster_id, throttle, can_torque, is_torque, wrench.rotation, ctrl.attitude,
-                // );
                 thruster.set_state(throttle, Some(*cpu_id))
             } else {
                 let throttle = if !tac.use_rcs { tac.throttle } else { 0.0 };

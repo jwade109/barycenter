@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize)]
 pub struct PDCtrl {
-    kp: f64,
-    kd: f64,
+    pub kp: f64,
+    pub kd: f64,
 }
 
 impl PDCtrl {
