@@ -60,29 +60,30 @@ impl GridCommander {
         ui.label(format!("Type: {model}"));
         ui.label(distance_str_v(iso.tr()));
 
-        ui.label("Heading");
-        ui.drag_angle(&mut self.heading);
+        ui.heading("Heading");
+        ui.horizontal(|ui| {
+            ui.drag_angle(&mut self.heading);
+            if ui.button("Attitude Hold").clicked() {
+                let instr = Instruction::HoldAttitude(Angle::radians(self.heading));
+                let delta = WorldDelta::SetGridInstruction(selected, instr.into());
+                deltas.send(delta.into());
+            }
+        });
+        ui.separator();
 
-        ui.label("Position");
-        ui.add(egui::DragValue::new(&mut self.x).speed(0.1));
-        ui.add(egui::DragValue::new(&mut self.y).speed(0.1));
+        ui.heading("Position");
+        ui.horizontal(|ui| {
+            ui.add(egui::DragValue::new(&mut self.x).speed(0.1));
+            ui.add(egui::DragValue::new(&mut self.y).speed(0.1));
+            if ui.button("Position Hold").clicked() {
+                let iso = (self.x as f64, self.y as f64, self.heading as f64).into();
+                let instr = Instruction::HoldPosition(iso);
+                let delta = WorldDelta::SetGridInstruction(selected, instr.into());
+                deltas.send(delta.into());
+            }
+        });
 
-        ui.label("Attitude PD Coefficients");
-        ui.add(egui::DragValue::new(&mut self.kp).speed(0.1));
-        ui.add(egui::DragValue::new(&mut self.kd).speed(0.1));
-
-        if ui.button("Attitude Hold").clicked() {
-            let instr = Instruction::HoldAttitude(Angle::radians(self.heading));
-            let delta = WorldDelta::SetGridInstruction(selected, instr.into());
-            deltas.send(delta.into());
-        }
-
-        if ui.button("Position Hold").clicked() {
-            let iso = (self.x as f64, self.y as f64, self.heading as f64).into();
-            let instr = Instruction::HoldPosition(iso);
-            let delta = WorldDelta::SetGridInstruction(selected, instr.into());
-            deltas.send(delta.into());
-        }
+        ui.separator();
 
         if ui.button("Drift").clicked() {
             let instr = Instruction::Drift;
@@ -90,10 +91,18 @@ impl GridCommander {
             deltas.send(delta.into());
         }
 
-        if ui.button("Set PD Coefficients").clicked() {
-            let delta = WorldDelta::SetGridAttitudePD(selected, self.kp, self.kd);
-            deltas.send(delta.into());
-        }
+        ui.separator();
+
+        ui.heading("Attitude PD Coefficients");
+
+        ui.horizontal(|ui| {
+            ui.add(egui::DragValue::new(&mut self.kp).speed(0.1));
+            ui.add(egui::DragValue::new(&mut self.kd).speed(0.1));
+            if ui.button("Set Coefficients").clicked() {
+                let delta = WorldDelta::SetGridAttitudePD(selected, self.kp, self.kd);
+                deltas.send(delta.into());
+            }
+        });
     }
 
     pub fn draw(

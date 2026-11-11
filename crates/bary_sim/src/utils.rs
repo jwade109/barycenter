@@ -73,7 +73,7 @@ pub fn get_grid_physical_props(
 pub fn set_thruster_state(thruster_id: Ent, world: &mut World, throttle: f32) -> BaryResult<Ent> {
     let part = world.parts.try_get(thruster_id)?;
     let thruster = world.thrusters.try_get_mut(thruster_id)?;
-    thruster.set_state(throttle, None);
+    thruster.set_state(throttle, 0.0, None);
     Ok(part.grid_id)
 }
 

@@ -119,20 +119,15 @@ pub fn sys_update_thrusters(
                 grid.center_of_mass,
             );
 
+            let wrench_sign = wrench.rotation.signum();
+
             let changed = if thruster.is_rcs() {
-                let can_torque = wrench.rotation.abs() > 0.0 && ctrl.attitude.abs() > 0.0;
-                let is_torque =
-                    can_torque && wrench.rotation.signum() as f64 == ctrl.attitude.signum();
-                let is_linear = tac.throttle > 0.0 && tac.use_rcs;
-                let throttle = if is_linear || is_torque {
-                    tac.throttle.max(ctrl.attitude.abs() as f32)
-                } else {
-                    0.0
-                };
-                thruster.set_state(throttle, Some(*cpu_id))
+                let angular_throttle = (wrench_sign * ctrl.attitude) as f32;
+                let linear_throttle = if tac.use_rcs { tac.throttle } else { 0.0 };
+                thruster.set_state(linear_throttle, angular_throttle, Some(*cpu_id))
             } else {
                 let throttle = if !tac.use_rcs { tac.throttle } else { 0.0 };
-                thruster.set_state(throttle, Some(*cpu_id))
+                thruster.set_state(throttle, 0.0, Some(*cpu_id))
             };
 
             thruster_changed |= changed;
@@ -270,7 +265,7 @@ pub fn set_all_thrusters(grid_id: Ent, throttle: f32, world: &mut World) -> Bary
     let grid = world.grids.try_get(grid_id)?;
     for thruster_id in &grid.thrusters {
         let thruster = world.thrusters.try_get_mut(*thruster_id)?;
-        thruster.set_state(throttle, None);
+        thruster.set_state(throttle, 0.0, None);
     }
     update_single_grid_acceleration(
         grid_id,

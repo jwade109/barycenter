@@ -146,15 +146,15 @@ pub fn zero_gravity_control_law(
     let distance = error.pos.length();
     let error_hat = error.pos.normalize_or_zero();
     let (desired_magnitude, desired_angle) = if distance > 7000.0 {
-        (150.0, body.angle)
+        (250.0, body.angle)
     } else if distance > 2000.0 {
-        (40.0, body.angle)
+        (50.0, body.angle)
     } else if distance > 1000.0 {
         (20.0, body.angle)
     } else if distance > 40.0 {
         (5.0, body.angle)
     } else {
-        ((distance / 40.0).clamp(0.0, 5.0), target_angle)
+        (distance / 30.0, target_angle)
     };
 
     let pos = SetpointError {

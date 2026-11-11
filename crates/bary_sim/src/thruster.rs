@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Thruster {
-    throttle: f32,
+    angular_throttle: f32,
+    linear_throttle: f32,
     is_rcs: bool,
     thrust: f32,
     /// the entity that last modified this thruster's state
@@ -14,7 +15,8 @@ pub struct Thruster {
 impl Thruster {
     pub fn from_proto(proto: &ThrusterPrototype) -> Self {
         Thruster {
-            throttle: 0.0,
+            angular_throttle: 0.0,
+            linear_throttle: 0.0,
             is_rcs: proto.is_rcs,
             // TODO(gross)
             thrust: proto.thrust as f32,
@@ -24,7 +26,8 @@ impl Thruster {
 
     pub fn rcs(thrust: f32) -> Self {
         Self {
-            throttle: 0.0,
+            angular_throttle: 0.0,
+            linear_throttle: 0.0,
             is_rcs: true,
             thrust,
             last_controlled_by: None,
@@ -33,7 +36,8 @@ impl Thruster {
 
     pub fn linear(thrust: f32) -> Self {
         Self {
-            throttle: 0.0,
+            angular_throttle: 0.0,
+            linear_throttle: 0.0,
             is_rcs: false,
             thrust,
             last_controlled_by: None,
@@ -45,24 +49,31 @@ impl Thruster {
     }
 
     pub fn is_on(&self) -> bool {
-        self.throttle > 0.0
+        self.throttle() > 0.0
     }
 
     pub fn throttle(&self) -> f32 {
-        self.throttle
+        self.linear_throttle + self.angular_throttle
     }
 
     pub fn current_thrust(&self) -> f32 {
-        self.thrust * self.throttle.clamp(0.0, 1.0)
+        self.thrust * self.throttle().clamp(0.0, 1.0)
     }
 
     pub fn max_thrust(&self) -> f32 {
         self.thrust
     }
 
-    pub fn set_state(&mut self, throttle: f32, identity: Option<Ent>) -> bool {
-        let changed = self.throttle != throttle;
-        self.throttle = throttle;
+    pub fn set_state(
+        &mut self,
+        linear_throttle: f32,
+        angular_throttle: f32,
+        identity: Option<Ent>,
+    ) -> bool {
+        let changed = self.linear_throttle != linear_throttle
+            || self.angular_throttle != angular_throttle;
+        self.linear_throttle = linear_throttle;
+        self.angular_throttle = angular_throttle;
         self.last_controlled_by = identity;
         changed
     }

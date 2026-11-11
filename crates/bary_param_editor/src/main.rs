@@ -10,7 +10,6 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::mpsc;
 use std::time::Duration;
 
-mod backend_handle;
 mod grid_commander;
 mod plotter;
 
@@ -59,13 +58,13 @@ impl TabViewer for App {
 
         match tab {
             Tab::HeadingPlot => {
-                self.heading.draw(ui, "heading", None);
+                self.heading.draw(ui);
             }
             Tab::PositionPlot => {
-                self.pos.draw(ui, "pos", 1.0);
+                self.pos.draw(ui);
             }
             Tab::ThrustersPlot => {
-                self.thrusters.draw(ui, "thrusters", None);
+                self.thrusters.draw(ui);
             }
             Tab::Buttons => {
                 self.button_panel(ui);
@@ -100,6 +99,25 @@ struct App {
     dock_state: DockState<Tab>,
 }
 
+fn default_layout() -> DockState<Tab> {
+    let mut dock_state = DockState::new(vec![Tab::PositionPlot]);
+
+    // Currently, the `DockState` only has one `Surface`: the main one.
+    // Let's get mutable access to add more nodes in it.
+    let surface = dock_state.main_surface_mut();
+
+    // Insert "tab2" to the left of "tab1", where the width of "tab2"
+    // is 20% of root node's width.
+    let [old_node, new_node] =
+        surface.split_left(NodeIndex::root(), 0.15, vec![Tab::GridCommander]);
+
+    surface.split_below(new_node, 0.5, vec![Tab::Buttons]);
+
+    surface.split_below(old_node, 0.5, vec![Tab::HeadingPlot, Tab::ThrustersPlot]);
+
+    dock_state
+}
+
 impl Default for App {
     fn default() -> Self {
         let client = ClientNode::localhost(5000);
@@ -111,21 +129,6 @@ impl Default for App {
             background_thread(client, request_receiver, response_sender);
         });
 
-        let tabs = vec![Tab::PositionPlot, Tab::HeadingPlot, Tab::ThrustersPlot];
-        let mut dock_state = DockState::new(tabs);
-
-        // Currently, the `DockState` only has one `Surface`: the main one.
-        // Let's get mutable access to add more nodes in it.
-        let surface = dock_state.main_surface_mut();
-
-        // Insert "tab2" to the left of "tab1", where the width of "tab2"
-        // is 20% of root node's width.
-        let [_old_node, _new_node] = surface.split_left(
-            NodeIndex::root(),
-            0.20,
-            vec![Tab::Buttons, Tab::GridCommander],
-        );
-
         Self {
             sender: request_sender,
             receiver: response_receiver,
@@ -134,11 +137,11 @@ impl Default for App {
             logs: VecDeque::new(),
             server_ticks: 0,
             n_clients: 0,
-            pos: Plotter::new(),
-            heading: Plotter::new(),
-            thrusters: Plotter::new(),
+            pos: Plotter::new("position", 1.0),
+            heading: Plotter::new("heading", None),
+            thrusters: Plotter::new("thrusters", None),
             commander: GridCommander::new(),
-            dock_state,
+            dock_state: default_layout(),
             grid_info: BTreeMap::new(),
         }
     }
@@ -251,9 +254,6 @@ impl App {
                 self.server_ticks = ticks;
             }
             ServerResponse::Info { clients, .. } => {
-                // let x = (Instant::now() - self.start).as_secs_f64();
-                // let y = clients as f64;
-                // self.metadata.add("clients", x, y);
                 self.n_clients = clients;
             }
             ServerResponse::Thrusters {
@@ -262,7 +262,7 @@ impl App {
                 thrusters,
             } => {
                 let x = tick as f64;
-                let y = thrusters.iter().filter(|(_, t)| **t > 0.0).count() as f64;
+                let y = thrusters.iter().filter(|(_, t)| **t > 0.001).count() as f64;
                 self.thrusters.add(&format!("{}-tr#", grid), x, y);
                 for (id, throttle) in thrusters {
                     let y = throttle as f64;

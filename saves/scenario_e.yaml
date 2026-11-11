@@ -1,0 +1,4 @@
+- !LoadBlueprint ["remora", 0]
+- !SpawnShip [["remora", 0], "Abbott", { translation: [0.0, 0.0], rotation: 0.0 }]
+- !LoadBlueprint ["bellerophon", 0]
+- !SpawnShip [["bellerophon", 0], "Costello", { translation: [0.0, 30.0], rotation: 0.0 }]
