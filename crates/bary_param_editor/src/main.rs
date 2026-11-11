@@ -1,7 +1,9 @@
-use bary_core::prelude::{ParamValue, randvec};
+use bary_core::prelude::{ParamValue, randvec, wrap_pi_npi_f64};
 use bary_ipc::{ClientNode, ServerRequest, ServerResponse};
 use bary_sim::WorldDelta;
 use eframe::egui;
+use egui::{AsId, Id, Ui, WidgetText};
+use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
 use egui_plot::*;
 use log::{Level, info};
 use std::collections::{BTreeMap, VecDeque};
@@ -9,15 +11,78 @@ use std::sync::mpsc::*;
 use std::time::{Duration, Instant};
 
 mod backend_handle;
+mod plotter;
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+enum Tab {
+    PositionPlot,
+    HeadingPlot,
+    ThrustersPlot,
+    Buttons,
+}
+
+impl std::fmt::Display for Tab {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Tab::HeadingPlot => "Heading",
+            Tab::PositionPlot => "Position",
+            Tab::ThrustersPlot => "Thrusters",
+            Tab::Buttons => "Buttons",
+        };
+        f.write_str(s)
+    }
+}
+
+impl TabViewer for ParamEditorApp {
+    // This associated type is used to attach some data to each tab.
+    type Tab = Tab;
+
+    // Returns the unique ID for the `tab`.
+    fn id(&mut self, tab: &mut Self::Tab) -> Id {
+        Id::new(tab)
+    }
+
+    // Returns the current `tab`'s title.
+    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText {
+        tab.to_string().into()
+    }
+
+    // Defines the contents of a given `tab`.
+    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
+        match tab {
+            Tab::HeadingPlot => {
+                self.heading.draw(ui, "heading", None);
+            }
+            Tab::PositionPlot => {
+                self.pos.draw(ui, "pos", 1.0);
+            }
+            Tab::ThrustersPlot => {
+                self.thrusters.draw(ui, "thrusters", None);
+            }
+            Tab::Buttons => {
+                self.button_panel(ui);
+            }
+        }
+    }
+}
+
+use crate::plotter::*;
 
 struct ParamEditorApp {
-    start: Instant,
     sender: Sender<ServerRequest>,
     receiver: Receiver<ServerResponse>,
     text_fields: BTreeMap<String, ParameterField>,
     telemetry: BTreeMap<u8, ServerResponse>,
     logs: VecDeque<ServerResponse>,
-    plots: BTreeMap<String, Vec<PlotPoint>>,
+
+    server_ticks: u64,
+    n_clients: usize,
+
+    pos: Plotter,
+    heading: Plotter,
+    thrusters: Plotter,
+
+    dock_state: DockState<Tab>,
 }
 
 impl Default for ParamEditorApp {
@@ -31,14 +96,30 @@ impl Default for ParamEditorApp {
             background_thread(client, request_receiver, response_sender);
         });
 
+        let tabs = vec![Tab::PositionPlot, Tab::HeadingPlot, Tab::ThrustersPlot];
+        let mut dock_state = DockState::new(tabs);
+
+        // Currently, the `DockState` only has one `Surface`: the main one.
+        // Let's get mutable access to add more nodes in it.
+        let surface = dock_state.main_surface_mut();
+
+        // Insert "tab2" to the left of "tab1", where the width of "tab2"
+        // is 20% of root node's width.
+        let [_old_node, _new_node] =
+            surface.split_left(NodeIndex::root(), 0.20, vec![Tab::Buttons]);
+
         Self {
-            start: Instant::now(),
             sender: request_sender,
             receiver: response_receiver,
             text_fields: BTreeMap::new(),
             telemetry: BTreeMap::new(),
             logs: VecDeque::new(),
-            plots: BTreeMap::new(),
+            server_ticks: 0,
+            n_clients: 0,
+            pos: Plotter::new(),
+            heading: Plotter::new(),
+            thrusters: Plotter::new(),
+            dock_state,
         }
     }
 }
@@ -81,15 +162,59 @@ fn background_thread(
 }
 
 impl ParamEditorApp {
-    fn add_plot_point(&mut self, key: &str, x: f64, y: f64) {
-        let p = PlotPoint { x, y };
-        if let Some(plot) = self.plots.get_mut(key) {
-            plot.push(p);
-            if plot.len() > 100 {
-                plot.remove(0);
+    fn button_panel(&mut self, ui: &mut egui::Ui) {
+        if ui.button("Clear Plots").clicked() {
+            self.pos.clear();
+            self.heading.clear();
+            self.thrusters.clear();
+        }
+        if ui.button("Speed 0").clicked() {
+            _ = self.sender.send(ServerRequest::SetSimSpeed(0));
+        }
+        if ui.button("Speed 1").clicked() {
+            _ = self.sender.send(ServerRequest::SetSimSpeed(1));
+        }
+        if ui.button("Speed 5").clicked() {
+            _ = self.sender.send(ServerRequest::SetSimSpeed(5));
+        }
+        if ui.button("Speed 20").clicked() {
+            _ = self.sender.send(ServerRequest::SetSimSpeed(20));
+        }
+        if ui.button("Speed 50").clicked() {
+            _ = self.sender.send(ServerRequest::SetSimSpeed(50));
+        }
+        if ui.button("Spawn Ship").clicked() {
+            _ = self
+                .sender
+                .send(WorldDelta::Ping(randvec(100.0, 1000.0).into()).into());
+        }
+        if ui.button("Say Hello").clicked() {
+            _ = self
+                .sender
+                .send(ServerRequest::ClientSays("Hello there!".into()));
+        }
+
+        for name in ["scenario_c", "scenario_d", "scenario_e"] {
+            let path = format!("saves/{}.yaml", name);
+            if ui.button(format!("Load {}", name)).clicked() {
+                _ = self.sender.send(ServerRequest::LoadSave(path));
             }
-        } else {
-            self.plots.insert(key.to_string(), vec![p]);
+        }
+
+        if ui.button("Download World").clicked() {
+            _ = self.sender.send(ServerRequest::BeginAsyncWorldDownload);
+        }
+
+        if ui.button("Request New Params").clicked() {
+            _ = self.sender.send(ServerRequest::RequestParams);
+        }
+
+        if ui.button("Push Params").clicked() {
+            let mut params = BTreeMap::new();
+            for (key, field) in &self.text_fields {
+                params.insert(key.clone(), field.value.clone());
+            }
+            _ = self.sender.send(ServerRequest::SetParameters(params));
         }
     }
 
@@ -103,14 +228,34 @@ impl ParamEditorApp {
 
         match msg {
             ServerResponse::Driver { ticks, .. } => {
-                let x = (Instant::now() - self.start).as_secs_f64();
-                let y = ticks as f64;
-                self.add_plot_point("server_ticks", x, y);
+                self.server_ticks = ticks;
             }
             ServerResponse::Info { clients, .. } => {
-                let x = (Instant::now() - self.start).as_secs_f64();
-                let y = clients as f64;
-                self.add_plot_point("clients", x, y);
+                // let x = (Instant::now() - self.start).as_secs_f64();
+                // let y = clients as f64;
+                // self.metadata.add("clients", x, y);
+                self.n_clients = clients;
+            }
+            ServerResponse::Thrusters {
+                tick,
+                grid,
+                thrusters,
+            } => {
+                let x = tick as f64;
+                let y = thrusters.iter().filter(|(_, t)| **t > 0.0).count() as f64;
+                self.thrusters.add(&format!("{}-tr#", grid), x, y);
+                for (id, throttle) in thrusters {
+                    let y = throttle as f64;
+                    let key = format!("gr-{}-thr-{}", grid, id);
+                    self.thrusters.add(&key, x, y);
+                }
+            }
+            ServerResponse::Grid { tick, grid, iso } => {
+                let pos = iso.tr();
+                self.pos.add(&format!("pos_{}", grid), pos.x, pos.y);
+                let x = tick as f64;
+                let y = wrap_pi_npi_f64(iso.rotation);
+                self.heading.add(&format!("heading_{}", grid), x, y);
             }
             ServerResponse::Parameters(params) => {
                 info!("Got new parameters: {params:?}");
@@ -127,6 +272,11 @@ impl ParamEditorApp {
                             is_dirty: false,
                         });
                 }
+            }
+            ServerResponse::HaveNewSave => {
+                self.pos.clear();
+                self.heading.clear();
+                self.thrusters.clear();
             }
             e => {
                 info!("{e:?}");
@@ -161,11 +311,9 @@ fn render_params(
         });
 }
 
-fn draw_plot(ui: &mut egui::Ui, plots: &BTreeMap<String, Vec<PlotPoint>>) {
-    let legend = Legend::default().title("Legendary");
-    Plot::new("my_plot")
-        .height(300.0)
-        // .width(1200.0)
+fn draw_plot(ui: &mut egui::Ui, plots: &BTreeMap<String, Vec<PlotPoint>>, id: &str) {
+    let legend = Legend::default();
+    Plot::new(id)
         .legend(legend)
         .show_crosshair(false)
         .show_grid([false, false])
@@ -190,99 +338,11 @@ impl eframe::App for ParamEditorApp {
         ui.request_repaint();
         ui.set_zoom_factor(1.5);
 
-        egui::CentralPanel::default().show(ui, |ui| {
-            ui.separator();
-
-            let mut response = None;
-
-            render_params(ui, &mut self.text_fields, &mut response);
-
-            ui.separator();
-
-            draw_plot(ui, &self.plots);
-
-            ui.separator();
-
-            ui.horizontal(|ui| {
-                if ui.button("Clear Plots").clicked() {
-                    self.plots.clear();
-                }
-                if ui.button("Speed 0").clicked() {
-                    _ = self.sender.send(ServerRequest::SetSimSpeed(0));
-                }
-                if ui.button("Speed 1").clicked() {
-                    _ = self.sender.send(ServerRequest::SetSimSpeed(1));
-                }
-                if ui.button("Speed 2").clicked() {
-                    _ = self.sender.send(ServerRequest::SetSimSpeed(2));
-                }
-                if ui.button("Speed 4").clicked() {
-                    _ = self.sender.send(ServerRequest::SetSimSpeed(4));
-                }
-                if ui.button("Spawn Ship").clicked() {
-                    _ = self
-                        .sender
-                        .send(WorldDelta::Ping(randvec(100.0, 1000.0).into()).into());
-                }
-                if ui.button("Say Hello").clicked() {
-                    _ = self
-                        .sender
-                        .send(ServerRequest::ClientSays("Hello there!".into()));
-                }
-                if ui.button("Load World").clicked() {
-                    _ = self
-                        .sender
-                        .send(ServerRequest::LoadSave("saves/scenario_c.yaml".into()));
-                }
-                if ui.button("Download World").clicked() {
-                    _ = self.sender.send(ServerRequest::BeginAsyncWorldDownload);
-                }
-            });
-
-            ui.separator();
-
-            if let Some((key, val)) = response {
-                let msg = ServerRequest::SetParameters([(key, val)].into());
-                _ = self.sender.send(msg);
-            }
-
-            if ui.button("Request New Params").clicked() {
-                _ = self.sender.send(ServerRequest::RequestParams);
-            }
-
-            if ui.button("Push Params").clicked() {
-                let mut params = BTreeMap::new();
-                for (key, field) in &self.text_fields {
-                    params.insert(key.clone(), field.value.clone());
-                }
-                _ = self.sender.send(ServerRequest::SetParameters(params));
-            }
-
-            ui.separator();
-
-            egui::ScrollArea::vertical()
-                .id_salt("telemetry")
-                .show(ui, |ui| {
-                    egui::Grid::new("telemetry").num_columns(2).show(ui, |ui| {
-                        for (id, log) in &self.telemetry {
-                            ui.label(format!("{id}"));
-                            ui.label(format!("{log:?}"));
-                            ui.end_row();
-                        }
-                    });
-                });
-
-            ui.separator();
-
-            egui::ScrollArea::vertical()
-                .id_salt("logs")
-                .stick_to_bottom(true)
-                .show(ui, |ui| {
-                    for log in &self.logs {
-                        ui.label(format!("{:?}", log));
-                    }
-                });
-        });
+        let mut dock_state = self.dock_state.clone();
+        DockArea::new(&mut dock_state)
+            .style(Style::from_egui(ui.style().as_ref()))
+            .show_inside(ui, self);
+        self.dock_state = dock_state;
     }
 }
 

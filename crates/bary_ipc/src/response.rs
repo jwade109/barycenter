@@ -1,4 +1,4 @@
-use bary_core::prelude::{Components, Ent, ParamValue};
+use bary_core::prelude::{Components, DVec2, Ent, Isometry2d, ParamValue};
 use bary_sim::{Player, SimulationEvent, WorldDelta};
 use enum_discriminant::discriminant;
 use serde::{Deserialize, Serialize};
@@ -37,6 +37,18 @@ pub enum ServerResponse {
         thrusters: usize,
         parts: usize,
         blueprints: usize,
+    },
+    /// Grid-specific info
+    Grid {
+        tick: u64,
+        grid: Ent,
+        iso: Isometry2d,
+    },
+    /// Thruster-specific info
+    Thrusters {
+        tick: u64,
+        grid: Ent,
+        thrusters: BTreeMap<Ent, f32>,
     },
     /// Indicates to client that the download is finished
     TransactionComplete,

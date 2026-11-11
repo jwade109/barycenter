@@ -112,7 +112,6 @@ impl ClientNode {
 
         for packet in self.framer.parse() {
             if let Ok(response) = bincode::deserialize::<ServerResponse>(packet.payload()) {
-                info!("Got a response: {response:?}");
                 messages.push(response);
             } else {
                 warn!("Unable to parse packet as response");

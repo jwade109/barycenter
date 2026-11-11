@@ -53,7 +53,7 @@ impl Thruster {
     }
 
     pub fn current_thrust(&self) -> f32 {
-        self.thrust * self.throttle
+        self.thrust * self.throttle.clamp(0.0, 1.0)
     }
 
     pub fn max_thrust(&self) -> f32 {
@@ -61,8 +61,7 @@ impl Thruster {
     }
 
     pub fn set_state(&mut self, throttle: f32, identity: Option<Ent>) -> bool {
-        let throttle = throttle.clamp(0.0, 1.0);
-        let changed = self.throttle == throttle;
+        let changed = self.throttle != throttle;
         self.throttle = throttle;
         self.last_controlled_by = identity;
         changed

@@ -305,7 +305,7 @@ impl Computer {
                 angular_velocity: info.vel.rotation as f64,
             };
 
-            let pid = PDCtrl::new(20.0, 250.0);
+            let pid = PDCtrl::new(20.0, 30.0);
 
             let (ctrl, _status) = attitude_control_law(target.as_rad() as f64, &pid, &body);
 
@@ -386,8 +386,8 @@ impl Computer {
         };
 
         let attitude = PDCtrl::new(
-            params.get_float("attitude_kp", 50.0),
-            params.get_float("attitude_kd", 250.0),
+            params.get_float("attitude_kp", 30.0),
+            params.get_float("attitude_kd", 50.0),
         );
 
         let (ctrl, _status) =

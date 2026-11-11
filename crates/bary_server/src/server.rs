@@ -102,7 +102,7 @@ impl BaryServer {
             tick_rate: speed,
             node,
             update_timer: WallTimer::hz(TICKS_PER_SECOND as u32),
-            md5_sync_timer: WallTimer::hz(1),
+            md5_sync_timer: WallTimer::hz(10),
             queued_deltas: Vec::new(),
             transactions: HashMap::new(),
         })
@@ -366,7 +366,7 @@ impl BaryServer {
         }
     }
 
-    fn send_info_packet(&mut self) {
+    fn send_info_packets(&mut self) {
         let info = ServerResponse::Info {
             clients: self.node.client_count(),
             grids: self.world.grids.len(),
@@ -376,6 +376,28 @@ impl BaryServer {
             blueprints: self.world.blueprints.len(),
         };
         self.node.broadcast(info);
+
+        for (id, grid) in self.world.grids.iter() {
+            let mut info = BTreeMap::new();
+            for thruster_id in &grid.thrusters {
+                if let Some(thruster) = self.world.thrusters.get(*thruster_id) {
+                    info.insert(*thruster_id, thruster.throttle());
+                }
+            }
+            let msg = ServerResponse::Thrusters {
+                tick: self.world.ticks,
+                grid: *id,
+                thrusters: info,
+            };
+            self.node.broadcast(msg);
+
+            let msg = ServerResponse::Grid {
+                tick: self.world.ticks,
+                grid: *id,
+                iso: grid.particle_location,
+            };
+            self.node.broadcast(msg);
+        }
     }
 
     pub fn update(&mut self) {
@@ -386,7 +408,6 @@ impl BaryServer {
         if self.md5_sync_timer.tick() {
             // self.send_md5_sync_packet();
             self.send_driver_packet();
-            self.send_info_packet();
             // self.send_tlm_server_info();
         }
 
@@ -406,6 +427,7 @@ impl BaryServer {
 
         for _ in 0..self.tick_rate {
             update_world(&mut self.world);
+            self.send_info_packets();
         }
 
         self.process_transactions();

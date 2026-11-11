@@ -190,12 +190,12 @@ fn compute_attitude_control(
         error: attitude_error,
     };
 
-    if wrap_pi_npi_f64(target_angle - body.angle).abs() < 0.02 {
-        return (0.0, herror);
-    }
+    // if wrap_pi_npi_f64(target_angle - body.angle).abs() < 0.02 {
+    //     return (0.0, herror);
+    // }
 
     let x = pid.apply(attitude_error, body.angular_velocity);
-    let x = if x.abs() > 1.0 { x } else { 0.0 };
+    // let x = if x.abs() > 1.0 { x } else { 0.0 };
 
     (x, herror)
 }

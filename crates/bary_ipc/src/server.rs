@@ -36,20 +36,17 @@ impl Client {
         let mut requests = Vec::new();
 
         'read: loop {
-            info!("Reading...");
             match self.socket.read(&mut buf) {
                 Ok(0) => {
                     warn!("Client {} has disconnected", self.addr);
                     return Err(());
                 }
                 Ok(n) => {
-                    info!("Got {n} bytes");
                     let bytes = &buf[0..n];
                     self.framer.push(bytes);
                 }
                 Err(e) => match e.kind() {
                     ErrorKind::WouldBlock => {
-                        info!("Got WouldBlock");
                         break 'read;
                     }
                     ErrorKind::ConnectionReset => {
@@ -63,7 +60,6 @@ impl Client {
             }
         }
 
-        info!("Parsing...");
         for packet in self.framer.parse() {
             if let Ok(request) = bincode::deserialize::<ServerRequest>(packet.payload()) {
                 info!("Got a request: {request:?}");
@@ -72,7 +68,6 @@ impl Client {
                 warn!("Unable to parse packet as request");
             }
         }
-        info!("all done");
 
         Ok(requests)
     }

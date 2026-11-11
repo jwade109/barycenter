@@ -113,7 +113,7 @@ pub fn sys_update_thrusters(
             let center_of_thrust = isometry.translation;
             let rotation = part.region.rot();
             let wrench = body_frame_wrench(
-                thruster.current_thrust(),
+                thruster.max_thrust(),
                 center_of_thrust,
                 rotation,
                 grid.center_of_mass,
@@ -129,6 +129,10 @@ pub fn sys_update_thrusters(
                 } else {
                     0.0
                 };
+                // println!(
+                //     "{}: thr={}, ct={}, it={}, {}, {}",
+                //     thruster_id, throttle, can_torque, is_torque, wrench.rotation, ctrl.attitude,
+                // );
                 thruster.set_state(throttle, Some(*cpu_id))
             } else {
                 let throttle = if !tac.use_rcs { tac.throttle } else { 0.0 };
