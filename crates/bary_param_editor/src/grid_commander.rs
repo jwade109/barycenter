@@ -1,13 +1,15 @@
 use std::collections::BTreeMap;
 
-use bary_core::prelude::{Angle, Ent, Isometry2d, distance_str_v, randvec};
+use bary_core::prelude::*;
+use bary_ipc::GridTelemetry;
 use bary_sim::{Instruction, Sender, WorldDelta};
 
 pub struct GridCommander {
     selected: Option<Ent>,
     heading: f32,
-    x: f64,
-    y: f64,
+    pos: DVec2,
+    vel: DVec2,
+    delta_v: DVec2,
     kp: f64,
     kd: f64,
 }
@@ -17,21 +19,23 @@ impl GridCommander {
         Self {
             selected: None,
             heading: 0.0,
-            x: 0.0,
-            y: 0.0,
+            pos: DVec2::ZERO,
+            vel: DVec2::ZERO,
+            delta_v: DVec2::ZERO,
             kp: 30.0,
             kd: 50.0,
         }
     }
 
-    fn grid_not_selected(
-        &mut self,
-        ui: &mut egui::Ui,
-        grids: &BTreeMap<Ent, (String, String, Isometry2d)>,
-    ) {
-        for (id, (name, _, pos)) in grids {
+    fn grid_not_selected(&mut self, ui: &mut egui::Ui, grids: &BTreeMap<Ent, GridTelemetry>) {
+        for (id, tlm) in grids {
             if ui
-                .button(format!("{} {} {}", id, name, distance_str_v(pos.tr())))
+                .button(format!(
+                    "{} {} {}",
+                    id,
+                    tlm.name,
+                    distance_str_v(tlm.pos.tr())
+                ))
                 .clicked()
             {
                 self.selected = Some(*id);
@@ -43,7 +47,7 @@ impl GridCommander {
         &mut self,
         ui: &mut egui::Ui,
         selected: Ent,
-        grids: &BTreeMap<Ent, (String, String, Isometry2d)>,
+        grids: &BTreeMap<Ent, GridTelemetry>,
         deltas: &mut Sender<WorldDelta>,
     ) {
         if ui.button("Select another ship").clicked() {
@@ -51,14 +55,15 @@ impl GridCommander {
             return;
         }
 
-        let Some((name, model, iso)) = grids.get(&selected) else {
+        let Some(tlm) = grids.get(&selected) else {
             self.selected = None;
             return;
         };
 
-        ui.heading(name);
-        ui.label(format!("Type: {model}"));
-        ui.label(distance_str_v(iso.tr()));
+        ui.heading(&tlm.name);
+        ui.label(format!("Type: {}", tlm.model));
+        ui.label(distance_str_v(tlm.pos.tr()));
+        ui.label(velocity_str_v(tlm.vel.tr()));
 
         ui.heading("Heading");
         ui.horizontal(|ui| {
@@ -69,14 +74,41 @@ impl GridCommander {
                 deltas.send(delta.into());
             }
         });
+
+        ui.separator();
+
+        ui.heading("Velocity");
+        ui.horizontal(|ui| {
+            ui.add(egui::DragValue::new(&mut self.vel.x).speed(0.1));
+            ui.add(egui::DragValue::new(&mut self.vel.y).speed(0.1));
+            if ui.button("Velocity Hold").clicked() {
+                let instr = Instruction::HoldVelocity(self.vel);
+                let delta = WorldDelta::SetGridInstruction(selected, instr.into());
+                deltas.send(delta.into());
+            }
+        });
+
+        ui.separator();
+
+        ui.heading("Delta-V");
+        ui.horizontal(|ui| {
+            ui.add(egui::DragValue::new(&mut self.delta_v.x).speed(0.1));
+            ui.add(egui::DragValue::new(&mut self.delta_v.y).speed(0.1));
+            if ui.button("Position Hold").clicked() {
+                let instr = Instruction::DeltaV(self.delta_v);
+                let delta = WorldDelta::SetGridInstruction(selected, instr.into());
+                deltas.send(delta.into());
+            }
+        });
+
         ui.separator();
 
         ui.heading("Position");
         ui.horizontal(|ui| {
-            ui.add(egui::DragValue::new(&mut self.x).speed(0.1));
-            ui.add(egui::DragValue::new(&mut self.y).speed(0.1));
+            ui.add(egui::DragValue::new(&mut self.pos.x).speed(0.1));
+            ui.add(egui::DragValue::new(&mut self.pos.y).speed(0.1));
             if ui.button("Position Hold").clicked() {
-                let iso = (self.x as f64, self.y as f64, self.heading as f64).into();
+                let iso = (self.pos, self.heading as f64).into();
                 let instr = Instruction::HoldPosition(iso);
                 let delta = WorldDelta::SetGridInstruction(selected, instr.into());
                 deltas.send(delta.into());
@@ -108,7 +140,7 @@ impl GridCommander {
     pub fn draw(
         &mut self,
         ui: &mut egui::Ui,
-        grids: &BTreeMap<Ent, (String, String, Isometry2d)>,
+        grids: &BTreeMap<Ent, GridTelemetry>,
         deltas: &mut Sender<WorldDelta>,
     ) {
         if let Some(selected) = self.selected {

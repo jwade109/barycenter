@@ -70,7 +70,7 @@ fn scenario_b() -> BaryResult<()> {
 fn scenario_c() -> BaryResult<()> {
     let world = WorldBuilder::new()
         .assets()
-        .parse_file("scenario_c.yaml")
+        .parse_file("scenario_c.yaml")?
         .build();
 
     save_world("saves/scenario_c", &world, true)

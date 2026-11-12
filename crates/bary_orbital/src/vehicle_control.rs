@@ -84,18 +84,20 @@ pub fn zero_gravity_velocity_control_law(
     let vel_error = body.pv.vel - desired_vel;
     let mut ctrl = VehicleControl::NULLOPT;
 
-    let target_angle = if vel_error.length() > 5.0 {
-        // ctrl.plus_x.throttle = (0.2 + vel_error.length() / 10.0).clamp(0.0, 1.0) as f32;
-        let target_angle = (-vel_error).to_angle();
-        let attitude_error = wrap_pi_npi_f64(target_angle - body.angle);
-        if attitude_error.to_degrees().abs() < 5.0 {
-            ctrl.plus_x.throttle = 1.0;
-        }
+    let target_angle = idle_angle;
 
-        target_angle
-    } else {
-        idle_angle
-    };
+    // let target_angle = if vel_error.length() > 0.5 {
+    //     // ctrl.plus_x.throttle = (0.2 + vel_error.length() / 10.0).clamp(0.0, 1.0) as f32;
+    //     let target_angle = (-vel_error).to_angle();
+    //     let attitude_error = wrap_pi_npi_f64(target_angle - body.angle);
+    //     if attitude_error.to_degrees().abs() < 5.0 {
+    //         ctrl.plus_x.throttle = 1.0;
+    //     }
+
+    //     target_angle
+    // } else {
+    //     idle_angle
+    // };
 
     let verror = SetpointError {
         target: desired_vel,
@@ -103,25 +105,25 @@ pub fn zero_gravity_velocity_control_law(
         error: vel_error,
     };
 
-    if vel_error.length() > 0.05 && vel_error.length() < 6.0 {
-        let body_frame_error = rotate_f64(vel_error, -body.angle);
-        if body_frame_error.x < -0.02 {
-            ctrl.plus_x.throttle = 0.03;
-            ctrl.plus_x.use_rcs = true;
-        }
-        if body_frame_error.x > 0.02 {
-            ctrl.neg_x.throttle = 0.03;
-            ctrl.neg_x.use_rcs = true;
-        }
-        if body_frame_error.y > 0.02 {
-            ctrl.plus_y.throttle = 0.03;
-            ctrl.plus_y.use_rcs = true;
-        }
-        if body_frame_error.y < -0.02 {
-            ctrl.neg_y.throttle = 0.03;
-            ctrl.neg_y.use_rcs = true;
-        }
+    // if vel_error.length() > 0.05 && vel_error.length() < 1.0 {
+    let body_frame_error = rotate_f64(vel_error, -body.angle);
+    if body_frame_error.x < -0.0001 {
+        ctrl.plus_x.throttle = body_frame_error.x.abs() as f32;
+        ctrl.plus_x.use_rcs = true;
     }
+    if body_frame_error.x > 0.0001 {
+        ctrl.neg_x.throttle = body_frame_error.x.abs() as f32;
+        ctrl.neg_x.use_rcs = true;
+    }
+    if body_frame_error.y > 0.0001 {
+        ctrl.plus_y.throttle = body_frame_error.y.abs() as f32;
+        ctrl.plus_y.use_rcs = true;
+    }
+    if body_frame_error.y < -0.0001 {
+        ctrl.neg_y.throttle = body_frame_error.y.abs() as f32;
+        ctrl.neg_y.use_rcs = true;
+    }
+    // }
 
     let (attitude, herror) = compute_attitude_control(body, target_angle, attitude_pd);
 

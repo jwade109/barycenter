@@ -1,5 +1,5 @@
-use bary_core::prelude::{Ent, Isometry2d, ParamValue, randvec, wrap_0_2pi_f64, wrap_pi_npi_f64};
-use bary_ipc::{ClientNode, ServerRequest, ServerResponse};
+use bary_core::prelude::*;
+use bary_ipc::{ClientNode, GridTelemetry, ServerRequest, ServerResponse};
 use bary_sim::{Sender, WorldDelta};
 use eframe::egui;
 use egui::{Id, Ui, WidgetText};
@@ -86,7 +86,7 @@ struct App {
     telemetry: BTreeMap<u8, ServerResponse>,
     logs: VecDeque<ServerResponse>,
 
-    grid_info: BTreeMap<Ent, (String, String, Isometry2d)>,
+    grid_info: BTreeMap<Ent, GridTelemetry>,
 
     server_ticks: u64,
     n_clients: usize,
@@ -169,7 +169,6 @@ fn background_thread(
     response_sender: mpsc::Sender<ServerResponse>,
 ) {
     client.send(ServerRequest::Ping);
-    client.send(ServerRequest::RequestParams);
 
     loop {
         for msg in client.update() {
@@ -262,8 +261,6 @@ impl App {
                 thrusters,
             } => {
                 let x = tick as f64;
-                let y = thrusters.iter().filter(|(_, t)| **t > 0.001).count() as f64;
-                self.thrusters.add(&format!("{}-tr#", grid), x, y);
                 for (id, throttle) in thrusters {
                     let y = throttle as f64;
                     let key = format!("gr-{}-thr-{}", grid, id);
@@ -272,12 +269,16 @@ impl App {
             }
             ServerResponse::Grids { tick, grids } => {
                 self.grid_info = grids.clone();
-                for (id, (name, _model, iso)) in grids {
-                    let pos = iso.tr();
-                    self.pos.add(&format!("pos_{}_{}", id, name), pos.x, pos.y);
+                for (id, tlm) in grids {
+                    let pos = tlm.pos.tr();
+                    self.pos
+                        .add(&format!("pos_{}_{}", id, tlm.name), pos.x, pos.y);
                     let x = tick as f64;
-                    let y = wrap_0_2pi_f64(iso.rotation).to_degrees();
-                    self.heading.add(&format!("heading_{}_{}", id, name), x, y);
+                    let y = wrap_0_2pi_f64(tlm.pos.rotation).to_degrees();
+                    self.heading
+                        .add(&format!("heading_{}_{}", id, tlm.name), x, y);
+                    let y = tlm.active_thrusters as f64;
+                    self.thrusters.add(&format!("{}-tr#", id), x, y);
                 }
             }
             ServerResponse::Parameters(params) => {
@@ -310,6 +311,7 @@ impl App {
     }
 }
 
+#[allow(unused)]
 fn render_params(
     ui: &mut egui::Ui,
     text_fields: &mut BTreeMap<String, ParameterField>,
@@ -336,6 +338,7 @@ fn render_params(
         });
 }
 
+#[allow(unused)]
 fn draw_plot(ui: &mut egui::Ui, plots: &BTreeMap<String, Vec<PlotPoint>>, id: &str) {
     let legend = Legend::default();
     Plot::new(id)

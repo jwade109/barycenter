@@ -592,7 +592,6 @@ pub fn set_primary_computer_waypoint_c(
     let primary_cpu_id = get_primary_cpu_id(grid_id, grids)?;
     let computer = computers.try_get_mut(primary_cpu_id)?;
     let command = TimedInstruction::perp(Instruction::HoldPosition(waypoint.into()));
-    computer.clear_instruction_queue();
     computer.enqueue_instruction(command);
     Ok(primary_cpu_id)
 }
@@ -616,7 +615,6 @@ pub fn set_grid_as_drifting(world: &mut World, cpu_id: Ent) -> BaryResult<()> {
 
 pub fn set_cpu_instruction(world: &mut World, cpu_id: Ent, ti: TimedInstruction) -> BaryResult<()> {
     let cpu = world.computers.try_get_mut(cpu_id)?;
-    cpu.clear_instruction_queue();
     cpu.enqueue_instruction(ti);
     Ok(())
 }
@@ -1459,7 +1457,6 @@ pub fn merge_grids(
 
     for cpu_id in &parent.computers {
         let computer = world.computers.try_get_mut(*cpu_id)?;
-        computer.clear_instruction_queue();
         computer.enqueue_instruction(Instruction::Drift.into());
     }
 

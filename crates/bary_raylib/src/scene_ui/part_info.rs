@@ -98,21 +98,12 @@ fn slot_info_str(idx: usize, slot: &InvSlot) -> String {
 }
 
 fn computer_info_str(cpu: &Computer) -> String {
-    let mut lines = vec![
+    let lines = vec![
         format!("On: {}", cpu.is_on()),
         format!("\nStatus: {:?}", cpu.status()),
         format!("\nTicks: {}", cpu.ticks()),
         format!("\nOdometry: {:0.1}", cpu.odometry()),
-        cpu.current_instruction()
-            .map(|ti| format!("\n{}", ti))
-            .unwrap_or_default(),
     ];
-
-    for cmd in cpu.instructions() {
-        let line = format!("\n  - {}", cmd);
-        lines.push(line);
-    }
-
     lines.into_iter().collect()
 }
 

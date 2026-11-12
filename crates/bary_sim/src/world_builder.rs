@@ -32,6 +32,7 @@ enum WorldBuilderCommand {
         username: String,
     },
     LoadInstruction(TimedInstruction),
+    SetAttitudePD(f64, f64),
 }
 
 pub struct WorldBuilder {
@@ -53,11 +54,11 @@ impl WorldBuilder {
         }
     }
 
-    pub fn parse_file(mut self, path: impl AsRef<Path>) -> Self {
-        let s = std::fs::read_to_string(path).unwrap();
-        let commands: Vec<WorldBuilderCommand> = serde_yaml::from_str(&s).unwrap();
+    pub fn parse_file(mut self, path: impl AsRef<Path>) -> BaryResult<Self> {
+        let s = std::fs::read_to_string(path)?;
+        let commands: Vec<WorldBuilderCommand> = serde_yaml::from_str(&s)?;
         self.commands.extend(commands);
-        self
+        Ok(self)
     }
 
     pub fn assets(mut self) -> Self {
@@ -318,6 +319,12 @@ impl WorldBuilder {
                 WorldBuilderCommand::LoadInstruction(ti) => {
                     if let Some(grid_id) = self.cursor_grid {
                         _ = enqueue_grid_instruction(&mut world, grid_id, ti);
+                    }
+                }
+                WorldBuilderCommand::SetAttitudePD(kp, kd) => {
+                    if let Some(grid_id) = self.cursor_grid {
+                        let delta = WorldDelta::SetGridAttitudePD(grid_id, kp, kd);
+                        _ = apply_delta(&mut world, delta);
                     }
                 }
             }

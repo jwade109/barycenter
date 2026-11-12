@@ -98,7 +98,7 @@ fn save<T: Serialize>(val: &T, dir: &Path, name: &str) -> BaryResult<()> {
 }
 
 pub fn load_yaml_scenario(path: impl AsRef<Path>) -> BaryResult<World> {
-    Ok(WorldBuilder::new().assets().parse_file(path).build())
+    Ok(WorldBuilder::new().assets().parse_file(path)?.build())
 }
 
 pub fn load_world(dir: impl AsRef<Path>) -> BaryResult<World> {

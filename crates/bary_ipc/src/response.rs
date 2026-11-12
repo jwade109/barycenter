@@ -6,6 +6,15 @@ use std::collections::BTreeMap;
 
 use crate::{Blob, ClientId, SyncFrame};
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct GridTelemetry {
+    pub name: String,
+    pub model: String,
+    pub pos: Isometry2d,
+    pub vel: Isometry2d,
+    pub active_thrusters: usize,
+}
+
 #[discriminant(u8)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum ServerResponse {
@@ -41,7 +50,7 @@ pub enum ServerResponse {
     /// Grid-specific info
     Grids {
         tick: u64,
-        grids: BTreeMap<Ent, (String, String, Isometry2d)>,
+        grids: BTreeMap<Ent, GridTelemetry>,
     },
     /// Thruster-specific info
     Thrusters {

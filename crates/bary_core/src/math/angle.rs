@@ -1,7 +1,7 @@
 use crate::math::{Rotation, wrap_pi_npi};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 pub struct Angle(f32);
 
 impl Angle {

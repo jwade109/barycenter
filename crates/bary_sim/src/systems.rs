@@ -234,7 +234,7 @@ pub fn sys_update_computers(world: &mut World) {
         };
 
         computer.update_grid_info(grid);
-        computer.update(&mut world.parameters);
+        computer.update();
     }
 }
 

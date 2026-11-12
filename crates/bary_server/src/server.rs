@@ -386,18 +386,33 @@ impl BaryServer {
                     info.insert(*thruster_id, thruster.throttle());
                 }
             }
-            let msg = ServerResponse::Thrusters {
-                tick: self.world.ticks,
-                grid: *id,
-                thrusters: info,
-            };
-            self.node.broadcast(msg);
+
+            let mut active_thrusters = 0;
+
+            for thruster_id in &grid.thrusters {
+                let Some(thruster) = self.world.thrusters.get(*thruster_id) else {
+                    continue;
+                };
+                if thruster.throttle() > 0.001 {
+                    active_thrusters += 1;
+                }
+            }
+
             let model = grid
                 .blueprint
                 .as_ref()
                 .map(|bp| bp.0.clone())
                 .unwrap_or_default();
-            grids.insert(*id, (grid.name.clone(), model, grid.particle_location));
+
+            let tlm = GridTelemetry {
+                name: grid.name.clone(),
+                model,
+                pos: grid.particle_location,
+                vel: grid.velocity,
+                active_thrusters,
+            };
+
+            grids.insert(*id, tlm);
         }
 
         let msg = ServerResponse::Grids {

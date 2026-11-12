@@ -1,172 +1,10 @@
-use std::collections::VecDeque;
-
 use bary_core::prelude::*;
 use bary_factory::*;
 use bary_orbital::*;
-use log::info;
+use log::error;
 use serde::{Deserialize, Serialize};
 
-use crate::{DynamicParams, VehicleGrid};
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
-pub enum Instruction {
-    Ctrl(VehicleControl),
-    HoldPosition(Isometry2d),
-    HoldAttitude(Angle),
-    PointAt(Vec2),
-    Drift,
-    DeltaV(DVec2),
-    HoldRelativePosition(Ent, DVec2),
-}
-
-impl Instruction {
-    pub fn rcs_left() -> Self {
-        Self::Ctrl(VehicleControl::rcs(false, true, false, false))
-    }
-
-    pub fn rcs_right() -> Self {
-        Self::Ctrl(VehicleControl::rcs(false, false, true, false))
-    }
-
-    pub fn rcs_forward() -> Self {
-        Self::Ctrl(VehicleControl::rcs(true, false, false, false))
-    }
-
-    pub fn rcs_backward() -> Self {
-        Self::Ctrl(VehicleControl::rcs(false, false, false, true))
-    }
-}
-
-impl std::fmt::Display for Instruction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Instruction::Ctrl(_vehicle_control) => {
-                write!(f, "CTRL")
-            }
-            Instruction::HoldPosition(iso) => {
-                write!(
-                    f,
-                    "HP pos={:0.2} hdg={:0.2}",
-                    iso.translation,
-                    iso.rotation.to_degrees()
-                )
-            }
-            Instruction::Drift => {
-                write!(f, "DRIFT")
-            }
-            Instruction::HoldAttitude(angle) => {
-                write!(f, "HDG {:0.2}", angle.as_deg())
-            }
-            Instruction::PointAt(pos) => {
-                write!(f, "POINT {:0.2}", pos)
-            }
-            Instruction::DeltaV(dv) => {
-                write!(f, "DV {:0.2}", dv)
-            }
-            Instruction::HoldRelativePosition(id, rel) => {
-                write!(f, "REL {} {:0.2}", id, rel)
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
-pub struct TimedInstruction {
-    pub duration: Option<u64>,
-    pub instruction: Instruction,
-}
-
-impl TimedInstruction {
-    pub fn perp(instruction: Instruction) -> Self {
-        Self {
-            duration: None,
-            instruction,
-        }
-    }
-
-    pub fn timed(ticks: u64, instruction: Instruction) -> Self {
-        Self {
-            duration: Some(ticks),
-            instruction,
-        }
-    }
-
-    pub fn tick(&mut self) {
-        if let Some(dur) = &mut self.duration {
-            if *dur > 0 {
-                *dur -= 1;
-            }
-        }
-    }
-
-    pub fn is_complete(&self) -> bool {
-        self.duration.map(|d| d == 0).unwrap_or(false)
-    }
-}
-
-impl From<Instruction> for TimedInstruction {
-    fn from(value: Instruction) -> Self {
-        Self::perp(value)
-    }
-}
-
-impl std::fmt::Display for TimedInstruction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(ticks) = self.duration {
-            write!(f, "{}, for {} ticks", self.instruction, ticks)
-        } else {
-            write!(f, "{}", self.instruction)
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-enum ControllerState {
-    Idle,
-    Executing(TimedInstruction),
-    DeltaV {
-        initial_odometry: DVec2,
-        final_odometry: DVec2,
-        odometry_sum: DVec2,
-    },
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Controller {
-    state: ControllerState,
-}
-
-impl Controller {
-    fn idle() -> Self {
-        Self {
-            state: ControllerState::Idle,
-        }
-    }
-
-    fn start(ti: TimedInstruction) -> Self {
-        Self {
-            state: ControllerState::Executing(ti),
-        }
-    }
-
-    fn update(&mut self) {
-        match &mut self.state {
-            ControllerState::Idle => (),
-            ControllerState::Executing(ti) => {
-                ti.tick();
-            }
-            ControllerState::DeltaV {
-                initial_odometry: _,
-                final_odometry: _,
-                odometry_sum: _,
-            } => todo!(),
-        }
-    }
-
-    fn is_idle(&self) -> bool {
-        matches!(self.state, ControllerState::Idle)
-    }
-}
+use crate::*;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 struct GridInfo {
@@ -184,9 +22,11 @@ pub struct Computer {
     ticks: u64,
     vehicle_control: VehicleControl,
     prototype: Ent,
-    instructions: VecDeque<TimedInstruction>,
     thruster_odometry: DVec2,
-    controller: Controller,
+    target_angle: Option<Angle>,
+    target_pos: Option<DVec2>,
+    target_vel: Option<DVec2>,
+    target_odometry: Option<DVec2>,
     grid_info: Option<GridInfo>,
     attitude_pd: PDCtrl,
 }
@@ -202,11 +42,13 @@ impl Computer {
             ticks: 0,
             vehicle_control: VehicleControl::NULLOPT,
             prototype,
-            instructions: VecDeque::new(),
             thruster_odometry: DVec2::ZERO,
-            controller: Controller::idle(),
             grid_info: None,
             attitude_pd: PDCtrl::new(30.0, 50.0),
+            target_angle: None,
+            target_pos: None,
+            target_vel: None,
+            target_odometry: None,
         }
     }
 
@@ -248,10 +90,6 @@ impl Computer {
         &self.vehicle_control
     }
 
-    pub fn set_current_control(&mut self, ctrl: VehicleControl) {
-        self.vehicle_control = ctrl;
-    }
-
     pub fn prototype(&self) -> Ent {
         self.prototype
     }
@@ -260,66 +98,71 @@ impl Computer {
         self.on = state;
     }
 
-    fn execute(&mut self, ti: TimedInstruction) {
-        info!("Beginning execution: {ti}");
-        self.controller = Controller::start(ti);
+    pub fn set_target_angle(&mut self, angle: Angle) {
+        self.target_angle = Some(angle);
     }
 
-    pub fn current_instruction(&self) -> Option<&TimedInstruction> {
-        if let ControllerState::Executing(ti) = &self.controller.state {
-            Some(ti)
-        } else {
-            None
+    pub fn set_target_pos(&mut self, pos: DVec2) {
+        self.target_pos = Some(pos);
+    }
+
+    pub fn set_target_waypoint(&mut self, iso: impl Into<Isometry2d>) {
+        let iso = iso.into();
+        self.target_angle = Some(iso.rotation.into());
+        self.target_pos = Some(iso.tr());
+    }
+
+    #[deprecated]
+    pub fn enqueue_instruction(&mut self, ti: TimedInstruction) {
+        match ti.instruction {
+            Instruction::HoldAttitude(a) => {
+                self.target_angle = Some(a);
+            }
+            Instruction::HoldPosition(p) => {
+                self.target_angle = Some(p.rotation.into());
+                self.target_pos = Some(p.tr());
+                self.target_vel = None;
+            }
+            Instruction::HoldVelocity(v) => {
+                self.target_vel = Some(v);
+                self.target_pos = None;
+            }
+            Instruction::Drift => {
+                self.target_angle = None;
+                self.target_vel = None;
+                self.target_pos = None;
+            }
+            Instruction::DeltaV(dv) => {
+                self.target_odometry = Some(self.thruster_odometry + dv);
+                self.target_pos = None;
+                self.target_vel = None;
+            }
+            e => {
+                error!("Bad instruction: {e:?}");
+            }
         }
     }
 
-    pub fn enqueue_instruction(&mut self, ti: TimedInstruction) {
-        self.instructions.push_back(ti);
-    }
-
-    pub fn clear_instruction_queue(&mut self) {
-        self.instructions.clear();
-        self.controller = Controller::idle();
-    }
-
-    pub fn instructions(&self) -> impl Iterator<Item = &TimedInstruction> {
-        self.instructions.iter()
-    }
-
-    fn tick(&mut self, params: &mut DynamicParams) {
+    fn tick(&mut self) {
         let Some(info) = self.grid_info else {
             return;
         };
 
-        if self.controller.is_idle()
-            && let Some(ti) = self.instructions.pop_front()
-        {
-            self.execute(ti);
-        } else {
-            self.controller.update();
-        }
-
-        if let Some(ctrl) = self.control_from_instruction() {
-            self.set_current_control(ctrl);
+        if let Some(target_odometry) = self.target_odometry {
+            let delta = target_odometry - self.thruster_odometry;
+            self.do_velocity_navigation(info, info.vel.tr() + delta);
+        } else if let Some(desired_vel) = self.target_vel {
+            self.do_velocity_navigation(info, desired_vel);
         } else if let Some(target_pose) = self.current_waypoint() {
-            self.do_waypoint_navigation(info.pos, info.vel, target_pose);
-        } else if let Some(target) = self.current_angle() {
-            let actual = Angle::radians(info.pos.rotation);
-
-            let body = RigidBody {
-                pv: PV::ZERO,
-                angle: actual.as_rad() as f64,
-                angular_velocity: info.vel.rotation as f64,
-            };
-
-            let (ctrl, _status) =
-                attitude_control_law(target.as_rad() as f64, &self.attitude_pd, &body);
-
-            self.set_current_control(ctrl);
+            self.do_waypoint_navigation(info, target_pose);
+        } else if let Some(target) = self.target_angle() {
+            self.do_heading_navigation(info, target);
+        } else {
+            self.vehicle_control = VehicleControl::NULLOPT;
         }
     }
 
-    pub fn update(&mut self, params: &mut DynamicParams) {
+    pub fn update(&mut self) {
         self.status = match self.on {
             true => MachineStatus::Running,
             false => MachineStatus::Off,
@@ -331,58 +174,70 @@ impl Computer {
             if self.fired_this_tick {
                 self.ticks_this_cycle = 0;
                 self.ticks += 1;
-                self.tick(params);
+                self.tick();
             }
         } else {
             self.fired_this_tick = false;
         }
     }
 
-    pub fn control_from_instruction(&self) -> Option<VehicleControl> {
-        let cmd = self.current_instruction()?;
-        if let Instruction::Ctrl(ctrl) = cmd.instruction {
-            Some(ctrl)
-        } else if let Instruction::Drift = cmd.instruction {
-            Some(VehicleControl::NULLOPT)
-        } else {
-            None
-        }
+    pub fn target_angle(&self) -> Option<Angle> {
+        self.target_angle
     }
 
-    pub fn current_angle(&self) -> Option<Angle> {
-        if let Some(wp) = self.current_waypoint() {
-            return Some(Angle::radians(wp.rotation));
-        }
-        let cmd = self.current_instruction()?;
+    pub fn target_pos(&self) -> Option<DVec2> {
+        self.target_pos
+    }
 
-        match cmd.instruction {
-            Instruction::HoldAttitude(hdg) => Some(hdg),
-            Instruction::HoldPosition(iso) => Some(Angle::radians(iso.rotation)),
-            _ => None,
-        }
+    pub fn current_waypoint(&self) -> Option<Isometry2d> {
+        let p = self.target_pos?;
+        let a = self.target_angle.unwrap_or(Angle::degrees(0.0));
+        Some((p, a.as_rad_f64()).into())
     }
 
     pub fn report_dv(&mut self, applied_dv: DVec2) {
         self.thruster_odometry += applied_dv;
     }
 
-    pub fn current_waypoint(&self) -> Option<Isometry2d> {
-        let cmd = self.current_instruction()?;
-        if let Instruction::HoldPosition(wp) = cmd.instruction {
-            Some(wp)
-        } else {
-            None
-        }
+    fn do_velocity_navigation(&mut self, info: GridInfo, desired_vel: DVec2) {
+        let idle_angle = self.target_angle.unwrap_or_default().as_rad_f64();
+        let actual_pv = PV::from_f64(info.pos.translation, info.vel.translation);
+
+        let actual = Angle::radians(info.pos.rotation);
+        let body = RigidBody {
+            pv: actual_pv,
+            angle: actual.as_rad() as f64,
+            angular_velocity: info.vel.rotation as f64,
+        };
+
+        let (ctrl, _status) =
+            zero_gravity_velocity_control_law(desired_vel, idle_angle, &body, &self.attitude_pd);
+
+        self.vehicle_control = ctrl;
     }
 
-    fn do_waypoint_navigation(&mut self, ego: Isometry2d, ego_vel: Isometry2d, target: Isometry2d) {
+    fn do_heading_navigation(&mut self, info: GridInfo, target: Angle) {
+        let actual = Angle::radians(info.pos.rotation);
+        let body = RigidBody {
+            pv: PV::ZERO,
+            angle: actual.as_rad() as f64,
+            angular_velocity: info.vel.rotation as f64,
+        };
+
+        let (ctrl, _status) =
+            attitude_control_law(target.as_rad() as f64, &self.attitude_pd, &body);
+
+        self.vehicle_control = ctrl;
+    }
+
+    fn do_waypoint_navigation(&mut self, info: GridInfo, target: Isometry2d) {
         let target_pv = PV::from_f64(target.translation, Vec2::ZERO);
-        let actual_pv = PV::from_f64(ego.translation, ego_vel.translation);
+        let actual_pv = PV::from_f64(info.pos.translation, info.vel.translation);
 
         let body = RigidBody {
             pv: actual_pv,
-            angle: ego.rotation as f64,
-            angular_velocity: ego_vel.rotation as f64,
+            angle: info.pos.rotation as f64,
+            angular_velocity: info.vel.rotation as f64,
         };
 
         let (ctrl, _status) = position_hold_control_law(
@@ -393,7 +248,7 @@ impl Computer {
             &self.attitude_pd,
         );
 
-        self.set_current_control(ctrl);
+        self.vehicle_control = ctrl;
     }
 
     pub fn toggle(&mut self) {
