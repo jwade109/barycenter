@@ -122,15 +122,18 @@ impl Computer {
                 self.target_angle = Some(p.rotation.into());
                 self.target_pos = Some(p.tr());
                 self.target_vel = None;
+                self.target_odometry = None;
             }
             Instruction::HoldVelocity(v) => {
                 self.target_vel = Some(v);
                 self.target_pos = None;
+                self.target_odometry = None;
             }
             Instruction::Drift => {
                 self.target_angle = None;
                 self.target_vel = None;
                 self.target_pos = None;
+                self.target_odometry = None;
             }
             Instruction::DeltaV(dv) => {
                 self.target_odometry = Some(self.thruster_odometry + dv);
