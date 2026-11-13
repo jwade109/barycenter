@@ -97,7 +97,7 @@ fn run_simulation(
             pose,
             vel,
             target_position: cpu.current_waypoint().map(|e| e.translation),
-            target_attitude: cpu.current_angle().map(|e| e.as_rad_f64()),
+            target_attitude: cpu.target_angle().map(|e| e.as_rad_f64()),
             acc_updates: world.grid_acceleration_updates,
             thrusters_firing,
         };

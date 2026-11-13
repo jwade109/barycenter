@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bary_core = { path = "../bary_core" }
+bary_core.workspace = true
 bary_parts = { path = "../bary_parts" }
 bary_sim = { path = "../bary_sim" }
 bincode = "1.3.3"

@@ -5,7 +5,7 @@ edition = "2024"
 rust-version.workspace = true
 
 [dependencies]
-bary_core = { path = "../bary_core" }
+bary_core.workspace = true
 bary_sim = { path = "../bary_sim" }
 bary_ipc = { path = "../bary_ipc" }
 clap = { version = "4.6.1", features = ["derive"] }

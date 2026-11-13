@@ -1,17 +1,29 @@
 - !LoadBlueprint ["remora", 0]
-- !LoadBlueprint ["pollux", 2]
-- !LoadBlueprint ["bellerophon", 0]
+# - !LoadBlueprint ["pollux", 2]
+# - !LoadBlueprint ["bellerophon", 0]
 
 - !SpawnShip [["remora", 0], "Rigel", { translation: [0.0, 0.0], rotation: 0.0 }]
-- !LoadInstruction { instruction: !HoldPosition { translation: [400, 500], rotation: 0.2 } }
+# - !SetVelocity { translation: [12.0, 3.0], rotation: 0.0 }
+# # - !LoadInstruction { instruction: !HoldPosition { translation: [400, 500], rotation: 0.2 } }
+# - !LoadInstruction { instruction: !HoldVelocity [3, 12] }
+# - !LoadInstruction { instruction: !HoldAttitude 0.7 }
 
-- !SpawnShip [["bellerophon", 0], "Bermuda", { translation: [-50.0, 10.0], rotation: 0.0 }]
-- !LoadInstruction { instruction: !HoldPosition { translation: [400, 500], rotation: 0.2 } }
-- !SetAttitudePD [3.0, 5.0]
+# - !SpawnShip [["bellerophon", 0], "Bermuda", { translation: [-50.0, 10.0], rotation: 0.0 }]
+# - !SetAttitudePD [3.0, 5.0]
+# - !SetVelocity { translation: [12.0, 3.0], rotation: 0.0 }
+# # - !LoadInstruction { instruction: !HoldPosition { translation: [400, 500], rotation: 0.2 } }
+# - !LoadInstruction { instruction: !HoldVelocity [3, 12] }
+# - !LoadInstruction { instruction: !HoldAttitude 0.7 }
 
-- !SpawnShip [["pollux", 2], "Petuna", { translation: [20.0, 0.0], rotation: 0.0 }]
-- !LoadInstruction { instruction: !HoldPosition { translation: [400, 500], rotation: 0.2 } }
+# - !SpawnShip [["pollux", 2], "Petuna", { translation: [20.0, 0.0], rotation: 0.0 }]
+# - !SetVelocity { translation: [12.0, 3.0], rotation: 0.0 }
+# # - !LoadInstruction { instruction: !HoldPosition { translation: [400, 500], rotation: 0.2 } }
+# - !LoadInstruction { instruction: !HoldVelocity [3, 12] }
+# - !LoadInstruction { instruction: !HoldAttitude 0.7 }
 
-- !SpawnShip [["bellerophon", 0], "Barry", { translation: [10.0, 10.0], rotation: 0.0 }]
-- !LoadInstruction { instruction: !HoldPosition { translation: [400, 500], rotation: 0.2 } }
-- !SetAttitudePD [3.0, 5.0]
+# - !SpawnShip [["bellerophon", 0], "Barry", { translation: [10.0, 10.0], rotation: 0.0 }]
+# - !SetAttitudePD [3.0, 5.0]
+# - !SetVelocity { translation: [12.0, 3.0], rotation: 0.0 }
+# # - !LoadInstruction { instruction: !HoldPosition { translation: [400, 500], rotation: 0.2 } }
+# - !LoadInstruction { instruction: !HoldVelocity [3, 12] }
+# - !LoadInstruction { instruction: !HoldAttitude 0.7 }

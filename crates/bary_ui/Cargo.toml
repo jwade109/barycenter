@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 glam = { version = "0.30.9", features = ["serde"] }
-bary_core = { path = "../bary_core" }
+bary_core.workspace = true
 svg = "0.18.0"
 log = "0.4.31"
 

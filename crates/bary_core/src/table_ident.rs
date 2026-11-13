@@ -26,6 +26,10 @@ impl TableIdent {
         all::<Self>()
     }
 
+    pub fn prev(&self) -> Option<Self> {
+        previous::<Self>(self)
+    }
+
     pub fn next(&self) -> Option<Self> {
         next::<Self>(self)
     }

@@ -1,3 +1,5 @@
+use log::warn;
+
 use crate::{Packet, PacketParseError};
 
 #[derive(Debug, Clone, Default)]
@@ -22,6 +24,17 @@ impl Framer {
                 Ok(packet)
             }
             Err(UnexpectedEof) => Err(false),
+            Err(BadChecksum {
+                expected,
+                calculated,
+            }) => {
+                warn!(
+                    "Bad checksum: expected {}, calculated {}",
+                    expected, calculated
+                );
+                self.data.drain(..1);
+                Err(true)
+            }
             Err(_) => {
                 self.data.drain(..1);
                 Err(true)

@@ -82,15 +82,20 @@ impl MultiplayerBackend {
     }
 
     fn on_rcv_have_new_save(&mut self) {
+        info!("Server has reported it has a new save file");
         self.node.send(ServerRequest::BeginAsyncWorldDownload);
         self.async_world_download = Some(AsyncWorldDownload::new());
     }
 
     fn on_rcv_blob(&mut self, blob: Blob) {
+        info!("Received blob {blob}");
         if let Some(dl) = &mut self.async_world_download {
             dl.add_blob(blob);
 
+            info!("Got {} of {} blobs", dl.steps(), dl.total());
+
             if dl.is_complete() {
+                info!("Got a new world download!");
                 let dl = self
                     .async_world_download
                     .take()
@@ -113,15 +118,15 @@ impl MultiplayerBackend {
     }
 
     fn update(&mut self) -> Vec<ServerResponse> {
-        if self.server_ping_timer.tick() {
-            if self.server_handshake_complete {
-                self.send_ping();
-            }
-        }
+        // if self.server_ping_timer.tick() {
+        //     if self.server_handshake_complete {
+        //         self.send_ping();
+        //     }
+        // }
 
-        if self.server_telemetry_timer.tick() {
-            self.report_telemetry();
-        }
+        // if self.server_telemetry_timer.tick() {
+        //     self.report_telemetry();
+        // }
 
         let mut propagated = Vec::new();
         for msg in self.node.update() {

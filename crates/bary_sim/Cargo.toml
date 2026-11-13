@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bary_core = { path = "../bary_core" }
+bary_core.workspace = true
 bary_parts = { path = "../bary_parts" }
 bary_orbital = { path = "../bary_orbital" }
 bary_factory = { path = "../bary_factory" }

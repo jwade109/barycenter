@@ -1635,7 +1635,7 @@ fn draw_thruster_plumes(
         let mut iso = part_isometry(origin, part.region);
         let mut dims = part.region.part_aligned_dims().to_meters().as_dvec2();
         let p = iso.translation + iso.local_y() * dims.y / 2.0;
-        dims.x *= 2.0 * t.throttle() as f64;
+        dims.x *= 2.0 * t.clamped_throttle() as f64;
         let offset = iso.local_x() * dims.x;
         iso.translation -= offset;
 

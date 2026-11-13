@@ -5,3 +5,6 @@ resolver = "2"
 
 [workspace.package]
 rust-version = "1.95"
+
+[workspace.dependencies]
+bary_core = { path = "crates/bary_core" }

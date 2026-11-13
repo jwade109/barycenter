@@ -230,6 +230,12 @@ impl ClientApp {
             ServerResponse::Simulation(sim) => {
                 self.on_sim_event(sim);
             }
+            ServerResponse::Grids { .. } => {
+                // TODO
+            }
+            ServerResponse::Info { .. } => {
+                // TODO
+            }
             _ => error!("Unsupported message from server: {:?}", msg),
         }
     }

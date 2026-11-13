@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 approx = "0.5.1"
 assert_float_eq = "1.2.0"
-bary_core = { path = "../bary_core" }
+bary_core.workspace = true
 clap = { version = "4.6.1", features = ["derive"] }
 image = "0.25.10"
 lazy_static = "1.5.0"

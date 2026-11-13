@@ -34,8 +34,6 @@ pub fn get_part_info_modal(
     }
     if let Ok(thruster) = world.thrusters.try_get(part_id) {
         let s = format!("{:#?}", thruster);
-        let msg = WorldDelta::SetThrusterThrottle(part_id, 1.0 - thruster.throttle());
-        ui.button(msg, turn_on_off_text(thruster.is_on()));
         ui.text(s);
     }
     if let Ok(light) = world.lights.try_get(part_id) {

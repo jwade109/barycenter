@@ -46,12 +46,13 @@ impl PaginatedTransaction {
         let all: Vec<_> = TableIdent::all().collect();
         for ident in &all {
             let blob = get_blob(world, *ident).expect("This is bad");
+            warn!("Made blob: {blob}");
             blobs.insert(*ident, blob);
         }
 
         Self {
             blobs,
-            next_blob: all.first().cloned(),
+            next_blob: all.last().cloned(),
             last_sent: Instant::now(),
         }
     }
@@ -155,7 +156,7 @@ impl BaryServer {
     }
 
     fn process_transactions(&mut self) {
-        let dur = Duration::from_millis(2);
+        let dur = Duration::from_millis(200);
         let now = Instant::now();
         for (client, tr) in &mut self.transactions {
             let next_send = tr.last_sent + dur;
@@ -164,12 +165,14 @@ impl BaryServer {
             }
 
             if let Some(next) = tr.next_blob {
-                debug!("Sending blob {next} to {client}");
                 if let Some(blob) = tr.blobs.remove(&next) {
+                    debug!("Sending blob {blob} to {client}");
                     let kind = ServerResponse::BlobResponse(blob);
                     self.node.send(*client, kind);
+                } else {
+                    warn!("No blob for {next}");
                 }
-                tr.next_blob = tr.next_blob.map(|t| t.next()).flatten();
+                tr.next_blob = tr.next_blob.map(|t| t.prev()).flatten();
                 tr.last_sent = now;
             }
 
@@ -383,7 +386,7 @@ impl BaryServer {
             let mut info = BTreeMap::new();
             for thruster_id in &grid.thrusters {
                 if let Some(thruster) = self.world.thrusters.get(*thruster_id) {
-                    info.insert(*thruster_id, thruster.throttle());
+                    info.insert(*thruster_id, thruster.unclamped_throttle());
                 }
             }
 
@@ -393,7 +396,7 @@ impl BaryServer {
                 let Some(thruster) = self.world.thrusters.get(*thruster_id) else {
                     continue;
                 };
-                if thruster.throttle() > 0.001 {
+                if thruster.unclamped_throttle() > 0.001 {
                     active_thrusters += 1;
                 }
             }
@@ -427,12 +430,6 @@ impl BaryServer {
             return;
         }
 
-        if self.md5_sync_timer.tick() {
-            // self.send_md5_sync_packet();
-            self.send_driver_packet();
-            // self.send_tlm_server_info();
-        }
-
         for msg in self.node.update() {
             match msg {
                 ServerEvent::Connected(id) => {
@@ -450,6 +447,7 @@ impl BaryServer {
         for _ in 0..self.tick_rate {
             update_world(&mut self.world);
             self.send_info_packets();
+            self.send_driver_packet();
         }
 
         self.process_transactions();

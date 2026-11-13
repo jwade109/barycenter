@@ -7,7 +7,7 @@ default-run = "client_app"
 [dependencies]
 rand = "0.10.0"
 raylib = "5.5.1"
-bary_core = { path = "../bary_core" }
+bary_core.workspace = true
 bary_factory = { path = "../bary_factory" }
 bary_parts = { path = "../bary_parts" }
 bary_ui = { path = "../bary_ui" }

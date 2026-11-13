@@ -49,15 +49,19 @@ impl Thruster {
     }
 
     pub fn is_on(&self) -> bool {
-        self.throttle() > 0.0
+        self.unclamped_throttle() > 0.0
     }
 
-    pub fn throttle(&self) -> f32 {
+    pub fn unclamped_throttle(&self) -> f32 {
         self.linear_throttle + self.angular_throttle
     }
 
+    pub fn clamped_throttle(&self) -> f32 {
+        self.unclamped_throttle().clamp(0.0, 1.0)
+    }
+
     pub fn current_thrust(&self) -> f32 {
-        self.thrust * self.throttle().clamp(0.0, 1.0)
+        self.thrust * self.unclamped_throttle().clamp(0.0, 1.0)
     }
 
     pub fn max_thrust(&self) -> f32 {

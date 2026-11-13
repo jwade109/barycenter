@@ -53,8 +53,13 @@ impl Client {
                         warn!("Client {} has disconnected", self.addr);
                         return Err(());
                     }
+                    ErrorKind::ConnectionAborted => {
+                        error!("Connection has been aborted: {}", self.addr);
+                        return Err(());
+                    }
                     e => {
                         error!("Got error reading from socket: {e:?}");
+                        return Err(());
                     }
                 },
             }
@@ -92,13 +97,17 @@ impl ServerNode {
 
     pub fn broadcast(&mut self, msg: ServerResponse) {
         for client in self.clients.values_mut() {
-            _ = client.send(msg.clone());
+            if let Err(e) = client.send(msg.clone()) {
+                error!("Failed to send: {e}");
+            }
         }
     }
 
     pub fn send(&mut self, id: ClientId, response: ServerResponse) {
         if let Some(client) = self.clients.get_mut(&id) {
-            _ = client.send(response);
+            if let Err(e) = client.send(response) {
+                error!("Failed to send: {e}");
+            }
         }
     }
 
