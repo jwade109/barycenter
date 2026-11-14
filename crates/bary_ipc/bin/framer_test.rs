@@ -47,7 +47,7 @@ fn socket_thread(socket: UdpSocket, responses: Sender<Packet>, requests: Receive
     loop {
         for req in requests.try_iter() {
             let payload = req.to_bytes();
-            let packet = Packet::new(payload.to_vec());
+            let packet = framer.frame(payload).unwrap();
             let bytes = packet.to_bytes();
             if let Err(e) = socket.send(&bytes) {
                 println!("Failed to send: {e}");

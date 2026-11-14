@@ -1,6 +1,6 @@
 use crate::ClientId;
 use crate::*;
-use log::{info, trace, warn};
+use log::{error, info, trace, warn};
 use std::io::{Read, Write};
 use std::net::*;
 use std::time::{Duration, SystemTime};
@@ -123,9 +123,19 @@ impl ClientNode {
 
     pub fn send(&mut self, msg: impl Into<ServerRequest>) {
         let msg = msg.into();
+        let Some(stream) = self.socket.as_mut() else {
+            error!("Cannot send: not connected to server");
+            return;
+        };
+
         let bytes = bincode::serialize(&msg).unwrap();
-        let packet = Packet::new(bytes.clone());
+        let Some(packet) = self.framer.frame(bytes) else {
+            error!("Packet too big!");
+            return;
+        };
         trace!("Sending: {packet:?}");
-        self.socket.as_mut().map(|s| s.write(&packet.to_bytes()));
+        if let Err(e) = send_in_chunks(stream, &packet.to_bytes(), MTU_CHUNK_SIZE) {
+            error!("Failed to send: {e}");
+        }
     }
 }

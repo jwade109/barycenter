@@ -211,7 +211,7 @@ impl ClientApp {
                 let s = format!("[{id}]: {text}");
                 self.client.chat.log(s);
             }
-            ServerResponse::TransactionComplete => {
+            ServerResponse::TransactionComplete(..) => {
                 self.client.scene_graph = SceneGraph::Free(FreeFlying::at_zero());
             }
             ServerResponse::SyncFrame(frame) => {

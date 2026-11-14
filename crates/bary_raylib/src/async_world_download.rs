@@ -1,60 +1,50 @@
-use bary_core::prelude::TableIdent;
-use bary_ipc::{Blob, apply_blob};
+use bary_core::prelude::{Components, Ent, TableIdent};
 use bary_sim::*;
-use log::*;
-use std::collections::BTreeSet;
+use serde::Deserialize;
 
 pub struct AsyncWorldDownload {
     world: World,
-    tables_completed: BTreeSet<TableIdent>,
-    n_tables_expected: usize,
-    status: String,
-    is_fail: bool,
+}
+
+fn unpack_data<'a, T: Deserialize<'a>>(
+    entities: &'a mut Components<T>,
+    id: Ent,
+    data: &'a [u8],
+) -> bool {
+    if let Ok(e) = bincode::deserialize(data) {
+        entities.spawn(id, e);
+        true
+    } else {
+        false
+    }
 }
 
 impl AsyncWorldDownload {
     pub fn new() -> Self {
         Self {
             world: World::empty(),
-            tables_completed: BTreeSet::new(),
-            n_tables_expected: TableIdent::all().count(),
-            status: "Requesting world from server...".to_string(),
-            is_fail: false,
         }
     }
 
-    pub fn add_blob(&mut self, blob: Blob) {
-        debug!("Got blob: {blob}");
-        let table = blob.table();
-        if apply_blob(&mut self.world, blob) {
-            debug!("Unpacked blob data for table {table}");
-            self.tables_completed.insert(table);
-            self.status = format!("Got entity table \"{table}\"...");
-        } else {
-            error!("Failed to unpack blob for table {table}");
-            self.status = format!("Failed to unpack \"{table}\"!");
-            self.is_fail = true;
+    pub fn add_entity(&mut self, ident: TableIdent, id: Ent, data: Vec<u8>) -> bool {
+        match ident {
+            TableIdent::Blueprints => unpack_data(&mut self.world.blueprints, id, &data),
+            TableIdent::Grids => unpack_data(&mut self.world.grids, id, &data),
+            TableIdent::Protos => unpack_data(&mut self.world.prototypes, id, &data),
+            TableIdent::Parts => unpack_data(&mut self.world.parts, id, &data),
+            TableIdent::Thrusters => unpack_data(&mut self.world.thrusters, id, &data),
+            TableIdent::Computers => unpack_data(&mut self.world.computers, id, &data),
+            TableIdent::Asteroids => unpack_data(&mut self.world.asteroids, id, &data),
+            TableIdent::Chunks => unpack_data(&mut self.world.terrain_chunks, id, &data),
+            TableIdent::Tiles => unpack_data(&mut self.world.terrain_tiles, id, &data),
+            TableIdent::Inventories => unpack_data(&mut self.world.inventories, id, &data),
+            TableIdent::Machines => unpack_data(&mut self.world.machines, id, &data),
+            TableIdent::Pipes => unpack_data(&mut self.world.pipes, id, &data),
+            TableIdent::Lights => unpack_data(&mut self.world.lights, id, &data),
+            TableIdent::Excavators => unpack_data(&mut self.world.excavators, id, &data),
+            TableIdent::Players => unpack_data(&mut self.world.players, id, &data),
+            TableIdent::Planets => unpack_data(&mut self.world.planets, id, &data),
         }
-    }
-
-    pub fn steps(&self) -> u32 {
-        self.tables_completed.len() as u32
-    }
-
-    pub fn total(&self) -> u32 {
-        self.n_tables_expected as u32
-    }
-
-    pub fn status(&self) -> &str {
-        &self.status
-    }
-
-    pub fn is_fail(&self) -> bool {
-        self.is_fail
-    }
-
-    pub fn is_complete(&self) -> bool {
-        self.n_tables_expected == self.tables_completed.len()
     }
 
     pub fn world(self) -> World {

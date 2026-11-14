@@ -1,5 +1,6 @@
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Packet {
+    sequence_no: u32,
     payload: Vec<u8>,
 }
 
@@ -36,9 +37,25 @@ fn get_u16(bytes: &[u8], offset: usize) -> Result<u16, PacketParseError> {
     Ok(u16::from_be_bytes([a, b]))
 }
 
+fn get_u32(bytes: &[u8], offset: usize) -> Result<u32, PacketParseError> {
+    use PacketParseError::*;
+    let a = *bytes.get(offset + 0).ok_or(UnexpectedEof)?;
+    let b = *bytes.get(offset + 1).ok_or(UnexpectedEof)?;
+    let c = *bytes.get(offset + 2).ok_or(UnexpectedEof)?;
+    let d = *bytes.get(offset + 3).ok_or(UnexpectedEof)?;
+    Ok(u32::from_be_bytes([a, b, c, d]))
+}
+
 impl Packet {
-    pub fn new(payload: Vec<u8>) -> Self {
-        Self { payload }
+    pub fn new(sequence_no: u32, payload: Vec<u8>) -> Option<Self> {
+        if payload.len() > u16::MAX as usize - 150 {
+            return None;
+        }
+
+        Some(Self {
+            sequence_no,
+            payload,
+        })
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), PacketParseError> {
@@ -49,15 +66,24 @@ impl Packet {
             return Err(BadPrefix(prefix));
         }
 
-        let actual_cksm = get_u16(bytes, 2)?;
-        let payload_length = get_u16(bytes, 4)? as usize;
+        const OFFSET_SEQUENCE_NO: usize = 2;
+        const OFFSET_CHECKSUM: usize = 6;
+        const OFFSET_PAYLOAD_LEN: usize = 8;
+        const OFFSET_PAYLOAD: usize = 10;
 
-        let suffix = get_u16(bytes, 6 + payload_length)?;
+        let sequence_no = get_u32(bytes, OFFSET_SEQUENCE_NO)?;
+        let actual_cksm = get_u16(bytes, OFFSET_CHECKSUM)?;
+        let payload_length = get_u16(bytes, OFFSET_PAYLOAD_LEN)? as usize;
+
+        let suffix = get_u16(bytes, OFFSET_PAYLOAD + payload_length)?;
         if suffix != TRAILING_BYTES {
             return Err(BadSuffix(suffix));
         }
 
-        let payload = bytes.get(6..6 + payload_length).ok_or(UnexpectedEof)?;
+        let payload = bytes
+            .get(OFFSET_PAYLOAD..OFFSET_PAYLOAD + payload_length)
+            .ok_or(UnexpectedEof)?
+            .to_vec();
 
         let calc_cksm = calculate_checksum(&payload);
 
@@ -68,9 +94,15 @@ impl Packet {
             });
         }
 
-        let n_consumed = 8 + payload.len();
+        let n_consumed = OFFSET_PAYLOAD + payload.len() + 2;
 
-        Ok((Self::new(payload.to_vec()), n_consumed))
+        Ok((
+            Self {
+                sequence_no,
+                payload,
+            },
+            n_consumed,
+        ))
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -84,6 +116,7 @@ impl Packet {
         let checksum = calculate_checksum(&self.payload);
         let len = self.payload.len().min(u16::MAX as usize) as u16;
         sum += sink.write(&LEADING_BYTES.to_be_bytes())?;
+        sum += sink.write(&self.sequence_no.to_be_bytes())?;
         sum += sink.write(&checksum.to_be_bytes())?;
         sum += sink.write(&len.to_be_bytes())?;
         sum += sink.write(&self.payload)?;
@@ -93,6 +126,10 @@ impl Packet {
 
     pub fn unwrap(self) -> Vec<u8> {
         self.payload
+    }
+
+    pub fn sequence_no(&self) -> u32 {
+        self.sequence_no
     }
 
     pub fn payload(&self) -> &[u8] {
@@ -116,10 +153,12 @@ mod tests {
 
     #[test]
     fn packet_to_bytes() {
-        let packet = Packet::new(vec![1, 2, 3, 4, 5]);
+        let packet = Packet::new(12, vec![1, 2, 3, 4, 5]).unwrap();
         let bytes = packet.to_bytes();
         assert_eq!(
-            vec![0xDB, 0x11, 9, 6, 0, 5, 1, 2, 3, 4, 5, 0xDB, 0xEE],
+            vec![
+                0xDB, 0x11, 0, 0, 0, 12, 9, 6, 0, 5, 1, 2, 3, 4, 5, 0xDB, 0xEE
+            ],
             bytes
         );
 
@@ -133,7 +172,7 @@ mod tests {
         for _ in 0..1000 {
             let len = randint(10, 200) as usize;
             let payload = (0..len).map(|_| randint(0, 255) as u8).collect();
-            let packet = Packet::new(payload);
+            let packet = Packet::new(0, payload).unwrap();
             let bytes = packet.to_bytes();
             println!("{bytes:02x?}");
             let (parsed, n) = Packet::from_bytes(&bytes).unwrap();

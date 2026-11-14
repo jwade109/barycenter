@@ -1,24 +1,30 @@
-use bary_core::prelude::{Components, TableIdent};
-use bary_sim::World;
-use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
-#[derive(Deserialize, Serialize, Clone)]
+use bary_core::prelude::{Components, Ent, TableIdent};
+use bary_sim::World;
+use serde::{Deserialize};
+
+#[derive(Clone)]
 pub struct Blob {
-    data: Vec<u8>,
+    payload: BTreeMap<Ent, Vec<u8>>,
     ident: TableIdent,
 }
 
 impl Blob {
-    pub fn new(data: Vec<u8>, ident: TableIdent) -> Self {
-        Self { data, ident }
+    pub fn new(ident: TableIdent, payload: BTreeMap<Ent, Vec<u8>>) -> Self {
+        Self { payload, ident }
     }
 
-    pub fn data(&self) -> &[u8] {
-        &self.data
+    pub fn add_entity(&mut self, id: Ent, data: Vec<u8>) {
+        self.payload.insert(id, data);
     }
 
-    pub fn consume(self) -> Vec<u8> {
-        self.data
+    pub fn payload(&self) -> &BTreeMap<Ent, Vec<u8>> {
+        &self.payload
+    }
+
+    pub fn consume(self) -> BTreeMap<Ent, Vec<u8>> {
+        self.payload
     }
 
     pub fn table(&self) -> TableIdent {
@@ -28,42 +34,28 @@ impl Blob {
 
 impl std::fmt::Debug for Blob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Blob({:?}, {} bytes)", self.ident, self.data.len())
+        write!(f, "Blob({:?}, {} entities)", self.ident, self.payload.len())
     }
 }
 
 impl std::fmt::Display for Blob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Blob({:?}, {} bytes)", self.ident, self.data.len())
+        write!(f, "Blob({:?}, {} entities)", self.ident, self.payload.len())
     }
 }
 
-fn unpack_blob<'a, T: Deserialize<'a>>(entities: &mut Components<T>, bytes: &'a [u8]) -> bool {
-    if let Ok(e) = bincode::deserialize(bytes) {
-        *entities = e;
-        true
-    } else {
-        false
-    }
-}
+fn unpack_blob<'a, T: Deserialize<'a>>(
+    entities: &mut Components<T>,
+    data: &'a BTreeMap<Ent, Vec<u8>>,
+) -> bool {
+    entities.clear();
 
-pub fn apply_blob(world: &mut World, blob: Blob) -> bool {
-    match blob.table() {
-        TableIdent::Blueprints => unpack_blob(&mut world.blueprints, blob.data()),
-        TableIdent::Grids => unpack_blob(&mut world.grids, blob.data()),
-        TableIdent::Protos => unpack_blob(&mut world.prototypes, blob.data()),
-        TableIdent::Parts => unpack_blob(&mut world.parts, blob.data()),
-        TableIdent::Thrusters => unpack_blob(&mut world.thrusters, blob.data()),
-        TableIdent::Computers => unpack_blob(&mut world.computers, blob.data()),
-        TableIdent::Chunks => unpack_blob(&mut world.terrain_chunks, blob.data()),
-        TableIdent::Tiles => unpack_blob(&mut world.terrain_tiles, blob.data()),
-        TableIdent::Inventories => unpack_blob(&mut world.inventories, blob.data()),
-        TableIdent::Machines => unpack_blob(&mut world.machines, blob.data()),
-        TableIdent::Asteroids => unpack_blob(&mut world.asteroids, blob.data()),
-        TableIdent::Pipes => unpack_blob(&mut world.pipes, blob.data()),
-        TableIdent::Lights => unpack_blob(&mut world.lights, blob.data()),
-        TableIdent::Excavators => unpack_blob(&mut world.excavators, blob.data()),
-        TableIdent::Players => unpack_blob(&mut world.players, blob.data()),
-        TableIdent::Planets => unpack_blob(&mut world.planets, blob.data()),
+    for (id, data) in data {
+        if let Ok(e) = bincode::deserialize(data) {
+            entities.spawn(*id, e);
+        } else {
+            return false;
+        }
     }
+    true
 }

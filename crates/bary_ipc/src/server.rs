@@ -1,9 +1,11 @@
-use crate::{ClientId, Framer, Packet, ServerRequest, ServerResponse};
+use crate::{ClientId, Framer, ServerRequest, ServerResponse};
 use bary_core::prelude::randint;
 use log::*;
 use std::collections::BTreeMap;
 use std::io::{ErrorKind, Read, Write};
 use std::net::*;
+
+pub const MTU_CHUNK_SIZE: usize = 600;
 
 pub enum ServerEvent {
     Connected(ClientId),
@@ -23,14 +25,31 @@ struct Client {
     framer: Framer,
 }
 
+pub fn send_in_chunks(
+    stream: &mut TcpStream,
+    data: &[u8],
+    chunk_size: usize,
+) -> std::io::Result<usize> {
+    let mut n = 0;
+    for chunk in data.chunks(chunk_size) {
+        n += stream.write(chunk)?;
+    }
+    Ok(n)
+}
+
 impl Client {
-    pub fn send(&mut self, response: ServerResponse) -> std::io::Result<usize> {
+    fn send(&mut self, response: ServerResponse) -> std::io::Result<usize> {
         let payload = bincode::serialize(&response).unwrap();
-        let packet = Packet::new(payload);
-        self.socket.write(&packet.to_bytes())
+        let packet = self.framer.frame(payload);
+        if let Some(packet) = packet {
+            send_in_chunks(&mut self.socket, &packet.to_bytes(), MTU_CHUNK_SIZE)
+        } else {
+            error!("Packet too big!");
+            Ok(0)
+        }
     }
 
-    pub fn update(&mut self) -> Result<Vec<ServerRequest>, ()> {
+    fn update(&mut self) -> Result<Vec<ServerRequest>, ()> {
         let mut buf = [0; 4096];
 
         let mut requests = Vec::new();

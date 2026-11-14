@@ -304,6 +304,9 @@ impl App {
             ServerResponse::Ack => {
                 // don't really care
             }
+            ServerResponse::Entity(ident, id, data) => {
+                info!("Got entity data: {} {} ({} bytes)", ident, id, data.len());
+            }
             e => {
                 info!("{e:?}");
             }

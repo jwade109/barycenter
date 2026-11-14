@@ -45,7 +45,7 @@ impl Backend for SinglePlayerBackend {
             }
         }
         self.append_event(ServerResponse::HaveNewSave);
-        self.append_event(ServerResponse::TransactionComplete);
+        self.append_event(ServerResponse::TransactionComplete(0));
     }
 
     fn set_sim_speed(&mut self, speed: u32) {

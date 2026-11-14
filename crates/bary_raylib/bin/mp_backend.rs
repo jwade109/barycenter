@@ -87,24 +87,24 @@ impl MultiplayerBackend {
         self.async_world_download = Some(AsyncWorldDownload::new());
     }
 
-    fn on_rcv_blob(&mut self, blob: Blob) {
-        info!("Received blob {blob}");
+    fn on_rcv_entity(&mut self, ident: TableIdent, id: Ent, data: Vec<u8>) {
+        info!("Received entity {} {} ({} bytes)", ident, id, data.len());
         if let Some(dl) = &mut self.async_world_download {
-            dl.add_blob(blob);
-
-            info!("Got {} of {} blobs", dl.steps(), dl.total());
-
-            if dl.is_complete() {
-                info!("Got a new world download!");
-                let dl = self
-                    .async_world_download
-                    .take()
-                    .expect("Expected this to be Some(_)");
-
-                self.world = dl.world();
-            }
+            dl.add_entity(ident, id, data);
         } else {
             error!("No download underway!");
+        }
+    }
+
+    fn on_transaction_complete(&mut self) {
+        match std::mem::take(&mut self.async_world_download) {
+            Some(dl) => {
+                info!("Successfully unpacked transaction.");
+                self.world = dl.world();
+            }
+            None => {
+                error!("No transaction was underway!");
+            }
         }
     }
 
@@ -152,26 +152,8 @@ impl MultiplayerBackend {
                     self.on_rcv_have_new_save();
                     continue;
                 }
-                ServerResponse::BlobResponse(blob) => {
-                    self.on_rcv_blob(blob);
-                    continue;
-                }
                 ServerResponse::TakeYourHatOff => {
                     self.on_rcv_take_your_hat_off();
-                    continue;
-                }
-                ServerResponse::MultiBlobResponse(ent, ticks, blobs) => {
-                    let delta = ticks as i64 - self.world.ticks as i64;
-                    warn!(
-                        "Delta ticks: {} AKA {:0.3}",
-                        delta,
-                        timedelta_from_delta_ticks(delta).as_seconds_f64()
-                    );
-                    self.world.spawner.set_next(ent);
-                    self.world.ticks = ticks;
-                    for blob in blobs {
-                        self.on_rcv_blob(blob);
-                    }
                     continue;
                 }
                 ServerResponse::Ack => {
@@ -179,6 +161,14 @@ impl MultiplayerBackend {
                 }
                 ServerResponse::Pong => {
                     continue;
+                }
+                ServerResponse::Entity(ident, id, data) => {
+                    self.on_rcv_entity(ident, id, data);
+                    continue;
+                }
+                ServerResponse::TransactionComplete(x) => {
+                    self.on_transaction_complete();
+                    ServerResponse::TransactionComplete(x)
                 }
                 e => e,
             };

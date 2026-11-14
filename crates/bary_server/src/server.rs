@@ -8,51 +8,58 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-fn serialize_table<T: Serialize>(entities: &Components<T>) -> Option<Vec<u8>> {
-    bincode::serialize(&entities).ok()
+fn table_to_blob<T: Serialize>(entities: &Components<T>) -> Option<BTreeMap<Ent, Vec<u8>>> {
+    let mut ret = BTreeMap::new();
+    for (id, entity) in entities.iter() {
+        let bytes = bincode::serialize(entity).ok()?;
+        ret.insert(*id, bytes);
+    }
+    Some(ret)
 }
 
-fn get_blob(world: &World, table: TableIdent) -> Option<Blob> {
-    let data = match table {
-        TableIdent::Blueprints => serialize_table(&world.blueprints),
-        TableIdent::Grids => serialize_table(&world.grids),
-        TableIdent::Protos => serialize_table(&world.prototypes),
-        TableIdent::Parts => serialize_table(&world.parts),
-        TableIdent::Thrusters => serialize_table(&world.thrusters),
-        TableIdent::Computers => serialize_table(&world.computers),
-        TableIdent::Chunks => serialize_table(&world.terrain_chunks),
-        TableIdent::Tiles => serialize_table(&world.terrain_tiles),
-        TableIdent::Inventories => serialize_table(&world.inventories),
-        TableIdent::Machines => serialize_table(&world.machines),
-        TableIdent::Asteroids => serialize_table(&world.asteroids),
-        TableIdent::Pipes => serialize_table(&world.pipes),
-        TableIdent::Lights => serialize_table(&world.lights),
-        TableIdent::Excavators => serialize_table(&world.excavators),
-        TableIdent::Players => serialize_table(&world.players),
-        TableIdent::Planets => serialize_table(&world.planets),
-    };
-    data.map(|data| Blob::new(data, table))
+fn get_blob(world: &World, ident: TableIdent) -> Option<Blob> {
+    let payload = match ident {
+        TableIdent::Blueprints => table_to_blob(&world.blueprints),
+        TableIdent::Grids => table_to_blob(&world.grids),
+        TableIdent::Protos => table_to_blob(&world.prototypes),
+        TableIdent::Parts => table_to_blob(&world.parts),
+        TableIdent::Thrusters => table_to_blob(&world.thrusters),
+        TableIdent::Computers => table_to_blob(&world.computers),
+        TableIdent::Chunks => table_to_blob(&world.terrain_chunks),
+        TableIdent::Tiles => table_to_blob(&world.terrain_tiles),
+        TableIdent::Inventories => table_to_blob(&world.inventories),
+        TableIdent::Machines => table_to_blob(&world.machines),
+        TableIdent::Asteroids => table_to_blob(&world.asteroids),
+        TableIdent::Pipes => table_to_blob(&world.pipes),
+        TableIdent::Lights => table_to_blob(&world.lights),
+        TableIdent::Excavators => table_to_blob(&world.excavators),
+        TableIdent::Players => table_to_blob(&world.players),
+        TableIdent::Planets => table_to_blob(&world.planets),
+    }?;
+    Some(Blob::new(ident, payload))
 }
 
 struct PaginatedTransaction {
-    blobs: BTreeMap<TableIdent, Blob>,
-    next_blob: Option<TableIdent>,
+    entities: Vec<(TableIdent, Ent, Vec<u8>)>,
     last_sent: Instant,
 }
 
 impl PaginatedTransaction {
     fn from_world(world: &World) -> Self {
-        let mut blobs = BTreeMap::new();
+        let mut entities = Vec::new();
         let all: Vec<_> = TableIdent::all().collect();
         for ident in &all {
             let blob = get_blob(world, *ident).expect("This is bad");
-            warn!("Made blob: {blob}");
-            blobs.insert(*ident, blob);
+            let ident = blob.table();
+            for (id, data) in blob.consume() {
+                entities.push((ident, id, data));
+            }
         }
 
+        info!("Transaction contains {} entities", entities.len());
+
         Self {
-            blobs,
-            next_blob: all.last().cloned(),
+            entities,
             last_sent: Instant::now(),
         }
     }
@@ -82,7 +89,6 @@ pub struct BaryServer {
     tick_rate: u32,
     node: ServerNode,
     update_timer: WallTimer,
-    md5_sync_timer: WallTimer,
     queued_deltas: Vec<WorldDelta>,
     transactions: HashMap<ClientId, PaginatedTransaction>,
 }
@@ -103,7 +109,6 @@ impl BaryServer {
             tick_rate: speed,
             node,
             update_timer: WallTimer::hz(TICKS_PER_SECOND as u32),
-            md5_sync_timer: WallTimer::hz(10),
             queued_deltas: Vec::new(),
             transactions: HashMap::new(),
         })
@@ -156,35 +161,23 @@ impl BaryServer {
     }
 
     fn process_transactions(&mut self) {
-        let dur = Duration::from_millis(200);
-        let now = Instant::now();
         for (client, tr) in &mut self.transactions {
-            let next_send = tr.last_sent + dur;
-            if now < next_send {
-                continue;
-            }
-
-            if let Some(next) = tr.next_blob {
-                if let Some(blob) = tr.blobs.remove(&next) {
-                    debug!("Sending blob {blob} to {client}");
-                    let kind = ServerResponse::BlobResponse(blob);
-                    self.node.send(*client, kind);
+            for _ in 0..100 {
+                if let Some((ident, id, data)) = tr.entities.pop() {
+                    info!("Sending entity {ident} {id} ({} bytes)", data.len());
+                    let msg = ServerResponse::Entity(ident, id, data);
+                    self.node.send(*client, msg);
                 } else {
-                    warn!("No blob for {next}");
+                    info!("Finished transaction!");
+                    let msg = ServerResponse::TransactionComplete(0);
+                    self.node.send(*client, msg);
+                    break;
                 }
-                tr.next_blob = tr.next_blob.map(|t| t.prev()).flatten();
-                tr.last_sent = now;
-            }
-
-            if tr.next_blob.is_none() {
-                info!("Finished transaction!");
-                let msg = ServerResponse::TransactionComplete;
-                self.node.send(*client, msg);
             }
         }
 
         self.transactions
-            .retain(|_client, tr| tr.next_blob.is_some());
+            .retain(|_client, tr| !tr.entities.is_empty());
     }
 
     fn on_accept_message(&mut self, client_id: ClientId, msg: ServerRequest) {
@@ -208,9 +201,6 @@ impl BaryServer {
             }
             ServerRequest::ClientBlobRequest(table) => {
                 self.on_accept_client_blob_request(client_id, table);
-            }
-            ServerRequest::ClientBlobRequestAll => {
-                self.on_accept_client_blob_request_all(client_id);
             }
             ServerRequest::RequestDelta(delta) => {
                 self.on_accept_world_delta(client_id, delta);
@@ -323,36 +313,21 @@ impl BaryServer {
         Some(())
     }
 
-    fn on_accept_client_blob_request(&mut self, client: ClientId, table: TableIdent) {
-        info!("Responding to blob request for {table} from {client}");
-        if let Some(blob) = get_blob(&self.world, table) {
-            let msg = ServerResponse::BlobResponse(blob);
-            self.node.send(client, msg);
-        } else {
-            let msg = ServerResponse::ServerSays(format!("Failed to serialize table: {:?}", table));
-            self.node.send(client, msg);
+    fn send_blob(&mut self, client: ClientId, blob: Blob) {
+        debug!("Sending blob {blob} to {client}");
+        for (id, data) in blob.payload() {
+            let kind = ServerResponse::Entity(blob.table(), *id, data.clone());
+            self.node.send(client, kind);
         }
     }
 
-    fn on_accept_client_blob_request_all(&mut self, client: ClientId) {
-        let blobs: Result<Vec<Blob>, BaryError> = TableIdent::all()
-            .map(|table| get_blob(&self.world, table).ok_or(BaryError::FailedToSerialize(table)))
-            .collect();
-
-        match blobs {
-            Ok(blobs) => {
-                let kind = ServerResponse::MultiBlobResponse(
-                    self.world.spawner.next(),
-                    self.world.ticks,
-                    blobs,
-                );
-                self.node.send(client, kind);
-            }
-            Err(err) => {
-                let msg =
-                    ServerResponse::ServerSays(format!("Failed to serialize table: {:?}", err));
-                self.node.send(client, msg);
-            }
+    fn on_accept_client_blob_request(&mut self, client: ClientId, table: TableIdent) {
+        info!("Responding to blob request for {table} from {client}");
+        if let Some(blob) = get_blob(&self.world, table) {
+            self.send_blob(client, blob);
+        } else {
+            let msg = ServerResponse::ServerSays(format!("Failed to serialize table: {:?}", table));
+            self.node.send(client, msg);
         }
     }
 
