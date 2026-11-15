@@ -1,10 +1,8 @@
 use bary_core::prelude::{Components, Ent, TableIdent};
+use bary_ipc::ServerResponse;
 use bary_sim::*;
+use log::warn;
 use serde::Deserialize;
-
-pub struct AsyncWorldDownload {
-    world: World,
-}
 
 fn unpack_data<'a, T: Deserialize<'a>>(
     entities: &'a mut Components<T>,
@@ -19,15 +17,33 @@ fn unpack_data<'a, T: Deserialize<'a>>(
     }
 }
 
+pub struct AsyncWorldDownload {
+    world: World,
+    expected_length: usize,
+    got_entities: usize,
+}
+
 impl AsyncWorldDownload {
-    pub fn new() -> Self {
+    pub fn new(expected_length: usize) -> Self {
         Self {
             world: World::empty(),
+            expected_length,
+            got_entities: 0,
         }
     }
 
+    pub fn complete(self) -> World {
+        if self.got_entities != self.expected_length {
+            warn!(
+                "Expected {} entities, but got {}",
+                self.expected_length, self.got_entities
+            );
+        }
+        self.world
+    }
+
     pub fn add_entity(&mut self, ident: TableIdent, id: Ent, data: Vec<u8>) -> bool {
-        match ident {
+        let success = match ident {
             TableIdent::Blueprints => unpack_data(&mut self.world.blueprints, id, &data),
             TableIdent::Grids => unpack_data(&mut self.world.grids, id, &data),
             TableIdent::Protos => unpack_data(&mut self.world.prototypes, id, &data),
@@ -44,10 +60,12 @@ impl AsyncWorldDownload {
             TableIdent::Excavators => unpack_data(&mut self.world.excavators, id, &data),
             TableIdent::Players => unpack_data(&mut self.world.players, id, &data),
             TableIdent::Planets => unpack_data(&mut self.world.planets, id, &data),
-        }
-    }
+        };
 
-    pub fn world(self) -> World {
-        self.world
+        if success {
+            self.got_entities += 1;
+        }
+
+        success
     }
 }

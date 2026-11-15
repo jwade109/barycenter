@@ -56,8 +56,12 @@ pub enum ServerResponse {
         grid: Ent,
         thrusters: BTreeMap<Ent, f32>,
     },
+    /// Indicates to a client that a transaction is beginning.
+    /// Includes how many entities are to be expected.
+    TransactionStart(usize),
     /// Indicates to client that the download is finished.
     /// A checksum is provided to verify integrity.
+    /// TODO not implemented.
     TransactionComplete(u32),
     /// sent to a client when they've been kicked
     Kicked,

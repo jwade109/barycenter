@@ -40,8 +40,8 @@ fn get_blob(world: &World, ident: TableIdent) -> Option<Blob> {
 }
 
 struct PaginatedTransaction {
+    has_sent_header: bool,
     entities: Vec<(TableIdent, Ent, Vec<u8>)>,
-    last_sent: Instant,
 }
 
 impl PaginatedTransaction {
@@ -59,8 +59,8 @@ impl PaginatedTransaction {
         info!("Transaction contains {} entities", entities.len());
 
         Self {
+            has_sent_header: false,
             entities,
-            last_sent: Instant::now(),
         }
     }
 }
@@ -162,6 +162,11 @@ impl BaryServer {
 
     fn process_transactions(&mut self) {
         for (client, tr) in &mut self.transactions {
+            if !tr.has_sent_header {
+                let msg = ServerResponse::TransactionStart(tr.entities.len());
+                self.node.send(*client, msg);
+                tr.has_sent_header = true;
+            }
             for _ in 0..100 {
                 if let Some((ident, id, data)) = tr.entities.pop() {
                     info!("Sending entity {ident} {id} ({} bytes)", data.len());

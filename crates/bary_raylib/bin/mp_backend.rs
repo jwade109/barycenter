@@ -84,7 +84,6 @@ impl MultiplayerBackend {
     fn on_rcv_have_new_save(&mut self) {
         info!("Server has reported it has a new save file");
         self.node.send(ServerRequest::BeginAsyncWorldDownload);
-        self.async_world_download = Some(AsyncWorldDownload::new());
     }
 
     fn on_rcv_entity(&mut self, ident: TableIdent, id: Ent, data: Vec<u8>) {
@@ -96,11 +95,20 @@ impl MultiplayerBackend {
         }
     }
 
+    fn on_transaction_start(&mut self, n: usize) {
+        if self.async_world_download.is_some() {
+            error!("Got a new transaction, but one is already underway!");
+            return;
+        }
+
+        self.async_world_download = Some(AsyncWorldDownload::new(n));
+    }
+
     fn on_transaction_complete(&mut self) {
         match std::mem::take(&mut self.async_world_download) {
             Some(dl) => {
                 info!("Successfully unpacked transaction.");
-                self.world = dl.world();
+                self.world = dl.complete();
             }
             None => {
                 error!("No transaction was underway!");
@@ -110,7 +118,6 @@ impl MultiplayerBackend {
 
     fn request_world_download(&mut self) {
         self.node.send(ServerRequest::BeginAsyncWorldDownload);
-        self.async_world_download = Some(AsyncWorldDownload::new());
     }
 
     fn on_rcv_take_your_hat_off(&mut self) {
@@ -164,6 +171,10 @@ impl MultiplayerBackend {
                 }
                 ServerResponse::Entity(ident, id, data) => {
                     self.on_rcv_entity(ident, id, data);
+                    continue;
+                }
+                ServerResponse::TransactionStart(n) => {
+                    self.on_transaction_start(n);
                     continue;
                 }
                 ServerResponse::TransactionComplete(x) => {
