@@ -35,6 +35,7 @@ md5 = "0.8.0"
 rfd = "0.17.2"
 image = "0.25.10"
 shellwords = "1.1.0"
+ctrlc = "3.5.2"
 
 [[bin]]
 name = "client_app"
@@ -51,6 +52,10 @@ path = "bin/traj.rs"
 [[bin]]
 name = "keybinds_test"
 path = "bin/keybinds_test.rs"
+
+[[bin]]
+name = "run_several_programs"
+path = "bin/run_several_programs.rs"
 
 [dev-dependencies]
 criterion = "0.5.1"

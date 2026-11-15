@@ -852,6 +852,7 @@ dependencies = [
  "chrono",
  "clap 4.6.7",
  "criterion",
+ "ctrlc",
  "early_returns",
  "enum-iterator",
  "env_logger",
@@ -1777,6 +1778,17 @@ checksum = "eb2a7d3066da2de787b7f032c736763eb7ae5d355f81a68bab2675a96008b0bf"
 dependencies = [
  "lab",
  "phf 0.11.3",
+]
+
+[[package]]
+name = "ctrlc"
+version = "3.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0b1fab2ae45819af2d0731d60f2afe17227ebb1a1538a236da84c93e9a60162"
+dependencies = [
+ "dispatch2",
+ "nix 0.31.3",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
