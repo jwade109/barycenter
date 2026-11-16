@@ -1,5 +1,4 @@
 use bary_core::prelude::{Components, Ent, TableIdent};
-use bary_ipc::ServerResponse;
 use bary_sim::*;
 use log::warn;
 use serde::Deserialize;
@@ -17,16 +16,19 @@ fn unpack_data<'a, T: Deserialize<'a>>(
     }
 }
 
-pub struct AsyncWorldDownload {
+pub struct WorldDownloader {
     world: World,
     expected_length: usize,
     got_entities: usize,
 }
 
-impl AsyncWorldDownload {
-    pub fn new(expected_length: usize) -> Self {
+impl WorldDownloader {
+    pub fn new(expected_length: usize, ticks: u64) -> Self {
+        let mut world = World::empty();
+        world.ticks = ticks;
+
         Self {
-            world: World::empty(),
+            world,
             expected_length,
             got_entities: 0,
         }

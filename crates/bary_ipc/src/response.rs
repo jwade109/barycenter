@@ -4,7 +4,7 @@ use enum_discriminant::discriminant;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use crate::{Blob, ClientId, SyncFrame};
+use crate::{ClientId, SyncFrame};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct GridTelemetry {
@@ -13,6 +13,27 @@ pub struct GridTelemetry {
     pub pos: Isometry2d,
     pub vel: Isometry2d,
     pub active_thrusters: usize,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct GridsTelemetry {
+    pub tick: u64,
+    pub grids: BTreeMap<Ent, GridTelemetry>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Copy)]
+pub struct ServerTelemetry {
+    pub n_clients: usize,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Copy)]
+pub struct WorldTelemetry {
+    pub tick: u64,
+    pub grids: usize,
+    pub planets: usize,
+    pub thrusters: usize,
+    pub parts: usize,
+    pub blueprints: usize,
 }
 
 #[discriminant(u8)]
@@ -37,19 +58,11 @@ pub enum ServerResponse {
         deltas: Vec<WorldDelta>,
     },
     /// General server info sent at 1 Hz
-    Info {
-        clients: usize,
-        grids: usize,
-        planets: usize,
-        thrusters: usize,
-        parts: usize,
-        blueprints: usize,
-    },
+    Summary(WorldTelemetry),
     /// Grid-specific info
-    Grids {
-        tick: u64,
-        grids: BTreeMap<Ent, GridTelemetry>,
-    },
+    Grids(GridsTelemetry),
+    /// Server-specific info
+    Server(ServerTelemetry),
     /// Thruster-specific info
     Thrusters {
         tick: u64,
@@ -58,7 +71,7 @@ pub enum ServerResponse {
     },
     /// Indicates to a client that a transaction is beginning.
     /// Includes how many entities are to be expected.
-    TransactionStart(usize),
+    TransactionStart(usize, u64),
     /// Indicates to client that the download is finished.
     /// A checksum is provided to verify integrity.
     /// TODO not implemented.

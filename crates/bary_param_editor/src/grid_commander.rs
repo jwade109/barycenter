@@ -4,7 +4,7 @@ use bary_core::prelude::*;
 use bary_ipc::GridTelemetry;
 use bary_sim::{Instruction, Sender, WorldDelta};
 
-pub struct GridCommander {
+pub struct VehicleDetailWidget {
     selected: Option<Ent>,
     heading: f32,
     pos: DVec2,
@@ -14,7 +14,7 @@ pub struct GridCommander {
     kd: f64,
 }
 
-impl GridCommander {
+impl VehicleDetailWidget {
     pub fn new() -> Self {
         Self {
             selected: None,

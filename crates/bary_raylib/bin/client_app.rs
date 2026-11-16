@@ -233,7 +233,7 @@ impl ClientApp {
             ServerResponse::Grids { .. } => {
                 // TODO
             }
-            ServerResponse::Info { .. } => {
+            ServerResponse::Summary { .. } => {
                 // TODO
             }
             _ => error!("Unsupported message from server: {:?}", msg),
@@ -496,7 +496,7 @@ fn server_thread(args: Args) {
 
     info!("Starting server in background thread");
 
-    let mut server = match BaryServer::new(args.server_port, 10) {
+    let mut server = match BaryServer::new(args.server_port) {
         Ok(server) => server,
         Err(e) => {
             error!("Failed to start server: {e:?}");

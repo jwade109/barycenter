@@ -1,34 +1,26 @@
 use crate::*;
 use bary_core::prelude::WallTimer;
-use bary_ipc::{Blob, ClientNode, ClientTelemetry, ServerResponse};
-use bary_raylib::AsyncWorldDownload;
-use bary_sim::{World, WorldDelta, apply_delta, timedelta_from_delta_ticks, update_world};
-use log::{error, warn};
+use bary_ipc::{ClientNode, ClientTelemetry, ServerResponse};
+use bary_sim::{World, WorldDelta, apply_delta, update_world};
+use log::error;
 use std::time::Duration;
 
 pub struct MultiplayerBackend {
     world: World,
     node: ClientNode,
-    async_world_download: Option<AsyncWorldDownload>,
+    async_world_download: Option<WorldDownloader>,
     username: String,
     server_handshake_complete: bool,
-    server_ping_timer: WallTimer,
-    server_telemetry_timer: WallTimer,
 }
 
 impl MultiplayerBackend {
     pub fn new(world: World, node: ClientNode, username: String) -> Self {
-        let server_ping_timer = WallTimer::with_dur(Duration::from_millis(1000));
-        let server_telemetry_timer = WallTimer::with_dur(Duration::from_millis(100));
-
         Self {
             world,
             node,
             async_world_download: None,
             username,
             server_handshake_complete: false,
-            server_ping_timer,
-            server_telemetry_timer,
         }
     }
 
@@ -83,7 +75,7 @@ impl MultiplayerBackend {
 
     fn on_rcv_have_new_save(&mut self) {
         info!("Server has reported it has a new save file");
-        self.node.send(ServerRequest::BeginAsyncWorldDownload);
+        self.node.send(ServerRequest::BeginWorldDownload);
     }
 
     fn on_rcv_entity(&mut self, ident: TableIdent, id: Ent, data: Vec<u8>) {
@@ -95,13 +87,13 @@ impl MultiplayerBackend {
         }
     }
 
-    fn on_transaction_start(&mut self, n: usize) {
+    fn on_transaction_start(&mut self, n: usize, ticks: u64) {
         if self.async_world_download.is_some() {
             error!("Got a new transaction, but one is already underway!");
             return;
         }
 
-        self.async_world_download = Some(AsyncWorldDownload::new(n));
+        self.async_world_download = Some(WorldDownloader::new(n, ticks));
     }
 
     fn on_transaction_complete(&mut self) {
@@ -117,7 +109,7 @@ impl MultiplayerBackend {
     }
 
     fn request_world_download(&mut self) {
-        self.node.send(ServerRequest::BeginAsyncWorldDownload);
+        self.node.send(ServerRequest::BeginWorldDownload);
     }
 
     fn on_rcv_take_your_hat_off(&mut self) {
@@ -173,8 +165,8 @@ impl MultiplayerBackend {
                     self.on_rcv_entity(ident, id, data);
                     continue;
                 }
-                ServerResponse::TransactionStart(n) => {
-                    self.on_transaction_start(n);
+                ServerResponse::TransactionStart(n, ticks) => {
+                    self.on_transaction_start(n, ticks);
                     continue;
                 }
                 ServerResponse::TransactionComplete(x) => {

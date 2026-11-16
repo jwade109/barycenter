@@ -11,6 +11,7 @@ bary_ipc = { path = "../bary_ipc" }
 log = "0.4.31"
 simple_logger = "5.2.0"
 bary_core.workspace = true
+bary_server.workspace = true
 bary_sim = { path = "../bary_sim" }
 egui_plot = "0.37"
 egui_dock = "0.21"

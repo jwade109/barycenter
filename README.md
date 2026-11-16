@@ -42,4 +42,4 @@ to discover the hidden jelly-filled center of the galaxy.
 5. Client responds with a [MessageKind::Introduction] containing their username
 6. If the server accepts their connection, responds with [MessageKind::Welcome] or
    with [MessageKind::ServerError] on error
-7. When client gets [MessageKind::Welcome], will send server [MessageKind::BeginAsyncWorldDownload]
+7. When client gets [MessageKind::Welcome], will send server [MessageKind::BeginWorldDownload]

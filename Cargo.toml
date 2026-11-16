@@ -8,3 +8,4 @@ rust-version = "1.95"
 
 [workspace.dependencies]
 bary_core = { path = "crates/bary_core" }
+bary_server = { path = "crates/bary_server" }

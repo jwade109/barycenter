@@ -6,7 +6,8 @@ use log::{debug, info, warn};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+
+use crate::{make_grid_telemetry, make_world_telemetry};
 
 fn table_to_blob<T: Serialize>(entities: &Components<T>) -> Option<BTreeMap<Ent, Vec<u8>>> {
     let mut ret = BTreeMap::new();
@@ -94,7 +95,7 @@ pub struct BaryServer {
 }
 
 impl BaryServer {
-    pub fn new(port: u16, speed: u32) -> BaryResult<Self> {
+    pub fn new(port: u16) -> BaryResult<Self> {
         info!("Creating a new server node on port {port}");
 
         let node = ServerNode::new(port);
@@ -106,7 +107,7 @@ impl BaryServer {
             save_file: None,
             client_telemetry: HashMap::new(),
             usernames: HashMap::new(),
-            tick_rate: speed,
+            tick_rate: 0,
             node,
             update_timer: WallTimer::hz(TICKS_PER_SECOND as u32),
             queued_deltas: Vec::new(),
@@ -163,7 +164,7 @@ impl BaryServer {
     fn process_transactions(&mut self) {
         for (client, tr) in &mut self.transactions {
             if !tr.has_sent_header {
-                let msg = ServerResponse::TransactionStart(tr.entities.len());
+                let msg = ServerResponse::TransactionStart(tr.entities.len(), self.world.ticks);
                 self.node.send(*client, msg);
                 tr.has_sent_header = true;
             }
@@ -213,7 +214,7 @@ impl BaryServer {
             ServerRequest::LoadSave(path) => {
                 self.load_world(path);
             }
-            ServerRequest::BeginAsyncWorldDownload => {
+            ServerRequest::BeginWorldDownload => {
                 self.begin_async_world_download(client_id);
             }
             ServerRequest::SetParameters(params) => {
@@ -279,6 +280,7 @@ impl BaryServer {
             Ok(world) => {
                 self.world = world;
                 self.save_file = Some(path.to_path_buf());
+                self.tick_rate = 0;
                 info!("Loaded {}", path.display());
                 self.node.broadcast(ServerResponse::HaveNewSave);
             }
@@ -350,59 +352,10 @@ impl BaryServer {
     }
 
     fn send_info_packets(&mut self) {
-        let info = ServerResponse::Info {
-            clients: self.node.client_count(),
-            grids: self.world.grids.len(),
-            planets: self.world.planets.len(),
-            thrusters: self.world.thrusters.len(),
-            parts: self.world.parts.len(),
-            blueprints: self.world.blueprints.len(),
-        };
-        self.node.broadcast(info);
-
-        let mut grids = BTreeMap::new();
-
-        for (id, grid) in self.world.grids.iter() {
-            let mut info = BTreeMap::new();
-            for thruster_id in &grid.thrusters {
-                if let Some(thruster) = self.world.thrusters.get(*thruster_id) {
-                    info.insert(*thruster_id, thruster.unclamped_throttle());
-                }
-            }
-
-            let mut active_thrusters = 0;
-
-            for thruster_id in &grid.thrusters {
-                let Some(thruster) = self.world.thrusters.get(*thruster_id) else {
-                    continue;
-                };
-                if thruster.unclamped_throttle() > 0.001 {
-                    active_thrusters += 1;
-                }
-            }
-
-            let model = grid
-                .blueprint
-                .as_ref()
-                .map(|bp| bp.0.clone())
-                .unwrap_or_default();
-
-            let tlm = GridTelemetry {
-                name: grid.name.clone(),
-                model,
-                pos: grid.particle_location,
-                vel: grid.velocity,
-                active_thrusters,
-            };
-
-            grids.insert(*id, tlm);
-        }
-
-        let msg = ServerResponse::Grids {
-            tick: self.world.ticks,
-            grids,
-        };
-        self.node.broadcast(msg);
+        let msg = make_world_telemetry(&self.world);
+        self.node.broadcast(ServerResponse::Summary(msg));
+        let msg = make_grid_telemetry(&self.world);
+        self.node.broadcast(ServerResponse::Grids(msg));
     }
 
     pub fn update(&mut self) {

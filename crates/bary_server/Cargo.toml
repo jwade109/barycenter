@@ -14,8 +14,7 @@ simple_logger = "5.2.0"
 serde = { version = "1.0.228", features = ["derive"] }
 bincode = "1.3.3"
 md5 = "0.8.0"
-ratatui = "*"
 
 [[bin]]
-name = "server_tui"
-path = "bin/server_tui.rs"
+name = "server"
+path = "bin/server.rs"

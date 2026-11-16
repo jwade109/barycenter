@@ -41,13 +41,16 @@ impl ClientNode {
     fn from_addr(server_addr: SocketAddr) -> Self {
         info!("Connecting on {server_addr}");
 
-        let new_socket = TcpStream::connect_timeout(&server_addr, Duration::from_millis(100)).ok();
-
-        if let Some(socket) = new_socket.as_ref() {
+        let new_socket = loop {
+            let Ok(socket) = TcpStream::connect_timeout(&server_addr, Duration::from_millis(1000))
+            else {
+                warn!("Attempting to connect to {server_addr}...");
+                std::thread::sleep(Duration::from_secs(1));
+                continue;
+            };
             socket.set_nonblocking(true).unwrap();
-        }
-
-        info!("New socket: {new_socket:?}");
+            break socket;
+        };
 
         let client_id = (get_current_time().as_micros() % 1000000000) as u64;
 
@@ -55,7 +58,7 @@ impl ClientNode {
             id: ClientId(client_id),
             errors: 0,
             server_addr,
-            socket: new_socket,
+            socket: Some(new_socket),
             framer: Framer::new(),
         }
     }

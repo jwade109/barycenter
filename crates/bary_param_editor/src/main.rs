@@ -1,19 +1,22 @@
 use bary_core::prelude::*;
 use bary_ipc::{ClientNode, GridTelemetry, ServerRequest, ServerResponse};
-use bary_sim::{Sender, WorldDelta};
+use bary_server::WorldDownloader;
+use bary_sim::{Sender, World, WorldDelta, apply_delta, update_world};
 use eframe::egui;
 use egui::{Id, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
 use egui_plot::*;
-use log::{Level, info};
+use log::{Level, error, info, warn};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::mpsc;
 use std::time::Duration;
 
+mod comparator;
 mod grid_commander;
 mod plotter;
 
-use crate::grid_commander::GridCommander;
+use crate::comparator::WorldComparator;
+use crate::grid_commander::VehicleDetailWidget;
 use crate::plotter::*;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -22,7 +25,8 @@ enum Tab {
     HeadingPlot,
     ThrustersPlot,
     Buttons,
-    GridCommander,
+    VehicleDetailWidget,
+    Comparator,
 }
 
 impl std::fmt::Display for Tab {
@@ -32,7 +36,8 @@ impl std::fmt::Display for Tab {
             Tab::PositionPlot => "Position",
             Tab::ThrustersPlot => "Thrusters",
             Tab::Buttons => "Buttons",
-            Tab::GridCommander => "Grid Commander",
+            Tab::VehicleDetailWidget => "Grid Commander",
+            Tab::Comparator => "Comparator",
         };
         f.write_str(s)
     }
@@ -69,8 +74,11 @@ impl TabViewer for App {
             Tab::Buttons => {
                 self.button_panel(ui);
             }
-            Tab::GridCommander => {
+            Tab::VehicleDetailWidget => {
                 self.commander.draw(ui, &self.grid_info, &mut deltas);
+            }
+            Tab::Comparator => {
+                self.comparator.ui(ui);
             }
         }
 
@@ -82,7 +90,6 @@ impl TabViewer for App {
 struct App {
     sender: mpsc::Sender<ServerRequest>,
     receiver: mpsc::Receiver<ServerResponse>,
-    text_fields: BTreeMap<String, ParameterField>,
     telemetry: BTreeMap<u8, ServerResponse>,
     logs: VecDeque<ServerResponse>,
 
@@ -94,13 +101,17 @@ struct App {
     pos: Plotter,
     heading: Plotter,
     thrusters: Plotter,
-    commander: GridCommander,
+    commander: VehicleDetailWidget,
+
+    download: Option<WorldDownloader>,
+    world: World,
+    comparator: WorldComparator,
 
     dock_state: DockState<Tab>,
 }
 
 fn default_layout() -> DockState<Tab> {
-    let mut dock_state = DockState::new(vec![Tab::PositionPlot]);
+    let mut dock_state = DockState::new(vec![Tab::PositionPlot, Tab::Comparator]);
 
     // Currently, the `DockState` only has one `Surface`: the main one.
     // Let's get mutable access to add more nodes in it.
@@ -109,7 +120,7 @@ fn default_layout() -> DockState<Tab> {
     // Insert "tab2" to the left of "tab1", where the width of "tab2"
     // is 20% of root node's width.
     let [old_node, new_node] =
-        surface.split_left(NodeIndex::root(), 0.15, vec![Tab::GridCommander]);
+        surface.split_left(NodeIndex::root(), 0.15, vec![Tab::VehicleDetailWidget]);
 
     surface.split_below(new_node, 0.5, vec![Tab::Buttons]);
 
@@ -132,7 +143,6 @@ impl Default for App {
         Self {
             sender: request_sender,
             receiver: response_receiver,
-            text_fields: BTreeMap::new(),
             telemetry: BTreeMap::new(),
             logs: VecDeque::new(),
             server_ticks: 0,
@@ -140,9 +150,12 @@ impl Default for App {
             pos: Plotter::new("position", 1.0),
             heading: Plotter::new("heading", None),
             thrusters: Plotter::new("thrusters", None),
-            commander: GridCommander::new(),
+            commander: VehicleDetailWidget::new(),
             dock_state: default_layout(),
             grid_info: BTreeMap::new(),
+            world: World::empty(),
+            download: None,
+            comparator: WorldComparator::new(),
         }
     }
 }
@@ -155,12 +168,6 @@ fn param_field_from_text(s: &str) -> ParamValue {
     } else {
         ParamValue::String(s.to_string())
     }
-}
-
-struct ParameterField {
-    field: String,
-    value: ParamValue,
-    is_dirty: bool,
 }
 
 fn background_thread(
@@ -216,6 +223,8 @@ impl App {
                 .send(ServerRequest::ClientSays("Hello there!".into()));
         }
 
+        ui.separator();
+
         for name in ["scenario_c", "scenario_d", "scenario_e"] {
             let path = format!("saves/{}.yaml", name);
             if ui.button(format!("Load {}", name)).clicked() {
@@ -223,20 +232,14 @@ impl App {
             }
         }
 
+        ui.separator();
+
         if ui.button("Download World").clicked() {
-            _ = self.sender.send(ServerRequest::BeginAsyncWorldDownload);
+            _ = self.sender.send(ServerRequest::BeginWorldDownload);
         }
 
         if ui.button("Request New Params").clicked() {
             _ = self.sender.send(ServerRequest::RequestParams);
-        }
-
-        if ui.button("Push Params").clicked() {
-            let mut params = BTreeMap::new();
-            for (key, field) in &self.text_fields {
-                params.insert(key.clone(), field.value.clone());
-            }
-            _ = self.sender.send(ServerRequest::SetParameters(params));
         }
     }
 
@@ -248,12 +251,25 @@ impl App {
             self.logs.pop_front();
         }
 
+        self.comparator.on_server_telemetry(&msg);
+
         match msg {
-            ServerResponse::Driver { ticks, .. } => {
+            ServerResponse::Driver { ticks, deltas, .. } => {
                 self.server_ticks = ticks;
+
+                for delta in deltas {
+                    if let Err(e) = apply_delta(&mut self.world, delta) {
+                        error!("Failed to apply delta from server: {e}");
+                    }
+                }
+
+                while self.world.ticks < self.server_ticks {
+                    update_world(&mut self.world);
+                    self.comparator.update_local(&self.world);
+                }
             }
-            ServerResponse::Info { clients, .. } => {
-                self.n_clients = clients;
+            ServerResponse::Server(tlm) => {
+                self.n_clients = tlm.n_clients;
             }
             ServerResponse::Thrusters {
                 tick,
@@ -267,95 +283,52 @@ impl App {
                     self.thrusters.add(&key, x, y);
                 }
             }
-            ServerResponse::Grids { tick, grids } => {
-                self.grid_info = grids.clone();
-                for (id, tlm) in grids {
-                    let pos = tlm.pos.tr();
+            ServerResponse::Grids(tlm) => {
+                self.grid_info = tlm.grids.clone();
+                for (id, gtlm) in tlm.grids {
+                    let pos = gtlm.pos.tr();
                     self.pos
-                        .add(&format!("pos_{}_{}", id, tlm.name), pos.x, pos.y);
-                    let x = tick as f64;
-                    let y = wrap_0_2pi_f64(tlm.pos.rotation).to_degrees();
+                        .add(&format!("pos_{}_{}", id, gtlm.name), pos.x, pos.y);
+                    let x = tlm.tick as f64;
+                    let y = wrap_0_2pi_f64(gtlm.pos.rotation).to_degrees();
                     self.heading
-                        .add(&format!("heading_{}_{}", id, tlm.name), x, y);
-                    let y = tlm.active_thrusters as f64;
+                        .add(&format!("heading_{}_{}", id, gtlm.name), x, y);
+                    let y = gtlm.active_thrusters as f64;
                     self.thrusters.add(&format!("{}-tr#", id), x, y);
                 }
             }
             ServerResponse::Parameters(params) => {
-                for (key, value) in params {
-                    self.text_fields
-                        .entry(key)
-                        .and_modify(|f| {
-                            f.value = value.clone();
-                            f.field = value.to_string();
-                        })
-                        .or_insert(ParameterField {
-                            field: value.to_string(),
-                            value: value,
-                            is_dirty: false,
-                        });
-                }
+                warn!("Unused parameters: {params:?}");
             }
             ServerResponse::HaveNewSave => {
-                self.pos.clear();
-                self.heading.clear();
-                self.thrusters.clear();
+                _ = self.sender.send(ServerRequest::BeginWorldDownload);
             }
             ServerResponse::Ack => {
                 // don't really care
             }
             ServerResponse::Entity(ident, id, data) => {
                 info!("Got entity data: {} {} ({} bytes)", ident, id, data.len());
+                if let Some(dl) = self.download.as_mut() {
+                    dl.add_entity(ident, id, data);
+                }
+            }
+            ServerResponse::TransactionStart(n, ticks) => {
+                self.download = Some(WorldDownloader::new(n, ticks));
+            }
+            ServerResponse::TransactionComplete(_checksum) => {
+                if let Some(dl) = std::mem::take(&mut self.download) {
+                    self.world = dl.complete();
+                    self.comparator.clear();
+                    self.pos.clear();
+                    self.heading.clear();
+                    self.thrusters.clear();
+                }
             }
             e => {
                 info!("{e:?}");
             }
         }
     }
-}
-
-#[allow(unused)]
-fn render_params(
-    ui: &mut egui::Ui,
-    text_fields: &mut BTreeMap<String, ParameterField>,
-    response: &mut Option<(String, ParamValue)>,
-) {
-    egui::Grid::new("params")
-        .num_columns(2)
-        .striped(true)
-        .show(ui, |ui| {
-            for (key, field) in text_fields {
-                ui.label(key);
-                if ui.text_edit_singleline(&mut field.field).changed() {
-                    field.is_dirty = true;
-                }
-                field.value = param_field_from_text(&field.field);
-                ui.label(format!("{:?}", field.value));
-                let button = egui::Button::new("Update");
-                if ui.add_enabled(field.is_dirty, button).clicked() {
-                    field.is_dirty = false;
-                    *response = Some((key.clone(), field.value.clone()));
-                }
-                ui.end_row();
-            }
-        });
-}
-
-#[allow(unused)]
-fn draw_plot(ui: &mut egui::Ui, plots: &BTreeMap<String, Vec<PlotPoint>>, id: &str) {
-    let legend = Legend::default();
-    Plot::new(id)
-        .legend(legend)
-        .show_crosshair(false)
-        .show_grid([false, false])
-        .show(ui, |plot_ui| {
-            for (name, data) in plots {
-                let points = Points::new(name, data.as_slice()).radius(3.0);
-                plot_ui.points(points);
-                let series = Line::new(name, data.as_slice());
-                plot_ui.line(series);
-            }
-        });
 }
 
 impl eframe::App for App {
@@ -367,7 +340,7 @@ impl eframe::App for App {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         ui.request_repaint();
-        ui.set_zoom_factor(1.5);
+        // ui.set_zoom_factor(1.5);
 
         let mut dock_state = self.dock_state.clone();
         DockArea::new(&mut dock_state)

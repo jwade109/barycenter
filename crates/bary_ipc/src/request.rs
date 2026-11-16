@@ -39,7 +39,7 @@ pub enum ServerRequest {
     /// directive for the server to load a new save file
     LoadSave(String),
     /// directive for the server to send paginated world data
-    BeginAsyncWorldDownload,
+    BeginWorldDownload,
     /// gets parameters
     RequestParams,
     /// sets parameters
