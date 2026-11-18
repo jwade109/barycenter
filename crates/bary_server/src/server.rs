@@ -199,8 +199,8 @@ impl BaryServer {
             ServerRequest::Ping => {
                 self.on_accept_ping(client_id);
             }
-            ServerRequest::ClientSays(s) => {
-                self.on_accept_client_say(client_id, s);
+            ServerRequest::Rebroadcast(s) => {
+                self.on_accept_rebroadcast(client_id, s);
             }
             ServerRequest::SetSimSpeed(s) => {
                 self.on_accept_set_sim_speed(client_id, s);
@@ -250,7 +250,7 @@ impl BaryServer {
             self.usernames.insert(id, username.clone());
             self.node
                 .broadcast(ServerResponse::PlayerConnected(username));
-            self.node.send(id, ServerResponse::TakeYourHatOff);
+            self.node.send(id, ServerResponse::SuccessfullyConnected);
         } else {
             error!("Client {id} has reintroduced themselves");
             self.nack(id);
@@ -309,7 +309,7 @@ impl BaryServer {
         self.client_telemetry.insert(id, tlm);
     }
 
-    fn on_accept_client_say(&mut self, id: ClientId, s: String) -> Option<()> {
+    fn on_accept_rebroadcast(&mut self, id: ClientId, s: String) -> Option<()> {
         self.node.broadcast(ServerResponse::ChatMessage(id, s));
         Some(())
     }
@@ -340,7 +340,7 @@ impl BaryServer {
 
     fn on_client_connect(&mut self, id: ClientId) {
         info!("Client {id} connected");
-        self.node.send(id, ServerResponse::WhoGoesThere);
+        self.node.send(id, ServerResponse::PleaseSendUsername);
     }
 
     fn on_client_disconnect(&mut self, id: ClientId) {

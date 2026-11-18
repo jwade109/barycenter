@@ -12,7 +12,7 @@ pub enum ServerRequest {
     Introduction {
         username: String,
     },
-    ClientSays(String),
+    Rebroadcast(String),
     SetSimSpeed(u32),
     Ack,
     Nack,

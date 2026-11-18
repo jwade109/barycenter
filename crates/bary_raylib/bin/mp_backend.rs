@@ -143,7 +143,7 @@ impl MultiplayerBackend {
                     propagated.push(msg);
                     continue;
                 }
-                ServerResponse::WhoGoesThere => {
+                ServerResponse::PleaseSendUsername => {
                     self.on_rcv_who_goes_there();
                     continue;
                 }
@@ -151,7 +151,7 @@ impl MultiplayerBackend {
                     self.on_rcv_have_new_save();
                     continue;
                 }
-                ServerResponse::TakeYourHatOff => {
+                ServerResponse::SuccessfullyConnected => {
                     self.on_rcv_take_your_hat_off();
                     continue;
                 }

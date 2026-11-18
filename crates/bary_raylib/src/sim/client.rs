@@ -1,8 +1,11 @@
-use crate::{SceneGraph, SoundEffects};
+use std::rc::Rc;
+
+use crate::{AppearingText, SceneGraph, SoundEffects};
 use bary_core::prelude::*;
 use bary_input::*;
 use bary_sim::Camera;
 use bary_sim::*;
+use raylib::text::Font;
 
 #[derive(Debug, Clone, Copy)]
 pub struct TerrainSelectionInfo {
@@ -97,11 +100,17 @@ pub struct ClientSpecificInfo {
     pub alt_mode: bool,
     pub sounds: SoundEffects,
     pub spawner: EntitySpawner,
+
     pub transmissions: Components<ReceivedTransmission>,
+    pub animations: Components<AppearingText>,
 }
 
 impl ClientSpecificInfo {
     pub fn new(username: String) -> Self {
+        let spawner = EntitySpawner::default();
+
+        let animations = Components::default();
+
         Self {
             player_id: None,
             username,
@@ -113,9 +122,14 @@ impl ClientSpecificInfo {
             input: InputState::default(),
             alt_mode: false,
             sounds: SoundEffects::new(),
-            spawner: EntitySpawner::default(),
+            spawner,
             transmissions: Components::default(),
+            animations,
         }
+    }
+
+    pub fn update(&mut self) {
+        self.animations.retain(|_, anim| anim.should_remain());
     }
 
     pub fn leave_editor(&mut self) -> bool {
@@ -162,5 +176,11 @@ impl ClientSpecificInfo {
             SceneGraph::Piloting(p) => Some(p.ownship),
             _ => None,
         }
+    }
+
+    pub fn spawn_animation(&mut self, font: Rc<Font>, anim: impl Into<String>) {
+        let id = self.spawner.spawn();
+        let anim = AppearingText::new(anim.into(), font);
+        self.animations.spawn(id, anim);
     }
 }

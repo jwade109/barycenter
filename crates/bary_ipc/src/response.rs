@@ -79,9 +79,9 @@ pub enum ServerResponse {
     /// sent to a client when they've been kicked
     Kicked,
     /// challenge sent by server for client to provide their username
-    WhoGoesThere,
+    PleaseSendUsername,
     /// sent by server to client to indicate they have successfully connected
-    TakeYourHatOff,
+    SuccessfullyConnected,
     /// sent by the server to clients to let them know someone has connected
     PlayerConnected(String),
     /// sent by the server to clients to let them know someone has disconnected

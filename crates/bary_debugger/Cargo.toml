@@ -1,5 +1,5 @@
 [package]
-name = "bary_param_editor"
+name = "bary_debugger"
 version = "0.1.0"
 edition = "2024"
 rust-version.workspace = true
@@ -12,6 +12,8 @@ log = "0.4.31"
 simple_logger = "5.2.0"
 bary_core.workspace = true
 bary_server.workspace = true
+serde.workspace = true
 bary_sim = { path = "../bary_sim" }
 egui_plot = "0.37"
 egui_dock = "0.21"
+serde_yaml = "0.9.34"

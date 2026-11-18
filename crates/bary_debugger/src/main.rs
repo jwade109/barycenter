@@ -5,17 +5,18 @@ use bary_sim::{Sender, World, WorldDelta, apply_delta, update_world};
 use eframe::egui;
 use egui::{Id, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
-use egui_plot::*;
 use log::{Level, error, info, warn};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::mpsc;
 use std::time::Duration;
 
 mod comparator;
+mod dialogue;
 mod grid_commander;
 mod plotter;
 
 use crate::comparator::WorldComparator;
+use crate::dialogue::DialogueSender;
 use crate::grid_commander::VehicleDetailWidget;
 use crate::plotter::*;
 
@@ -27,6 +28,7 @@ enum Tab {
     Buttons,
     VehicleDetailWidget,
     Comparator,
+    Dialogue,
 }
 
 impl std::fmt::Display for Tab {
@@ -38,6 +40,7 @@ impl std::fmt::Display for Tab {
             Tab::Buttons => "Buttons",
             Tab::VehicleDetailWidget => "Grid Commander",
             Tab::Comparator => "Comparator",
+            Tab::Dialogue => "Dialogue",
         };
         f.write_str(s)
     }
@@ -80,6 +83,9 @@ impl TabViewer for App {
             Tab::Comparator => {
                 self.comparator.ui(ui);
             }
+            Tab::Dialogue => {
+                self.dialogue.ui(ui, &mut self.sender);
+            }
         }
 
         for delta in deltas.take() {
@@ -106,12 +112,13 @@ struct App {
     download: Option<WorldDownloader>,
     world: World,
     comparator: WorldComparator,
+    dialogue: DialogueSender,
 
     dock_state: DockState<Tab>,
 }
 
 fn default_layout() -> DockState<Tab> {
-    let mut dock_state = DockState::new(vec![Tab::PositionPlot, Tab::Comparator]);
+    let mut dock_state = DockState::new(vec![Tab::PositionPlot, Tab::Comparator, Tab::Dialogue]);
 
     // Currently, the `DockState` only has one `Surface`: the main one.
     // Let's get mutable access to add more nodes in it.
@@ -140,6 +147,8 @@ impl Default for App {
             background_thread(client, request_receiver, response_sender);
         });
 
+        let dialogue = DialogueSender::new("assets/dialogue.yaml");
+
         Self {
             sender: request_sender,
             receiver: response_receiver,
@@ -156,17 +165,8 @@ impl Default for App {
             world: World::empty(),
             download: None,
             comparator: WorldComparator::new(),
+            dialogue,
         }
-    }
-}
-
-fn param_field_from_text(s: &str) -> ParamValue {
-    if let Ok(x) = s.parse::<i64>() {
-        ParamValue::Integer(x)
-    } else if let Ok(x) = s.parse::<f64>() {
-        ParamValue::Float(x)
-    } else {
-        ParamValue::String(s.to_string())
     }
 }
 
@@ -216,11 +216,6 @@ impl App {
             _ = self
                 .sender
                 .send(WorldDelta::Ping(randvec(100.0, 1000.0).into()).into());
-        }
-        if ui.button("Say Hello").clicked() {
-            _ = self
-                .sender
-                .send(ServerRequest::ClientSays("Hello there!".into()));
         }
 
         ui.separator();

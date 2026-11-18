@@ -1,3 +1,4 @@
+mod appearing_text;
 mod assets;
 mod commands;
 mod constants;
@@ -10,6 +11,7 @@ mod sound_handler;
 mod sounds;
 mod utils;
 
+pub use appearing_text::*;
 pub use assets::*;
 pub use commands::*;
 pub use constants::*;

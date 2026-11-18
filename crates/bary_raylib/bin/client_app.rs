@@ -198,6 +198,8 @@ impl ClientApp {
         match &self.client.scene_graph {
             _ => self.update_in_world(),
         }
+
+        self.client.update();
     }
 
     pub fn on_rcv_server_msg(&mut self, msg: ServerResponse) {
@@ -210,6 +212,7 @@ impl ClientApp {
             ServerResponse::ChatMessage(id, text) => {
                 let s = format!("[{id}]: {text}");
                 self.client.chat.log(s);
+                self.client.spawn_animation(self.assets.ui_font(), text);
             }
             ServerResponse::TransactionComplete(..) => {
                 self.client.scene_graph = SceneGraph::Free(FreeFlying::at_zero());
@@ -510,6 +513,12 @@ fn server_thread(args: Args) {
     }
 }
 
+fn draw_animations(d: &mut RaylibDrawHandle, animations: &Components<AppearingText>) {
+    for anim in animations.values() {
+        anim.draw(d);
+    }
+}
+
 fn draw(mut d: &mut RaylibDrawHandle, app: &ClientApp, ui: Tree<UiMessage>) {
     d.clear_background(Color::BLACK);
 
@@ -528,6 +537,8 @@ fn draw(mut d: &mut RaylibDrawHandle, app: &ClientApp, ui: Tree<UiMessage>) {
     }
 
     draw_ui(&mut d, &app.ui_state, &ui, &app.assets);
+
+    draw_animations(&mut d, &app.client.animations);
 
     draw_mouse_screen_position(&mut d, app.client.mouse_screen_position);
 

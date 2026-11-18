@@ -729,6 +729,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "bary_debugger"
+version = "0.1.0"
+dependencies = [
+ "bary_core",
+ "bary_ipc",
+ "bary_server",
+ "bary_sim",
+ "eframe",
+ "egui",
+ "egui_dock",
+ "egui_plot",
+ "log",
+ "serde",
+ "serde_yaml",
+ "simple_logger",
+]
+
+[[package]]
 name = "bary_factory"
 version = "0.1.0"
 dependencies = [
@@ -778,22 +796,6 @@ dependencies = [
  "rootfinder 0.5.1",
  "serde",
  "splines",
-]
-
-[[package]]
-name = "bary_param_editor"
-version = "0.1.0"
-dependencies = [
- "bary_core",
- "bary_ipc",
- "bary_server",
- "bary_sim",
- "eframe",
- "egui",
- "egui_dock",
- "egui_plot",
- "log",
- "simple_logger",
 ]
 
 [[package]]
