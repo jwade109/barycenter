@@ -29,7 +29,7 @@ pub enum ServerRequest {
     SetWaypoint(Ent, Isometry2d),
     CameraPosition(Isometry2d),
     /// request from the client for table blobs
-    ClientBlobRequest(TableIdent),
+    DownloadTable(TableIdent),
     /// client requests all blobs
     ClientBlobRequestAll,
     /// information sent consistently by each client

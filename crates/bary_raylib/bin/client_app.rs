@@ -113,7 +113,7 @@ impl ClientApp {
 
         let app = ClientApp {
             backend,
-            client: ClientSpecificInfo::new(username),
+            client: ClientSpecificInfo::new(username, assets.ui_font()),
             input_handler,
             terminal,
             assets,
@@ -146,8 +146,8 @@ impl ClientApp {
 
         let controls = ExternalControls { controls };
 
-        for msg in self.backend.update(&controls) {
-            self.on_rcv_server_msg(msg);
+        for event in self.backend.update(&controls) {
+            self.on_rcv_backend_event(event);
         }
 
         let post_deltas = post_simulation_update(
@@ -202,6 +202,19 @@ impl ClientApp {
         self.client.update();
     }
 
+    pub fn on_rcv_backend_event(&mut self, event: BackendEvent) {
+        match event {
+            BackendEvent::FinishedWorldDownload(name) => {
+                let message = format!("Finished world download \"{name}\"");
+                self.client.spawn_animation(message, true);
+                self.client.scene_graph = SceneGraph::Free(FreeFlying::at_zero());
+            }
+            BackendEvent::Server(response) => {
+                self.on_rcv_server_msg(response);
+            }
+        }
+    }
+
     pub fn on_rcv_server_msg(&mut self, msg: ServerResponse) {
         let s = format!("{:?}", msg);
         self.terminal.log_debug(s);
@@ -212,10 +225,7 @@ impl ClientApp {
             ServerResponse::ChatMessage(id, text) => {
                 let s = format!("[{id}]: {text}");
                 self.client.chat.log(s);
-                self.client.spawn_animation(self.assets.ui_font(), text);
-            }
-            ServerResponse::TransactionComplete(..) => {
-                self.client.scene_graph = SceneGraph::Free(FreeFlying::at_zero());
+                self.client.spawn_animation(text, false);
             }
             ServerResponse::SyncFrame(frame) => {
                 debug!("Got frame: {:?}", frame);
@@ -239,15 +249,32 @@ impl ClientApp {
             ServerResponse::Summary { .. } => {
                 // TODO
             }
+            ServerResponse::Driver { deltas, .. } => {
+                for delta in deltas {
+                    let s = format!("{:?}", delta);
+                    self.client.spawn_animation(s, true);
+                }
+            }
+            ServerResponse::ClientConnected(id, addr) => {
+                let msg = format!("Client connected: {id}, {addr}");
+                self.client.spawn_animation(msg, true);
+            }
+            ServerResponse::ClientDisconnected(id, addr) => {
+                let msg = format!("Client disconnected: {id}, {addr}");
+                self.client.spawn_animation(msg, true);
+            }
             _ => error!("Unsupported message from server: {:?}", msg),
         }
     }
 
     fn on_sim_event(&mut self, sim: SimulationEvent) {
         let id = self.client.spawner.spawn();
+        info!("Got sim event: {sim:?}");
         match sim {
             SimulationEvent::Transmission(rt) => {
+                let msg = format!("TR: {} {:?}", rt.received_by, rt.original.contents());
                 self.client.transmissions.spawn(id, rt);
+                self.client.spawn_animation(msg, true)
             }
             SimulationEvent::Piloting(id, username) => {
                 info!("{username} is piloting {id}");
@@ -443,6 +470,8 @@ fn make_gui(
         SceneGraph::Free(free) => {
             make_free_flying_ui(&mut ui, free, app.backend.world(), &app.assets);
             make_part_info_gui(&mut ui, app.backend.world(), &app.client, &app.assets);
+            // TODO
+            app.client.transmissions.clear();
             make_transmission_ui(&mut ui, &app.client.transmissions);
         }
         SceneGraph::Piloting(piloting) => {

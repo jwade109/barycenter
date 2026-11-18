@@ -1,14 +1,12 @@
 use crate::*;
-use bary_core::prelude::WallTimer;
 use bary_ipc::{ClientNode, ClientTelemetry, ServerResponse};
 use bary_sim::{World, WorldDelta, apply_delta, update_world};
 use log::error;
-use std::time::Duration;
 
 pub struct MultiplayerBackend {
     world: World,
     node: ClientNode,
-    async_world_download: Option<WorldDownloader>,
+    async_world_download: WorldDownloader,
     username: String,
     server_handshake_complete: bool,
 }
@@ -18,7 +16,7 @@ impl MultiplayerBackend {
         Self {
             world,
             node,
-            async_world_download: None,
+            async_world_download: WorldDownloader::new(),
             username,
             server_handshake_complete: false,
         }
@@ -78,33 +76,10 @@ impl MultiplayerBackend {
         self.node.send(ServerRequest::BeginWorldDownload);
     }
 
-    fn on_rcv_entity(&mut self, ident: TableIdent, id: Ent, data: Vec<u8>) {
-        info!("Received entity {} {} ({} bytes)", ident, id, data.len());
-        if let Some(dl) = &mut self.async_world_download {
-            dl.add_entity(ident, id, data);
-        } else {
-            error!("No download underway!");
-        }
-    }
-
-    fn on_transaction_start(&mut self, n: usize, ticks: u64) {
-        if self.async_world_download.is_some() {
-            error!("Got a new transaction, but one is already underway!");
-            return;
-        }
-
-        self.async_world_download = Some(WorldDownloader::new(n, ticks));
-    }
-
-    fn on_transaction_complete(&mut self) {
-        match std::mem::take(&mut self.async_world_download) {
-            Some(dl) => {
-                info!("Successfully unpacked transaction.");
-                self.world = dl.complete();
-            }
-            None => {
-                error!("No transaction was underway!");
-            }
+    fn on_rcv_fragment(&mut self, fragment: DownloadFragment, sender: &mut Sender<BackendEvent>) {
+        if let Some((world, name)) = self.async_world_download.on_fragment(fragment) {
+            self.world = world;
+            sender.send(BackendEvent::FinishedWorldDownload(name));
         }
     }
 
@@ -116,18 +91,9 @@ impl MultiplayerBackend {
         self.server_handshake_complete = true;
     }
 
-    fn update(&mut self) -> Vec<ServerResponse> {
-        // if self.server_ping_timer.tick() {
-        //     if self.server_handshake_complete {
-        //         self.send_ping();
-        //     }
-        // }
+    fn update(&mut self) -> Vec<BackendEvent> {
+        let mut events = Sender::new();
 
-        // if self.server_telemetry_timer.tick() {
-        //     self.report_telemetry();
-        // }
-
-        let mut propagated = Vec::new();
         for msg in self.node.update() {
             let e = match msg.clone() {
                 ServerResponse::Driver {
@@ -136,11 +102,11 @@ impl MultiplayerBackend {
                     deltas,
                 } => {
                     self.on_driver_packet(ticks, deltas);
-                    continue;
+                    msg
                 }
                 ServerResponse::Kicked => {
                     self.on_rcv_kicked();
-                    propagated.push(msg);
+                    events.send(msg.into());
                     continue;
                 }
                 ServerResponse::PleaseSendUsername => {
@@ -161,24 +127,17 @@ impl MultiplayerBackend {
                 ServerResponse::Pong => {
                     continue;
                 }
-                ServerResponse::Entity(ident, id, data) => {
-                    self.on_rcv_entity(ident, id, data);
+                ServerResponse::Download(fragment) => {
+                    self.on_rcv_fragment(fragment, &mut events);
                     continue;
-                }
-                ServerResponse::TransactionStart(n, ticks) => {
-                    self.on_transaction_start(n, ticks);
-                    continue;
-                }
-                ServerResponse::TransactionComplete(x) => {
-                    self.on_transaction_complete();
-                    ServerResponse::TransactionComplete(x)
                 }
                 e => e,
             };
 
-            propagated.push(e);
+            events.send(e.into());
         }
-        propagated
+
+        events.take()
     }
 }
 
@@ -211,7 +170,7 @@ impl Backend for MultiplayerBackend {
         Some(&self.username)
     }
 
-    fn update(&mut self, _controls: &ExternalControls) -> Vec<ServerResponse> {
+    fn update(&mut self, _controls: &ExternalControls) -> Vec<BackendEvent> {
         self.update()
     }
 }

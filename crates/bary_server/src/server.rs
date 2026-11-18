@@ -5,6 +5,7 @@ use log::*;
 use log::{debug, info, warn};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 
 use crate::{make_grid_telemetry, make_world_telemetry};
@@ -42,7 +43,7 @@ fn get_blob(world: &World, ident: TableIdent) -> Option<Blob> {
 
 struct PaginatedTransaction {
     has_sent_header: bool,
-    entities: Vec<(TableIdent, Ent, Vec<u8>)>,
+    entities: Vec<EntityData>,
 }
 
 impl PaginatedTransaction {
@@ -51,9 +52,10 @@ impl PaginatedTransaction {
         let all: Vec<_> = TableIdent::all().collect();
         for ident in &all {
             let blob = get_blob(world, *ident).expect("This is bad");
-            let ident = blob.table();
+            let table = blob.table();
             for (id, data) in blob.consume() {
-                entities.push((ident, id, data));
+                let data = EntityData { table, id, data };
+                entities.push(data);
             }
         }
 
@@ -164,18 +166,30 @@ impl BaryServer {
     fn process_transactions(&mut self) {
         for (client, tr) in &mut self.transactions {
             if !tr.has_sent_header {
-                let msg = ServerResponse::TransactionStart(tr.entities.len(), self.world.ticks);
+                let name = self
+                    .save_file
+                    .as_ref()
+                    .map(|s| s.display().to_string())
+                    .unwrap_or("<anonymous>".into());
+                let fragment = DownloadFragment::Start {
+                    name,
+                    n_entities: tr.entities.len(),
+                    ticks: self.world.ticks,
+                };
+                let msg = ServerResponse::Download(fragment);
                 self.node.send(*client, msg);
                 tr.has_sent_header = true;
             }
             for _ in 0..100 {
-                if let Some((ident, id, data)) = tr.entities.pop() {
-                    info!("Sending entity {ident} {id} ({} bytes)", data.len());
-                    let msg = ServerResponse::Entity(ident, id, data);
+                if let Some(data) = tr.entities.pop() {
+                    info!("Sending entity {}", data);
+                    let fragment = DownloadFragment::Entity(data);
+                    let msg = ServerResponse::Download(fragment);
                     self.node.send(*client, msg);
                 } else {
                     info!("Finished transaction!");
-                    let msg = ServerResponse::TransactionComplete(0);
+                    let fragment = DownloadFragment::End(0);
+                    let msg = ServerResponse::Download(fragment);
                     self.node.send(*client, msg);
                     break;
                 }
@@ -205,8 +219,8 @@ impl BaryServer {
             ServerRequest::SetSimSpeed(s) => {
                 self.on_accept_set_sim_speed(client_id, s);
             }
-            ServerRequest::ClientBlobRequest(table) => {
-                self.on_accept_client_blob_request(client_id, table);
+            ServerRequest::DownloadTable(table) => {
+                self.on_accept_table_dl_request(client_id, table);
             }
             ServerRequest::RequestDelta(delta) => {
                 self.on_accept_world_delta(client_id, delta);
@@ -322,13 +336,15 @@ impl BaryServer {
 
     fn send_blob(&mut self, client: ClientId, blob: Blob) {
         debug!("Sending blob {blob} to {client}");
-        for (id, data) in blob.payload() {
-            let kind = ServerResponse::Entity(blob.table(), *id, data.clone());
+        let table = blob.table();
+        for (id, data) in blob.consume() {
+            let fragment = DownloadFragment::Entity(EntityData { table, id, data });
+            let kind = ServerResponse::Download(fragment);
             self.node.send(client, kind);
         }
     }
 
-    fn on_accept_client_blob_request(&mut self, client: ClientId, table: TableIdent) {
+    fn on_accept_table_dl_request(&mut self, client: ClientId, table: TableIdent) {
         info!("Responding to blob request for {table} from {client}");
         if let Some(blob) = get_blob(&self.world, table) {
             self.send_blob(client, blob);
@@ -338,13 +354,17 @@ impl BaryServer {
         }
     }
 
-    fn on_client_connect(&mut self, id: ClientId) {
+    fn on_client_connect(&mut self, id: ClientId, addr: SocketAddr) {
         info!("Client {id} connected");
         self.node.send(id, ServerResponse::PleaseSendUsername);
+        self.node
+            .broadcast(ServerResponse::ClientConnected(id, addr));
     }
 
-    fn on_client_disconnect(&mut self, id: ClientId) {
+    fn on_client_disconnect(&mut self, id: ClientId, addr: SocketAddr) {
         info!("Client {id} disconnected");
+        self.node
+            .broadcast(ServerResponse::ClientDisconnected(id, addr));
         if let Some(username) = self.usernames.remove(&id) {
             self.node
                 .broadcast(ServerResponse::PlayerDisconnected(username));
@@ -365,11 +385,11 @@ impl BaryServer {
 
         for msg in self.node.update() {
             match msg {
-                ServerEvent::Connected(id) => {
-                    self.on_client_connect(id);
+                ServerEvent::Connected(id, addr) => {
+                    self.on_client_connect(id, addr);
                 }
-                ServerEvent::Disconnected(id) => {
-                    self.on_client_disconnect(id);
+                ServerEvent::Disconnected(id, addr) => {
+                    self.on_client_disconnect(id, addr);
                 }
                 ServerEvent::Message(id, msg) => {
                     self.on_accept_message(id, msg);
@@ -377,10 +397,17 @@ impl BaryServer {
             }
         }
 
-        for _ in 0..self.tick_rate {
-            update_world(&mut self.world);
-            self.send_info_packets();
-            self.send_driver_packet();
+        if self.transactions.is_empty() {
+            for _ in 0..self.tick_rate {
+                let res = update_world(&mut self.world);
+                self.send_info_packets();
+                self.send_driver_packet();
+
+                for event in res.events.take() {
+                    let msg = ServerResponse::Simulation(event);
+                    self.node.broadcast(msg);
+                }
+            }
         }
 
         self.process_transactions();

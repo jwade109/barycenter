@@ -6,6 +6,7 @@ use bary_sim::{Instruction, Sender, WorldDelta};
 
 pub struct VehicleDetailWidget {
     selected: Option<Ent>,
+    rename: String,
     heading: f32,
     pos: DVec2,
     vel: DVec2,
@@ -18,6 +19,7 @@ impl VehicleDetailWidget {
     pub fn new() -> Self {
         Self {
             selected: None,
+            rename: String::new(),
             heading: 0.0,
             pos: DVec2::ZERO,
             vel: DVec2::ZERO,
@@ -61,6 +63,15 @@ impl VehicleDetailWidget {
         };
 
         ui.heading(&tlm.name);
+
+        ui.horizontal(|ui| {
+            ui.text_edit_singleline(&mut self.rename);
+            if ui.button("Rename").clicked() {
+                let delta = WorldDelta::RenameGrid(selected, self.rename.clone());
+                deltas.send(delta);
+            }
+        });
+
         ui.label(format!("Type: {}", tlm.model));
         ui.label(distance_str_v(tlm.pos.tr()));
         ui.label(velocity_str_v(tlm.vel.tr()));

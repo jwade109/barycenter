@@ -2,7 +2,7 @@ use bary_core::prelude::{Ent, Isometry2d, ParamValue, TableIdent};
 use bary_sim::{SimulationEvent, WorldDelta};
 use enum_discriminant::discriminant;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, net::SocketAddr};
 
 use crate::{ClientId, SyncFrame};
 
@@ -36,6 +36,30 @@ pub struct WorldTelemetry {
     pub blueprints: usize,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct EntityData {
+    pub table: TableIdent,
+    pub id: Ent,
+    pub data: Vec<u8>,
+}
+
+impl std::fmt::Display for EntityData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {} ({} bytes)", self.table, self.id, self.data.len())
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub enum DownloadFragment {
+    Start {
+        name: String,
+        n_entities: usize,
+        ticks: u64,
+    },
+    Entity(EntityData),
+    End(u64),
+}
+
 #[discriminant(u8)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum ServerResponse {
@@ -43,12 +67,12 @@ pub enum ServerResponse {
     Ping,
     Ack,
     Nack,
+    ClientConnected(ClientId, SocketAddr),
+    ClientDisconnected(ClientId, SocketAddr),
     Unsupported(String),
     ServerSays(String),
     /// broadcasted to all clients when the server loads a new world
     HaveNewSave,
-    /// server response containing a single entity
-    Entity(TableIdent, Ent, Vec<u8>),
     /// hashes of a few key tables to indicate desyncs
     SyncFrame(SyncFrame),
     /// driver packet sent to each client each tick
@@ -69,13 +93,8 @@ pub enum ServerResponse {
         grid: Ent,
         thrusters: BTreeMap<Ent, f32>,
     },
-    /// Indicates to a client that a transaction is beginning.
-    /// Includes how many entities are to be expected.
-    TransactionStart(usize, u64),
-    /// Indicates to client that the download is finished.
-    /// A checksum is provided to verify integrity.
-    /// TODO not implemented.
-    TransactionComplete(u32),
+    /// Part of a world download.
+    Download(DownloadFragment),
     /// sent to a client when they've been kicked
     Kicked,
     /// challenge sent by server for client to provide their username

@@ -1,4 +1,4 @@
-use crate::backend::Backend;
+use crate::backend::{Backend, BackendEvent};
 use bary_core::prelude::WallTimer;
 use bary_ipc::*;
 use bary_sim::*;
@@ -7,7 +7,7 @@ use log::*;
 pub struct SinglePlayerBackend {
     world: World,
     sim_speed: u32,
-    events: Vec<ServerResponse>,
+    events: Vec<BackendEvent>,
     step_timer: WallTimer,
 }
 
@@ -21,7 +21,7 @@ impl SinglePlayerBackend {
         }
     }
 
-    fn append_event(&mut self, msg: impl Into<ServerResponse>) {
+    fn append_event(&mut self, msg: impl Into<BackendEvent>) {
         self.events.push(msg.into());
     }
 }
@@ -36,7 +36,7 @@ impl Backend for SinglePlayerBackend {
     }
 
     fn load_save(&mut self, path: String) {
-        match load_world(path) {
+        match load_world(&path) {
             Ok(world) => {
                 self.world = world;
             }
@@ -45,7 +45,7 @@ impl Backend for SinglePlayerBackend {
             }
         }
         self.append_event(ServerResponse::HaveNewSave);
-        self.append_event(ServerResponse::TransactionComplete(0));
+        self.append_event(BackendEvent::FinishedWorldDownload(path));
     }
 
     fn set_sim_speed(&mut self, speed: u32) {
@@ -62,16 +62,17 @@ impl Backend for SinglePlayerBackend {
         None
     }
 
-    fn update(&mut self, controls: &ExternalControls) -> Vec<ServerResponse> {
+    fn update(&mut self, controls: &ExternalControls) -> Vec<BackendEvent> {
         if self.step_timer.tick() {
             for _ in 0..self.sim_speed {
                 let response = update_world_with_user_controls(&mut self.world, controls);
                 let events = response.events.take();
                 if !events.is_empty() {
-                    self.events
-                        .extend(events.into_iter().map(|s| ServerResponse::Simulation(s)));
-                    // self.sim_speed = 1;
-                    // break;
+                    self.events.extend(
+                        events
+                            .into_iter()
+                            .map(|s| ServerResponse::Simulation(s).into()),
+                    );
                 }
             }
         }

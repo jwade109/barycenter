@@ -1,6 +1,18 @@
 use bary_ipc::{ClientNode, ServerResponse};
 use bary_sim::{ExternalControls, World, WorldDelta};
 
+#[derive(Debug)]
+pub enum BackendEvent {
+    FinishedWorldDownload(String),
+    Server(ServerResponse),
+}
+
+impl From<ServerResponse> for BackendEvent {
+    fn from(value: ServerResponse) -> Self {
+        Self::Server(value)
+    }
+}
+
 pub trait Backend {
     fn world(&self) -> &World;
 
@@ -16,5 +28,5 @@ pub trait Backend {
 
     fn username(&self) -> Option<&str>;
 
-    fn update(&mut self, controls: &ExternalControls) -> Vec<ServerResponse>;
+    fn update(&mut self, controls: &ExternalControls) -> Vec<BackendEvent>;
 }

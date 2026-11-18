@@ -26,6 +26,7 @@ fn camera_moves_with_wasd(
     follow: &mut Option<Ent>,
     lock_rotation: &mut bool,
     sounds: &mut SoundEffects,
+    animations: &mut Sender<String>,
 ) {
     let angular_speed = 2.5f64.to_radians();
     let speed = 40.0 / target.zoom as f64;
@@ -66,6 +67,7 @@ fn camera_moves_with_wasd(
 
     if old_follow.is_some() && follow.is_none() {
         sounds.push(SoundEffect::LeaveFollow);
+        animations.send("Free Camera".into());
     }
 }
 
@@ -208,7 +210,6 @@ pub fn process_event(world: &World, client: &mut ClientSpecificInfo, on_gui: boo
                         input_handlers::save_world_and_alert_chat(world, client);
                     }
                 }
-                Key::KeyF => input_handlers::toggle_following_on_key_f(client),
                 Key::KeyC => {
                     input_handlers::editor_copy_on_control_c(world, client);
                 }
@@ -301,6 +302,10 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
 
     if client.input.just_pressed_debounced(Key::Alt) {
         client.alt_mode ^= true;
+    }
+
+    if client.input.just_pressed_debounced(Key::KeyF) {
+        input_handlers::toggle_following_on_key_f(client);
     }
 
     if client.input.just_pressed_debounced(Button::Right) {
@@ -419,6 +424,7 @@ pub fn post_simulation_update(
     zoom_in_on_key_v(client);
 
     let mut deltas = Sender::new();
+    let mut text = Sender::new();
 
     match &mut client.scene_graph {
         SceneGraph::Free(fly) => {
@@ -441,6 +447,7 @@ pub fn post_simulation_update(
                     &mut fly.follow_vehicle,
                     &mut fly.lock_rotation,
                     &mut client.sounds,
+                    &mut text,
                 );
 
                 camera_zooms_with_plus_minus(&client.input, &mut fly.target_camera);
@@ -475,6 +482,10 @@ pub fn post_simulation_update(
             pilot.step(&client.input);
         }
         _ => (),
+    }
+
+    for t in text.take() {
+        client.spawn_animation(t, true);
     }
 
     deltas

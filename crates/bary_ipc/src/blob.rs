@@ -19,10 +19,6 @@ impl Blob {
         self.payload.insert(id, data);
     }
 
-    pub fn payload(&self) -> &BTreeMap<Ent, Vec<u8>> {
-        &self.payload
-    }
-
     pub fn consume(self) -> BTreeMap<Ent, Vec<u8>> {
         self.payload
     }

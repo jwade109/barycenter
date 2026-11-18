@@ -68,6 +68,12 @@ impl World {
             ..Default::default()
         }
     }
+
+    pub fn empty_at_ticks(ticks: u64) -> Self {
+        let mut s = Self::empty();
+        s.ticks = ticks;
+        s
+    }
 }
 
 pub fn size_in_bytes(world: &World) -> usize {

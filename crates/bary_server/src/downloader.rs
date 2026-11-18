@@ -1,4 +1,5 @@
 use bary_core::prelude::{Components, Ent, TableIdent};
+use bary_ipc::DownloadFragment;
 use bary_sim::*;
 use log::warn;
 use serde::Deserialize;
@@ -16,56 +17,82 @@ fn unpack_data<'a, T: Deserialize<'a>>(
     }
 }
 
-pub struct WorldDownloader {
+struct PartialDownloadState {
+    name: String,
     world: World,
-    expected_length: usize,
-    got_entities: usize,
+    n_expected_entities: usize,
+    n_got_entities: usize,
+}
+
+pub struct WorldDownloader {
+    state: Option<PartialDownloadState>,
 }
 
 impl WorldDownloader {
-    pub fn new(expected_length: usize, ticks: u64) -> Self {
-        let mut world = World::empty();
-        world.ticks = ticks;
+    pub fn new() -> Self {
+        Self { state: None }
+    }
 
-        Self {
-            world,
-            expected_length,
-            got_entities: 0,
+    pub fn on_fragment(&mut self, fragment: DownloadFragment) -> Option<(World, String)> {
+        match fragment {
+            DownloadFragment::Start {
+                name,
+                n_entities,
+                ticks,
+            } => {
+                self.state = Some(PartialDownloadState {
+                    name,
+                    world: World::empty_at_ticks(ticks),
+                    n_expected_entities: n_entities,
+                    n_got_entities: 0,
+                });
+                None
+            }
+            DownloadFragment::Entity(e) => {
+                self.add_entity(e.table, e.id, e.data);
+                None
+            }
+            DownloadFragment::End(_) => {
+                let state = std::mem::take(&mut self.state)?;
+
+                if state.n_expected_entities != state.n_got_entities {
+                    warn!(
+                        "Expected {} entities, got {}",
+                        state.n_expected_entities, state.n_got_entities
+                    );
+                }
+
+                Some((state.world, state.name))
+            }
         }
     }
 
-    pub fn complete(self) -> World {
-        if self.got_entities != self.expected_length {
-            warn!(
-                "Expected {} entities, but got {}",
-                self.expected_length, self.got_entities
-            );
-        }
-        self.world
-    }
+    fn add_entity(&mut self, table: TableIdent, id: Ent, data: Vec<u8>) -> bool {
+        let Some(state) = self.state.as_mut() else {
+            return false;
+        };
 
-    pub fn add_entity(&mut self, ident: TableIdent, id: Ent, data: Vec<u8>) -> bool {
-        let success = match ident {
-            TableIdent::Blueprints => unpack_data(&mut self.world.blueprints, id, &data),
-            TableIdent::Grids => unpack_data(&mut self.world.grids, id, &data),
-            TableIdent::Protos => unpack_data(&mut self.world.prototypes, id, &data),
-            TableIdent::Parts => unpack_data(&mut self.world.parts, id, &data),
-            TableIdent::Thrusters => unpack_data(&mut self.world.thrusters, id, &data),
-            TableIdent::Computers => unpack_data(&mut self.world.computers, id, &data),
-            TableIdent::Asteroids => unpack_data(&mut self.world.asteroids, id, &data),
-            TableIdent::Chunks => unpack_data(&mut self.world.terrain_chunks, id, &data),
-            TableIdent::Tiles => unpack_data(&mut self.world.terrain_tiles, id, &data),
-            TableIdent::Inventories => unpack_data(&mut self.world.inventories, id, &data),
-            TableIdent::Machines => unpack_data(&mut self.world.machines, id, &data),
-            TableIdent::Pipes => unpack_data(&mut self.world.pipes, id, &data),
-            TableIdent::Lights => unpack_data(&mut self.world.lights, id, &data),
-            TableIdent::Excavators => unpack_data(&mut self.world.excavators, id, &data),
-            TableIdent::Players => unpack_data(&mut self.world.players, id, &data),
-            TableIdent::Planets => unpack_data(&mut self.world.planets, id, &data),
+        let success = match table {
+            TableIdent::Blueprints => unpack_data(&mut state.world.blueprints, id, &data),
+            TableIdent::Grids => unpack_data(&mut state.world.grids, id, &data),
+            TableIdent::Protos => unpack_data(&mut state.world.prototypes, id, &data),
+            TableIdent::Parts => unpack_data(&mut state.world.parts, id, &data),
+            TableIdent::Thrusters => unpack_data(&mut state.world.thrusters, id, &data),
+            TableIdent::Computers => unpack_data(&mut state.world.computers, id, &data),
+            TableIdent::Asteroids => unpack_data(&mut state.world.asteroids, id, &data),
+            TableIdent::Chunks => unpack_data(&mut state.world.terrain_chunks, id, &data),
+            TableIdent::Tiles => unpack_data(&mut state.world.terrain_tiles, id, &data),
+            TableIdent::Inventories => unpack_data(&mut state.world.inventories, id, &data),
+            TableIdent::Machines => unpack_data(&mut state.world.machines, id, &data),
+            TableIdent::Pipes => unpack_data(&mut state.world.pipes, id, &data),
+            TableIdent::Lights => unpack_data(&mut state.world.lights, id, &data),
+            TableIdent::Excavators => unpack_data(&mut state.world.excavators, id, &data),
+            TableIdent::Players => unpack_data(&mut state.world.players, id, &data),
+            TableIdent::Planets => unpack_data(&mut state.world.planets, id, &data),
         };
 
         if success {
-            self.got_entities += 1;
+            state.n_got_entities += 1;
         }
 
         success

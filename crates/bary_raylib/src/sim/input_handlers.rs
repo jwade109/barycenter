@@ -3,7 +3,6 @@ use crate::sim::*;
 use crate::sounds::*;
 use bary_core::prelude::*;
 use bary_input::*;
-use bary_sim::Camera;
 use bary_sim::*;
 use early_returns::*;
 use log::*;
@@ -103,6 +102,7 @@ pub fn toggle_following_on_key_f(client: &mut ClientSpecificInfo) {
     if client.scene_graph.look_at(grid_id) {
         client.sounds.push(SoundEffect::Follow);
         debug!("Following {}", grid_id);
+        client.spawn_animation(format!("Following {}", grid_id), true)
     }
 }
 

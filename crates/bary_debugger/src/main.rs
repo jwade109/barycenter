@@ -5,7 +5,7 @@ use bary_sim::{Sender, World, WorldDelta, apply_delta, update_world};
 use eframe::egui;
 use egui::{Id, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
-use log::{Level, error, info, warn};
+use log::*;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -109,8 +109,9 @@ struct App {
     thrusters: Plotter,
     commander: VehicleDetailWidget,
 
-    download: Option<WorldDownloader>,
+    download: WorldDownloader,
     world: World,
+    save_name: String,
     comparator: WorldComparator,
     dialogue: DialogueSender,
 
@@ -163,7 +164,8 @@ impl Default for App {
             dock_state: default_layout(),
             grid_info: BTreeMap::new(),
             world: World::empty(),
-            download: None,
+            save_name: "".to_string(),
+            download: WorldDownloader::new(),
             comparator: WorldComparator::new(),
             dialogue,
         }
@@ -192,6 +194,7 @@ fn background_thread(
 
 impl App {
     fn button_panel(&mut self, ui: &mut egui::Ui) {
+        ui.label(&self.save_name);
         if ui.button("Clear Plots").clicked() {
             self.pos.clear();
             self.heading.clear();
@@ -301,26 +304,18 @@ impl App {
             ServerResponse::Ack => {
                 // don't really care
             }
-            ServerResponse::Entity(ident, id, data) => {
-                info!("Got entity data: {} {} ({} bytes)", ident, id, data.len());
-                if let Some(dl) = self.download.as_mut() {
-                    dl.add_entity(ident, id, data);
-                }
-            }
-            ServerResponse::TransactionStart(n, ticks) => {
-                self.download = Some(WorldDownloader::new(n, ticks));
-            }
-            ServerResponse::TransactionComplete(_checksum) => {
-                if let Some(dl) = std::mem::take(&mut self.download) {
-                    self.world = dl.complete();
+            ServerResponse::Download(fragment) => {
+                if let Some((world, name)) = self.download.on_fragment(fragment) {
                     self.comparator.clear();
                     self.pos.clear();
                     self.heading.clear();
                     self.thrusters.clear();
+                    self.world = world;
+                    self.save_name = name;
                 }
             }
             e => {
-                info!("{e:?}");
+                debug!("{e:?}");
             }
         }
     }

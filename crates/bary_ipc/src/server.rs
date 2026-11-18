@@ -8,8 +8,8 @@ use std::net::*;
 pub const MTU_CHUNK_SIZE: usize = 600;
 
 pub enum ServerEvent {
-    Connected(ClientId),
-    Disconnected(ClientId),
+    Connected(ClientId, SocketAddr),
+    Disconnected(ClientId, SocketAddr),
     Message(ClientId, ServerRequest),
 }
 
@@ -144,7 +144,7 @@ impl ServerNode {
             warn!("Got a client: {client:?}");
             let id = ClientId(randint(1, 1000000) as u64);
             self.clients.insert(id, client);
-            messages.push(ServerEvent::Connected(id));
+            messages.push(ServerEvent::Connected(id, addr));
         }
 
         self.clients.retain(|id, c| match c.update() {
@@ -155,7 +155,7 @@ impl ServerNode {
                 true
             }
             Err(()) => {
-                messages.push(ServerEvent::Disconnected(*id));
+                messages.push(ServerEvent::Disconnected(*id, c.addr));
                 false
             }
         });

@@ -103,10 +103,12 @@ pub struct ClientSpecificInfo {
 
     pub transmissions: Components<ReceivedTransmission>,
     pub animations: Components<AppearingText>,
+
+    ui_font: Rc<Font>,
 }
 
 impl ClientSpecificInfo {
-    pub fn new(username: String) -> Self {
+    pub fn new(username: String, ui_font: Rc<Font>) -> Self {
         let spawner = EntitySpawner::default();
 
         let animations = Components::default();
@@ -125,6 +127,7 @@ impl ClientSpecificInfo {
             spawner,
             transmissions: Components::default(),
             animations,
+            ui_font,
         }
     }
 
@@ -178,9 +181,9 @@ impl ClientSpecificInfo {
         }
     }
 
-    pub fn spawn_animation(&mut self, font: Rc<Font>, anim: impl Into<String>) {
+    pub fn spawn_animation(&mut self, anim: impl Into<String>, is_debug: bool) {
         let id = self.spawner.spawn();
-        let anim = AppearingText::new(anim.into(), font);
+        let anim = AppearingText::new(anim.into(), self.ui_font.clone(), is_debug);
         self.animations.spawn(id, anim);
     }
 }
