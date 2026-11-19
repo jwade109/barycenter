@@ -27,14 +27,10 @@ impl MultiplayerBackend {
     }
 
     fn report_telemetry(&mut self) {
-        let tlm = ClientTelemetry {
-            ticks: self.world.ticks,
-        };
+        let grids = make_grid_telemetry(&self.world);
+        let world = make_world_telemetry(&self.world);
+        let tlm = ClientTelemetry { grids, world };
         self.node.send(ServerRequest::ClientTelemetry(tlm));
-    }
-
-    fn send_ping(&mut self) {
-        self.node.send(ServerRequest::Ping);
     }
 
     fn set_sim_speed(&mut self, speed: u32) {
@@ -48,6 +44,10 @@ impl MultiplayerBackend {
     fn on_driver_packet(&mut self, ticks: u64, deltas: Vec<WorldDelta>) {
         while self.world.ticks + 1 < ticks {
             update_world(&mut self.world);
+        }
+
+        if self.world.ticks % 25 == 0 {
+            self.report_telemetry();
         }
 
         for delta in deltas {

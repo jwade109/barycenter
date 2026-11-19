@@ -9,7 +9,6 @@ pub fn debug_lines(
     client: &ClientSpecificInfo,
     timers: &DebugTimers,
     network: Option<&ClientNode>,
-    update_timer: &WallTimer,
     username: Option<&str>,
     user_id: Option<Ent>,
     fps: u32,
@@ -50,13 +49,15 @@ pub fn debug_lines(
 
         ui.text(format!("FPS:       {}", fps));
         ui.text(format!("Memory:    {:0.3} KB", size as f64 / 1000.0));
-        ui.text(format!("Camera:    {:?}", client.scene_graph.camera()));
 
-        ui.text(format!(
-            "Update:    {:0.2} Hz / {:0.2} Hz ",
-            update_timer.actual_rate(),
-            update_timer.nominal_rate()
-        ));
+        if let Some(cam) = client.scene_graph.camera() {
+            ui.text(format!(
+                "Camera:    {:0.1} {:0.1} {:0.1}",
+                cam.isometry.tr(),
+                cam.isometry.rotation.to_degrees(),
+                cam.zoom
+            ));
+        }
 
         ui.sep();
 
@@ -109,20 +110,9 @@ pub fn debug_ui(
     client: &ClientSpecificInfo,
     timers: &DebugTimers,
     network: Option<&ClientNode>,
-    update_timer: &WallTimer,
     username: Option<&str>,
     user_id: Option<Ent>,
     fps: u32,
 ) {
-    debug_lines(
-        ui,
-        world,
-        client,
-        timers,
-        network,
-        update_timer,
-        username,
-        user_id,
-        fps,
-    );
+    debug_lines(ui, world, client, timers, network, username, user_id, fps);
 }

@@ -104,11 +104,25 @@ impl UiBuilder {
     }
 
     pub fn text(&mut self, s: impl Into<String>) {
+        self.colored_text(s, Color::WHITE);
+    }
+
+    pub fn colored_text(&mut self, s: impl Into<String>, color: Color) {
         let s = s.into();
         let dims = self.font.measure_text(&s, self.font_size, 0.0);
         let w = dims.x;
         let h = dims.y;
-        self.add_to_active(Node::text(w, h, s).with_font_size(self.font_size))
+        let color = [
+            color.r as f32 / 255.0,
+            color.g as f32 / 255.0,
+            color.b as f32 / 255.0,
+            color.a as f32 / 255.0,
+        ];
+        self.add_to_active(
+            Node::text(w, h, s)
+                .with_font_size(self.font_size)
+                .with_color(color),
+        )
     }
 
     pub fn button(&mut self, msg: impl Into<UiMessage>, s: impl Into<String>) {

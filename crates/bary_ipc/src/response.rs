@@ -4,7 +4,7 @@ use enum_discriminant::discriminant;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, net::SocketAddr};
 
-use crate::{ClientId, SyncFrame};
+use crate::{ClientId, ClientTelemetry, SyncFrame};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct GridTelemetry {
@@ -22,7 +22,7 @@ pub struct GridsTelemetry {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Copy)]
-pub struct ServerTelemetry {
+pub struct ConnectionTelemetry {
     pub n_clients: usize,
 }
 
@@ -60,6 +60,21 @@ pub enum DownloadFragment {
     End(u64),
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct ThrusterTelemetry {
+    pub tick: u64,
+    pub grid: Ent,
+    pub thrusters: BTreeMap<Ent, f32>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub enum ServerTelemetry {
+    Conn(ConnectionTelemetry),
+    World(WorldTelemetry),
+    Grids(GridsTelemetry),
+    Thrusters(ThrusterTelemetry),
+}
+
 #[discriminant(u8)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum ServerResponse {
@@ -81,18 +96,8 @@ pub enum ServerResponse {
         speed: u32,
         deltas: Vec<WorldDelta>,
     },
-    /// General server info sent at 1 Hz
-    Summary(WorldTelemetry),
-    /// Grid-specific info
-    Grids(GridsTelemetry),
-    /// Server-specific info
-    Server(ServerTelemetry),
-    /// Thruster-specific info
-    Thrusters {
-        tick: u64,
-        grid: Ent,
-        thrusters: BTreeMap<Ent, f32>,
-    },
+    /// Any kind of telemetry from server
+    Telemetry(ServerTelemetry),
     /// Part of a world download.
     Download(DownloadFragment),
     /// sent to a client when they've been kicked
@@ -111,6 +116,10 @@ pub enum ServerResponse {
     Simulation(SimulationEvent),
     /// parameters
     Parameters(BTreeMap<String, ParamValue>),
+    /// new sim speed
+    NewSimSpeed(u32),
+    /// forwarded telemetry from other clients
+    ClientTelemetry(ClientId, ClientTelemetry),
 }
 
 impl ServerResponse {

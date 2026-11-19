@@ -12,27 +12,27 @@ pub enum Instruction {
     HoldRelativePosition(Ent, DVec2),
 }
 
-impl Instruction {
-    pub fn rcs_left() -> Self {
-        todo!()
-        // Self::Ctrl(VehicleControl::rcs(false, true, false, false))
-    }
+// impl Instruction {
+//     pub fn rcs_left() -> Self {
+//         todo!()
+//         // Self::Ctrl(VehicleControl::rcs(false, true, false, false))
+//     }
 
-    pub fn rcs_right() -> Self {
-        todo!()
-        // Self::Ctrl(VehicleControl::rcs(false, false, true, false))
-    }
+//     pub fn rcs_right() -> Self {
+//         todo!()
+//         // Self::Ctrl(VehicleControl::rcs(false, false, true, false))
+//     }
 
-    pub fn rcs_forward() -> Self {
-        todo!()
-        // Self::Ctrl(VehicleControl::rcs(true, false, false, false))
-    }
+//     pub fn rcs_forward() -> Self {
+//         todo!()
+//         // Self::Ctrl(VehicleControl::rcs(true, false, false, false))
+//     }
 
-    pub fn rcs_backward() -> Self {
-        todo!()
-        // Self::Ctrl(VehicleControl::rcs(false, false, false, true))
-    }
-}
+//     pub fn rcs_backward() -> Self {
+//         todo!()
+//         // Self::Ctrl(VehicleControl::rcs(false, false, false, true))
+//     }
+// }
 
 impl std::fmt::Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

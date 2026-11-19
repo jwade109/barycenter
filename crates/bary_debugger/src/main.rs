@@ -1,5 +1,8 @@
 use bary_core::prelude::*;
-use bary_ipc::{ClientNode, GridTelemetry, ServerRequest, ServerResponse};
+use bary_ipc::{
+    ClientId, ClientNode, ClientTelemetry, DownloadFragment, GridTelemetry, ServerRequest,
+    ServerResponse, ServerTelemetry,
+};
 use bary_server::WorldDownloader;
 use bary_sim::{Sender, World, WorldDelta, apply_delta, update_world};
 use eframe::egui;
@@ -241,47 +244,17 @@ impl App {
         }
     }
 
-    fn on_server_msg(&mut self, msg: ServerResponse) {
-        let disc = msg.id();
-        self.telemetry.insert(disc, msg.clone());
-        self.logs.push_back(msg.clone());
-        if self.logs.len() > 300 {
-            self.logs.pop_front();
-        }
+    fn on_client_telemetry(&mut self, id: ClientId, tlm: ClientTelemetry) {
+        // warn!("Got TLM: {} {:?}", id, tlm);
+    }
 
-        self.comparator.on_server_telemetry(&msg);
-
-        match msg {
-            ServerResponse::Driver { ticks, deltas, .. } => {
-                self.server_ticks = ticks;
-
-                for delta in deltas {
-                    if let Err(e) = apply_delta(&mut self.world, delta) {
-                        error!("Failed to apply delta from server: {e}");
-                    }
-                }
-
-                while self.world.ticks < self.server_ticks {
-                    update_world(&mut self.world);
-                    self.comparator.update_local(&self.world);
-                }
-            }
-            ServerResponse::Server(tlm) => {
+    fn on_server_telemetry(&mut self, tlm: ServerTelemetry) {
+        match tlm {
+            ServerTelemetry::Conn(tlm) => {
                 self.n_clients = tlm.n_clients;
             }
-            ServerResponse::Thrusters {
-                tick,
-                grid,
-                thrusters,
-            } => {
-                let x = tick as f64;
-                for (id, throttle) in thrusters {
-                    let y = throttle as f64;
-                    let key = format!("gr-{}-thr-{}", grid, id);
-                    self.thrusters.add(&key, x, y);
-                }
-            }
-            ServerResponse::Grids(tlm) => {
+            ServerTelemetry::World(tlm) => {}
+            ServerTelemetry::Grids(tlm) => {
                 self.grid_info = tlm.grids.clone();
                 for (id, gtlm) in tlm.grids {
                     let pos = gtlm.pos.tr();
@@ -295,27 +268,72 @@ impl App {
                     self.thrusters.add(&format!("{}-tr#", id), x, y);
                 }
             }
-            ServerResponse::Parameters(params) => {
-                warn!("Unused parameters: {params:?}");
+            ServerTelemetry::Thrusters(tlm) => {
+                let x = tlm.tick as f64;
+                for (id, throttle) in tlm.thrusters {
+                    let y = throttle as f64;
+                    let key = format!("gr-{}-thr-{}", tlm.grid, id);
+                    self.thrusters.add(&key, x, y);
+                }
+            }
+        }
+    }
+
+    fn on_download_fragment(&mut self, fragment: DownloadFragment) {
+        if let Some((world, name)) = self.download.on_fragment(fragment) {
+            self.comparator.clear();
+            self.pos.clear();
+            self.heading.clear();
+            self.thrusters.clear();
+            self.world = world;
+            self.save_name = name;
+        }
+    }
+
+    fn on_driver(&mut self, ticks: u64, deltas: Vec<WorldDelta>) {
+        self.server_ticks = ticks;
+
+        for delta in deltas {
+            if let Err(e) = apply_delta(&mut self.world, delta) {
+                error!("Failed to apply delta from server: {e}");
+            }
+        }
+
+        while self.world.ticks < self.server_ticks {
+            update_world(&mut self.world);
+            self.comparator.update_local(&self.world);
+        }
+    }
+
+    fn on_server_msg(&mut self, msg: ServerResponse) {
+        let disc = msg.id();
+        self.telemetry.insert(disc, msg.clone());
+        self.logs.push_back(msg.clone());
+        if self.logs.len() > 300 {
+            self.logs.pop_front();
+        }
+
+        match msg {
+            ServerResponse::Driver { ticks, deltas, .. } => {
+                self.on_driver(ticks, deltas);
             }
             ServerResponse::HaveNewSave => {
                 _ = self.sender.send(ServerRequest::BeginWorldDownload);
             }
+            ServerResponse::Download(fragment) => {
+                self.on_download_fragment(fragment);
+            }
+            ServerResponse::Telemetry(tlm) => {
+                self.on_server_telemetry(tlm);
+            }
+            ServerResponse::ClientTelemetry(id, tlm) => {
+                self.on_client_telemetry(id, tlm)
+            }
             ServerResponse::Ack => {
                 // don't really care
             }
-            ServerResponse::Download(fragment) => {
-                if let Some((world, name)) = self.download.on_fragment(fragment) {
-                    self.comparator.clear();
-                    self.pos.clear();
-                    self.heading.clear();
-                    self.thrusters.clear();
-                    self.world = world;
-                    self.save_name = name;
-                }
-            }
             e => {
-                debug!("{e:?}");
+                debug!("Unhandled message from server: {e:?}");
             }
         }
     }

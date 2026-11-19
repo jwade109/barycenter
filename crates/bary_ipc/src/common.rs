@@ -3,6 +3,8 @@ use crossbeam_queue::SegQueue;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::{GridsTelemetry, WorldTelemetry};
+
 #[deprecated]
 pub type MessageQueue<T> = Arc<SegQueue<T>>;
 
@@ -17,7 +19,8 @@ impl std::fmt::Display for ClientId {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ClientTelemetry {
-    pub ticks: u64,
+    pub grids: GridsTelemetry,
+    pub world: WorldTelemetry,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

@@ -1,0 +1,89 @@
+global::exit_app:
+  primary: KeyC
+  secondary: [ControlLeft]
+  trigger: OnClick
+
+global::toggle_show_debug_text:
+  primary: KeyD
+  secondary: [ControlLeft, ShiftLeft]
+  trigger: OnClick
+
+global::toggle_show_keybinds:
+  primary: KeyK
+  secondary: [ControlLeft, ShiftLeft]
+  trigger: OnClick
+
+global::toggle_alt_mode:
+  primary: Alt
+  secondary: []
+  trigger: OnClick
+
+free::go_forward:
+  primary: KeyW
+  secondary: []
+  trigger: IsPressed
+
+free::go_backward:
+  primary: KeyS
+  secondary: []
+  trigger: IsPressed
+
+free::go_left:
+  primary: KeyA
+  secondary: []
+  trigger: IsPressed
+
+free::go_right:
+  primary: KeyD
+  secondary: []
+  trigger: IsPressed
+
+piloting::go_forward:
+  primary: KeyW
+  secondary: []
+  trigger: IsPressed
+
+piloting::go_backward:
+  primary: KeyS
+  secondary: []
+  trigger: IsPressed
+
+piloting::go_left:
+  primary: KeyA
+  secondary: []
+  trigger: IsPressed
+
+piloting::go_right:
+  primary: KeyD
+  secondary: []
+  trigger: IsPressed
+
+global::rotate_cam_ccw:
+  primary: KeyQ
+  secondary: []
+  trigger: IsPressed
+
+global::rotate_cam_cw:
+  primary: KeyE
+  secondary: []
+  trigger: IsPressed
+
+free::toggle_follow:
+  primary: KeyF
+  secondary: []
+  trigger: OnClick
+
+free::spawn_radio_transmission:
+  primary: KeyB
+  secondary: []
+  trigger: OnClick
+
+free::toggle_grid_tracking:
+  primary: KeyT
+  secondary: []
+  trigger: OnClick
+
+free::explode_at_mouseover:
+  primary: KeyC
+  secondary: []
+  trigger: OnClick

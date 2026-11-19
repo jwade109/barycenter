@@ -109,7 +109,7 @@ impl BaryServer {
             save_file: None,
             client_telemetry: HashMap::new(),
             usernames: HashMap::new(),
-            tick_rate: 0,
+            tick_rate: 1,
             node,
             update_timer: WallTimer::hz(TICKS_PER_SECOND as u32),
             queued_deltas: Vec::new(),
@@ -182,10 +182,12 @@ impl BaryServer {
             }
             for _ in 0..100 {
                 if let Some(data) = tr.entities.pop() {
-                    info!("Sending entity {}", data);
+                    info!("[{client}] Sending entity {}", data);
                     let fragment = DownloadFragment::Entity(data);
                     let msg = ServerResponse::Download(fragment);
-                    self.node.send(*client, msg);
+                    if !self.node.send(*client, msg) {
+                        error!("Failed to send entity data");
+                    }
                 } else {
                     info!("Finished transaction!");
                     let fragment = DownloadFragment::End(0);
@@ -320,7 +322,9 @@ impl BaryServer {
 
     fn on_accept_client_tlm(&mut self, id: ClientId, tlm: ClientTelemetry) {
         self.ensure_client_is_connected(id);
-        self.client_telemetry.insert(id, tlm);
+        self.client_telemetry.insert(id, tlm.clone());
+        self.node
+            .broadcast(ServerResponse::ClientTelemetry(id, tlm));
     }
 
     fn on_accept_rebroadcast(&mut self, id: ClientId, s: String) -> Option<()> {
@@ -330,7 +334,7 @@ impl BaryServer {
 
     fn on_accept_set_sim_speed(&mut self, id: ClientId, speed: u32) -> Option<()> {
         self.tick_rate = speed;
-        self.node.send(id, ServerResponse::Ack);
+        self.node.broadcast(ServerResponse::NewSimSpeed(speed));
         Some(())
     }
 
@@ -372,10 +376,12 @@ impl BaryServer {
     }
 
     fn send_info_packets(&mut self) {
-        let msg = make_world_telemetry(&self.world);
-        self.node.broadcast(ServerResponse::Summary(msg));
-        let msg = make_grid_telemetry(&self.world);
-        self.node.broadcast(ServerResponse::Grids(msg));
+        let tlm = make_world_telemetry(&self.world);
+        let tlm = ServerTelemetry::World(tlm);
+        self.node.broadcast(ServerResponse::Telemetry(tlm));
+        let tlm = make_grid_telemetry(&self.world);
+        let tlm = ServerTelemetry::Grids(tlm);
+        self.node.broadcast(ServerResponse::Telemetry(tlm));
     }
 
     pub fn update(&mut self) {

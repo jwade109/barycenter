@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use crate::UiInteractionState;
 use crate::UiMessage;
 use crate::assets::*;
@@ -386,6 +388,7 @@ pub fn draw_world(
         &world.parts,
         &world.thrusters,
         &client,
+        world.ticks,
     );
 
     draw_trackers(&mut c, &world.tracking, client.alt_mode);
@@ -1616,6 +1619,7 @@ fn draw_thruster_plumes(
     parts: &Components<Part>,
     thrusters: &Components<Thruster>,
     client: &ClientSpecificInfo,
+    ticks: u64,
 ) {
     let camera = some_or_return!(client.scene_graph.camera());
 
@@ -1623,8 +1627,10 @@ fn draw_thruster_plumes(
         return;
     }
 
+    let time_offset = apparent_elapsed_time(ticks).subsec_millis() as f64 / 1000.0;
+
     for (e, t) in thrusters.iter() {
-        if !t.is_on() {
+        if t.clamped_throttle() < 0.001 {
             continue;
         }
 
@@ -1638,14 +1644,39 @@ fn draw_thruster_plumes(
 
         let origin = grid.origin();
 
-        let mut iso = part_isometry(origin, part.region);
+        let mut part_iso = part_isometry(origin, part.region);
         let mut dims = part.region.part_aligned_dims().to_meters().as_dvec2();
-        let p = iso.translation + iso.local_y() * dims.y / 2.0;
+        let p = part_iso.translation + part_iso.local_y() * dims.y / 2.0;
         dims.x *= 2.0 * t.clamped_throttle() as f64;
-        let offset = iso.local_x() * dims.x;
+        let offset = part_iso.local_x() * dims.x;
+        let mut iso = part_iso;
         iso.translation -= offset;
 
-        fill_rectangle(d, iso, dims, Color::RED);
+        let center_isometry = origin * part.region.center_isometry();
+
+        let max_length = t.clamped_throttle() as f64 * 6.0 + 5.0;
+        let base_width = 0.02;
+        let max_width = 4.0;
+
+        for (rs, c) in [
+            (1.0, Color::RED),
+            (0.8, Color::ORANGE),
+            (0.5, Color::WHITE),
+        ] {
+            for s in linspace(0.0, 1.0, 12) {
+                let x = s as f64 * max_length;
+                let l = (time_offset * 50.0 + x) % max_length;
+                let p = center_isometry.tr() - center_isometry.local_x() * l;
+                let s = l / max_length;
+                let mut r = base_width + max_width * s;
+                let alpha = 0.2 * ((1.0 - s) * t.clamped_throttle() as f64).clamp(0.0, 0.6);
+                let rand = rand(0.9, 1.1) as f64;
+                if r > 0.01 {
+                    fill_circle(d, p, r * rs * rand, c.alpha(alpha as f32));
+                }
+            }
+        }
+
         draw_light_source(d, p, dims.x, Color::RED);
     }
 }
@@ -2101,8 +2132,15 @@ fn draw_node(
             draw_text_centered(d, font, &text, p, font_size, Color::WHITE);
         }
         NodeType::Text(text) => {
+            let c = node.color();
+            let color = Color::new(
+                (c[0] * 255.0) as u8,
+                (c[1] * 255.0) as u8,
+                (c[2] * 255.0) as u8,
+                (c[3] * 255.0) as u8,
+            );
             let p = glam_to_raylib(aabb.center);
-            draw_text_centered(d, font, &text, p, font_size, Color::WHITE);
+            draw_text_centered(d, font, &text, p, font_size, color);
         }
         NodeType::DragHandle(_) => {
             let color = if is_clicked {

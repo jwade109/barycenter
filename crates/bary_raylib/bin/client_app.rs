@@ -11,7 +11,7 @@ use clap::Parser;
 use log::*;
 use raylib::prelude::*;
 use rdev::{Button, Key};
-use std::{rc::Rc, time::Duration};
+use std::time::Duration;
 
 mod backend;
 mod mp_backend;
@@ -21,16 +21,13 @@ use backend::*;
 use mp_backend::*;
 use sp_backend::*;
 
-pub struct ClientApp {
+pub struct GameApp {
     input_handler: InputHandler,
-    client: ClientSpecificInfo,
+    frontend: FrontEnd,
     backend: Box<dyn Backend>,
     terminal: Terminal<TermCmd>,
-    assets: Assets,
     ui_state: UiInteractionState,
-    update_timer: WallTimer,
     should_exit: bool,
-    show_debug_text: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -73,7 +70,18 @@ fn keyboard_control_law(input: &InputState, keybinds: PilotingKeybinds) -> Vehic
     ctrl
 }
 
-impl ClientApp {
+fn make_terminal() -> Terminal<TermCmd> {
+    let mut terminal = Terminal::new();
+
+    terminal.register_commands(all_commands());
+    terminal.register_commands(client_request_blob_commands());
+    terminal.register_commands(world_delta_commands());
+    terminal.register_commands(terminal_commands());
+
+    terminal
+}
+
+impl GameApp {
     fn new(
         args: Args,
         log_level: log::LevelFilter,
@@ -81,13 +89,6 @@ impl ClientApp {
         let input_handler = InputHandler::new();
 
         let world = World::empty();
-
-        let mut terminal = Terminal::new();
-
-        terminal.register_commands(all_commands());
-        terminal.register_commands(client_request_blob_commands());
-        terminal.register_commands(world_delta_commands());
-        terminal.register_commands(terminal_commands());
 
         _ = simple_logger::SimpleLogger::new()
             .with_level(log_level)
@@ -99,7 +100,6 @@ impl ClientApp {
         let mut assets = Assets::default();
         load_assets(&mut assets, &mut raylib);
 
-        let update_timer = WallTimer::hz(50);
         let ui_state = UiInteractionState::default();
 
         let username = args.username.clone();
@@ -111,23 +111,20 @@ impl ClientApp {
             Box::new(SinglePlayerBackend::new(world))
         };
 
-        let app = ClientApp {
+        let app = GameApp {
             backend,
-            client: ClientSpecificInfo::new(username, assets.ui_font()),
+            frontend: FrontEnd::new(username, assets),
             input_handler,
-            terminal,
-            assets,
+            terminal: make_terminal(),
             ui_state,
-            update_timer,
             should_exit: false,
-            show_debug_text: false,
         };
 
         Ok((app, raylib))
     }
 
     fn update_in_world(&mut self) {
-        let deltas = pre_simulation_update(self.backend.world(), &mut self.client);
+        let deltas = pre_simulation_update(self.backend.world(), &mut self.frontend);
 
         let keybinds = PilotingKeybinds {
             left: Key::KeyA,
@@ -139,8 +136,8 @@ impl ClientApp {
 
         let mut controls = Components::default();
 
-        if let SceneGraph::Piloting(pilot) = &self.client.scene_graph {
-            let ctrl = keyboard_control_law(&self.client.input, keybinds);
+        if let SceneGraph::Piloting(pilot) = &self.frontend.scene_graph {
+            let ctrl = keyboard_control_law(&self.frontend.input, keybinds);
             controls.spawn(pilot.ownship, ctrl);
         }
 
@@ -152,7 +149,7 @@ impl ClientApp {
 
         let post_deltas = post_simulation_update(
             self.backend.world(),
-            &mut self.client,
+            &mut self.frontend,
             self.terminal.is_focused(),
         );
 
@@ -160,7 +157,7 @@ impl ClientApp {
             self.backend.request_delta(delta);
         }
 
-        let cmds = self.terminal.handle_input(&self.client.input);
+        let cmds = self.terminal.handle_input(&self.frontend.input);
 
         for cmd in cmds {
             self.on_terminal_cmd(cmd);
@@ -168,10 +165,11 @@ impl ClientApp {
 
         let on_gui = self.ui_state.is_on_gui();
         if !self.terminal.is_active() {
-            process_event(self.backend.world(), &mut self.client, on_gui);
+            process_event(self.backend.world(), &mut self.frontend, on_gui);
 
-            if let Some(editor) = self.client.scene_graph.editor_mut() {
-                if let Some(delta) = editor.handle_keys(&self.client.input, self.backend.world()) {
+            if let Some(editor) = self.frontend.scene_graph.editor_mut() {
+                if let Some(delta) = editor.handle_keys(&self.frontend.input, self.backend.world())
+                {
                     self.backend.request_delta(delta);
                 }
             }
@@ -181,33 +179,63 @@ impl ClientApp {
     fn update(&mut self, raylib: &Raylib) {
         // GET SOME BASIC INPUT INFORMATION FROM RAYLIB
 
-        self.client.mouse_screen_position = raylib
+        self.frontend.keybinds.clear_active();
+        self.frontend.keybinds.set_active("global");
+
+        match &self.frontend.scene_graph {
+            SceneGraph::MainMenu => {
+                self.frontend.keybinds.set_active("menu");
+            }
+            SceneGraph::ListSaves => {
+                self.frontend.keybinds.set_active("menu");
+            }
+            SceneGraph::Kicked => {
+                self.frontend.keybinds.set_active("menu");
+            }
+            SceneGraph::Settings => {
+                self.frontend.keybinds.set_active("menu");
+            }
+            SceneGraph::Editor(..) => {
+                self.frontend.keybinds.set_active("editor");
+            }
+            SceneGraph::Free(..) => {
+                self.frontend.keybinds.set_active("freecamera");
+            }
+            SceneGraph::Piloting(..) => {
+                self.frontend.keybinds.set_active("piloting");
+            }
+            SceneGraph::Part(..) => {
+                self.frontend.keybinds.set_active("part");
+            }
+        }
+
+        self.frontend.mouse_screen_position = raylib
             .handle()
             .is_cursor_on_screen()
             .then(|| raylib_to_glam(raylib.handle().get_mouse_position()));
 
-        self.client.screen_dims = Vec2::new(
+        self.frontend.screen_dims = Vec2::new(
             raylib.handle().get_screen_width() as f32,
             raylib.handle().get_screen_height() as f32,
         );
 
-        self.client.input = self
+        self.frontend.input = self
             .input_handler
             .update(raylib.handle().is_window_focused());
 
-        match &self.client.scene_graph {
+        match &self.frontend.scene_graph {
             _ => self.update_in_world(),
         }
 
-        self.client.update();
+        self.frontend.update();
     }
 
     pub fn on_rcv_backend_event(&mut self, event: BackendEvent) {
         match event {
             BackendEvent::FinishedWorldDownload(name) => {
                 let message = format!("Finished world download \"{name}\"");
-                self.client.spawn_animation(message, true);
-                self.client.scene_graph = SceneGraph::Free(FreeFlying::at_zero());
+                self.frontend.spawn_animation(message, true);
+                self.frontend.scene_graph = SceneGraph::Free(FreeFlying::at_zero());
             }
             BackendEvent::Server(response) => {
                 self.on_rcv_server_msg(response);
@@ -224,8 +252,8 @@ impl ClientApp {
         match msg {
             ServerResponse::ChatMessage(id, text) => {
                 let s = format!("[{id}]: {text}");
-                self.client.chat.log(s);
-                self.client.spawn_animation(text, false);
+                self.frontend.chat.log(s);
+                self.frontend.spawn_animation(text, false);
             }
             ServerResponse::SyncFrame(frame) => {
                 debug!("Got frame: {:?}", frame);
@@ -233,48 +261,58 @@ impl ClientApp {
                 debug!("Our frame: {:?}", our_frame);
             }
             ServerResponse::PlayerConnected(username) => {
-                self.client.chat.log(format!("{username} just connected."));
+                self.frontend
+                    .chat
+                    .log(format!("{username} just connected."));
             }
             ServerResponse::PlayerDisconnected(username) => {
-                self.client
+                self.frontend
                     .chat
                     .log(format!("{username} just disconnected."));
             }
             ServerResponse::Simulation(sim) => {
                 self.on_sim_event(sim);
             }
-            ServerResponse::Grids { .. } => {
-                // TODO
-            }
-            ServerResponse::Summary { .. } => {
-                // TODO
-            }
             ServerResponse::Driver { deltas, .. } => {
                 for delta in deltas {
                     let s = format!("{:?}", delta);
-                    self.client.spawn_animation(s, true);
+                    self.frontend.spawn_animation(s, true);
                 }
             }
             ServerResponse::ClientConnected(id, addr) => {
                 let msg = format!("Client connected: {id}, {addr}");
-                self.client.spawn_animation(msg, true);
+                self.frontend.spawn_animation(msg, true);
             }
             ServerResponse::ClientDisconnected(id, addr) => {
                 let msg = format!("Client disconnected: {id}, {addr}");
-                self.client.spawn_animation(msg, true);
+                self.frontend.spawn_animation(msg, true);
+            }
+            ServerResponse::NewSimSpeed(speed) => {
+                let msg = if speed == 0 {
+                    "Sim paused".to_string()
+                } else {
+                    format!("New sim speed: {speed}")
+                };
+                self.frontend.spawn_animation(msg, true);
+            }
+            ServerResponse::Telemetry(_) => {
+                // PASS
+            }
+            ServerResponse::ClientTelemetry(id, tlm) => {
+                // info!("Got TLM from client {id}: {tlm:?}");
             }
             _ => error!("Unsupported message from server: {:?}", msg),
         }
     }
 
     fn on_sim_event(&mut self, sim: SimulationEvent) {
-        let id = self.client.spawner.spawn();
+        let id = self.frontend.spawner.spawn();
         info!("Got sim event: {sim:?}");
         match sim {
             SimulationEvent::Transmission(rt) => {
                 let msg = format!("TR: {} {:?}", rt.received_by, rt.original.contents());
-                self.client.transmissions.spawn(id, rt);
-                self.client.spawn_animation(msg, true)
+                self.frontend.transmissions.spawn(id, rt);
+                self.frontend.spawn_animation(msg, true)
             }
             SimulationEvent::Piloting(id, username) => {
                 info!("{username} is piloting {id}");
@@ -288,13 +326,13 @@ impl ClientApp {
     }
 
     fn docking_rotate(&mut self) {
-        if let Some(free) = self.client.scene_graph.free_mut() {
+        if let Some(free) = self.frontend.scene_graph.free_mut() {
             free.rotation = free.rotation.next();
         }
     }
 
     fn docking_shift(&mut self, delta: Vec2, is_x: bool) {
-        if let Some(free) = self.client.scene_graph.free_mut() {
+        if let Some(free) = self.frontend.scene_graph.free_mut() {
             if is_x {
                 let delta = delta.with_y(0.0) / 4.0;
                 let off = PartCoord(vround(delta));
@@ -308,7 +346,7 @@ impl ClientApp {
     }
 
     fn docking_activate(&mut self) {
-        if let Some(free) = self.client.scene_graph.free()
+        if let Some(free) = self.frontend.scene_graph.free()
             && let Some(docking) = free.docking_interface()
         {
             let delta = WorldDelta::MergeGrids(
@@ -345,7 +383,7 @@ impl ClientApp {
 
     pub fn on_click(&mut self, ui: UiRef) {
         info!("Click event: {:?}", ui);
-        self.client.sounds.push(SoundEffect::ButtonDown);
+        self.frontend.sounds.push(SoundEffect::ButtonDown);
 
         let Some(onclick) = ui.onclick else {
             return;
@@ -353,37 +391,37 @@ impl ClientApp {
 
         match onclick {
             UiMessage::Navigate(nav) => {
-                self.client.scene_graph.handle_navigation(nav);
+                self.frontend.scene_graph.handle_navigation(nav);
             }
             UiMessage::Exit => self.exit(),
-            UiMessage::AltMode => self.client.alt_mode ^= true,
-            UiMessage::DebugText => self.show_debug_text ^= true,
+            UiMessage::AltMode => self.frontend.toggle_alt_mode(),
+            UiMessage::DebugText => self.frontend.toggle_debug_text(),
             UiMessage::SimSpeed(sp) => self.backend.set_sim_speed(sp),
             UiMessage::DockingRotate => self.docking_rotate(),
             UiMessage::DockingActivate => self.docking_activate(),
             UiMessage::LoadSaveFile(path) => self.load_save_file(path),
             UiMessage::LoadSave => {
-                self.client.scene_graph = SceneGraph::ListSaves;
+                self.frontend.scene_graph = SceneGraph::ListSaves;
             }
             UiMessage::JoinMultiplayer => {
                 self.backend.request_world_download();
             }
             UiMessage::WriteSaveToDisk => {
-                save_world_and_alert_chat(self.backend.world(), &mut self.client);
+                save_world_and_alert_chat(self.backend.world(), &mut self.frontend);
             }
             UiMessage::Delta(delta) => {
                 self.backend.request_delta(delta);
             }
             UiMessage::Editor(cmd) => {
-                if let SceneGraph::Editor(state) = &mut self.client.scene_graph {
+                if let SceneGraph::Editor(state) = &mut self.frontend.scene_graph {
                     state.handle_command(cmd)
                 }
             }
             UiMessage::AckTransmission(id) => {
-                _ = self.client.transmissions.despawn(id);
+                _ = self.frontend.transmissions.despawn(id);
             }
             UiMessage::ClearTransmissions => {
-                self.client.transmissions.clear();
+                self.frontend.transmissions.clear();
             }
             e => warn!("Unhandled click event: {e:?}"),
         }
@@ -395,7 +433,7 @@ impl ClientApp {
                 self.on_drag(c.reference, delta);
             }
             UiEventKind::Release => {
-                self.client.sounds.push(SoundEffect::ButtonUp);
+                self.frontend.sounds.push(SoundEffect::ButtonUp);
             }
             UiEventKind::Click => self.on_click(c.reference),
         }
@@ -451,37 +489,32 @@ struct Args {
     use_mp_backend: bool,
 }
 
-fn make_gui(
-    raylib: &Raylib,
-    font: Rc<Font>,
-    app: &mut ClientApp,
-    timers: &DebugTimers,
-) -> Tree<UiMessage> {
+fn make_gui(raylib: &Raylib, app: &mut GameApp, timers: &DebugTimers) -> Tree<UiMessage> {
     let mut ui = UiBuilder::new(
-        font,
-        app.client.input.clone(),
+        app.frontend.assets.ui_font(),
+        app.frontend.input.clone(),
         std::mem::take(&mut app.ui_state),
     );
 
-    match &mut app.client.scene_graph {
+    match &mut app.frontend.scene_graph {
         SceneGraph::MainMenu => {
             main_menu_ui(&mut ui);
         }
         SceneGraph::Free(free) => {
-            make_free_flying_ui(&mut ui, free, app.backend.world(), &app.assets);
-            make_part_info_gui(&mut ui, app.backend.world(), &app.client, &app.assets);
+            make_free_flying_ui(&mut ui, free, app.backend.world(), &app.frontend.assets);
+            make_part_info_gui(&mut ui, app.backend.world(), &app.frontend);
             // TODO
-            app.client.transmissions.clear();
-            make_transmission_ui(&mut ui, &app.client.transmissions);
+            app.frontend.transmissions.clear();
+            make_transmission_ui(&mut ui, &app.frontend.transmissions);
         }
         SceneGraph::Piloting(piloting) => {
-            make_piloting_ui(&mut ui, piloting, app.backend.world(), &app.assets);
+            make_piloting_ui(&mut ui, piloting, app.backend.world(), &app.frontend.assets);
         }
         SceneGraph::Editor(editor) => {
             make_editor_ui(&mut ui, editor, app.backend.world());
         }
         SceneGraph::Part(state) => {
-            part_info_modal(&mut ui, state, app.backend.world(), &app.assets);
+            part_info_modal(&mut ui, state, app.backend.world(), &app.frontend.assets);
         }
         SceneGraph::ListSaves => {
             list_saves_scene_ui(&mut ui);
@@ -494,8 +527,12 @@ fn make_gui(
         }
     }
 
-    if app.show_debug_text {
+    if app.frontend.show_debug_text {
         make_debug_ui(&mut ui, app, timers, raylib.handle().get_fps());
+    }
+
+    if app.frontend.show_keybinds {
+        make_keybinds_ui(&mut ui, app);
     }
 
     let (tree, state) = ui.take();
@@ -505,16 +542,33 @@ fn make_gui(
     tree
 }
 
-fn make_debug_ui(ui: &mut UiBuilder, app: &ClientApp, timers: &DebugTimers, fps: u32) {
+fn make_keybinds_ui(ui: &mut UiBuilder, app: &GameApp) {
+    ui.window("keybinds", |ui| {
+        for gid in app.frontend.keybinds.active_groups() {
+            ui.text(gid);
+        }
+
+        ui.sep();
+
+        for (id, kb) in app.frontend.keybinds.iter() {
+            let is_on = app.frontend.is_satisfied(id);
+            let prefix = if is_on { "##" } else { "  " };
+            let color = if is_on { Color::TEAL } else { Color::WHITE };
+            let s = format!("{prefix} {:50} {}", id, kb);
+            ui.colored_text(s, color);
+        }
+    });
+}
+
+fn make_debug_ui(ui: &mut UiBuilder, app: &GameApp, timers: &DebugTimers, fps: u32) {
     debug_ui(
         ui,
         app.backend.world(),
-        &app.client,
+        &app.frontend,
         timers,
         app.backend.network(),
-        &app.update_timer,
         app.backend.username(),
-        app.client.player_id,
+        app.frontend.player_id,
         fps,
     )
 }
@@ -548,10 +602,10 @@ fn draw_animations(d: &mut RaylibDrawHandle, animations: &Components<AppearingTe
     }
 }
 
-fn draw(mut d: &mut RaylibDrawHandle, app: &ClientApp, ui: Tree<UiMessage>) {
+fn draw(mut d: &mut RaylibDrawHandle, app: &GameApp, ui: Tree<UiMessage>) {
     d.clear_background(Color::BLACK);
 
-    if let Some(blob) = &app.assets.blob {
+    if let Some(blob) = &app.frontend.assets.blob {
         d.draw_texture_ex(
             blob,
             Vector2::new(100.0, 100.0),
@@ -561,17 +615,27 @@ fn draw(mut d: &mut RaylibDrawHandle, app: &ClientApp, ui: Tree<UiMessage>) {
         );
     }
 
-    if app.client.scene_graph.should_draw_world() {
-        draw_world(app.backend.world(), &app.client, &app.assets, &mut d);
+    if app.frontend.scene_graph.should_draw_world() {
+        draw_world(
+            app.backend.world(),
+            &app.frontend,
+            &app.frontend.assets,
+            &mut d,
+        );
     }
 
-    draw_ui(&mut d, &app.ui_state, &ui, &app.assets);
+    draw_ui(&mut d, &app.ui_state, &ui, &app.frontend.assets);
 
-    draw_animations(&mut d, &app.client.animations);
+    draw_animations(&mut d, &app.frontend.animations);
 
-    draw_mouse_screen_position(&mut d, app.client.mouse_screen_position);
+    draw_mouse_screen_position(&mut d, app.frontend.mouse_screen_position);
 
-    draw_terminal(&mut d, &app.terminal, &app.assets, Color::BLACK.alpha(0.8));
+    draw_terminal(
+        &mut d,
+        &app.terminal,
+        &app.frontend.assets,
+        Color::BLACK.alpha(0.8),
+    );
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -587,41 +651,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let sounds = SoundHandler::new();
 
-    let (mut main_app, mut raylib) = ClientApp::new(args, log::LevelFilter::Info)?;
+    let (mut app, mut raylib) = GameApp::new(args, log::LevelFilter::Info)?;
 
-    while !raylib.handle().window_should_close() && !main_app.should_exit {
-        if !main_app.update_timer.tick() {
-            continue;
-        }
+    while !raylib.handle().window_should_close() && !app.should_exit {
+        std::thread::sleep(Duration::from_millis(10));
 
-        main_app.update(&raylib);
+        app.update(&raylib);
 
         // AND DRAW IT ALL
 
-        let font = main_app.assets.ui_font();
-
         let timers = DebugTimers::default();
 
-        let ui = make_gui(&raylib, font, &mut main_app, &timers);
+        let ui = make_gui(&raylib, &mut app, &timers);
 
-        if let Some(c) = main_app.ui_state.update(
-            &ui,
-            main_app.client.mouse_screen_position,
-            &main_app.client.input,
-        ) {
-            main_app.on_ui_event(c);
+        if let Some(c) =
+            app.ui_state
+                .update(&ui, app.frontend.mouse_screen_position, &app.frontend.input)
+        {
+            app.on_ui_event(c);
         }
 
         raylib.draw(|mut d: RaylibDrawHandle<'_>| {
-            draw(&mut d, &main_app, ui.clone());
+            draw(&mut d, &app, ui.clone());
         });
 
-        sounds.play_sounds(std::mem::take(&mut main_app.client.sounds));
+        sounds.play_sounds(std::mem::take(&mut app.frontend.sounds));
 
-        if main_app.client.input.just_pressed(rdev::Key::KeyC)
-            && main_app.client.input.is_key_pressed(rdev::Key::ControlLeft)
-        {
+        if app.frontend.is_satisfied("global::exit_app") {
             break;
+        }
+
+        if app.frontend.is_satisfied("global::toggle_show_debug_text") {
+            app.frontend.toggle_debug_text();
+        }
+
+        if app.frontend.is_satisfied("global::toggle_show_keybinds") {
+            app.frontend.toggle_show_keybinds();
+        }
+
+        if app.frontend.is_satisfied("global::toggle_alt_mode") {
+            app.frontend.toggle_alt_mode();
         }
     }
 

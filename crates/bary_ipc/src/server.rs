@@ -44,8 +44,11 @@ impl Client {
         if let Some(packet) = packet {
             send_in_chunks(&mut self.socket, &packet.to_bytes(), MTU_CHUNK_SIZE)
         } else {
-            error!("Packet too big!");
-            Ok(0)
+            let e = std::io::Error::new(
+                std::io::ErrorKind::FileTooLarge,
+                "Response was too large to send",
+            );
+            std::io::Result::Err(e)
         }
     }
 
@@ -86,7 +89,7 @@ impl Client {
 
         for packet in self.framer.parse() {
             if let Ok(request) = bincode::deserialize::<ServerRequest>(packet.payload()) {
-                info!("Got a request: {request:?}");
+                debug!("Got a request: {request:?}");
                 requests.push(request);
             } else {
                 warn!("Unable to parse packet as request");
@@ -122,11 +125,16 @@ impl ServerNode {
         }
     }
 
-    pub fn send(&mut self, id: ClientId, response: ServerResponse) {
+    pub fn send(&mut self, id: ClientId, response: ServerResponse) -> bool {
         if let Some(client) = self.clients.get_mut(&id) {
             if let Err(e) = client.send(response) {
                 error!("Failed to send: {e}");
+                false
+            } else {
+                true
             }
+        } else {
+            false
         }
     }
 

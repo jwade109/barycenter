@@ -1,4 +1,4 @@
-use log::{info, warn};
+use log::{info, trace, warn};
 
 use crate::{Packet, PacketParseError};
 
@@ -48,7 +48,7 @@ impl Framer {
                 Err(true)
             }
             Err(e) => {
-                warn!("Unspecified error: {e:?}, {} bytes remain", self.data.len());
+                trace!("Unspecified error: {e:?}, {} bytes remain", self.data.len());
                 self.data.drain(..1);
                 Err(true)
             }

@@ -3,12 +3,7 @@ use bary_core::prelude::{Rotation, Vec2, distance_str, velocity_str};
 use bary_sim::*;
 use early_returns::*;
 
-pub fn make_part_info_gui(
-    ui: &mut UiBuilder,
-    world: &World,
-    client: &ClientSpecificInfo,
-    assets: &Assets,
-) {
+pub fn make_part_info_gui(ui: &mut UiBuilder, world: &World, client: &ClientSpecificInfo) {
     let gridloc = some_or_return!(client.selected_grid_loc());
     let grid = ok_or_return!(world.grids.try_get(gridloc.grid_id));
     let occ = some_or_return!(grid.get_parts_at(gridloc.coord));
@@ -26,7 +21,7 @@ pub fn make_part_info_gui(
         for (_, part_id) in occ.iter() {
             ui.sep();
             ui.button(Scene::Part(part_id), format!("Go to Part {}", part_id));
-            get_part_info_modal(ui, part_id, world, assets, None);
+            get_part_info_modal(ui, part_id, world, &client.assets, None);
         }
     });
 }
@@ -35,8 +30,6 @@ pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World,
     ui.begin_window_at(Vec2::splat(40.0), "free_flying_window");
     ui.button(UiMessage::Navigate(Scene::MainMenu), "Return to Main Menu");
     ui.button(UiMessage::WriteSaveToDisk, "Save Game");
-    ui.button(UiMessage::AltMode, "Toggle Alt Mode");
-    ui.button(UiMessage::DebugText, "Toggle Debug Text");
     ui.button(UiMessage::SimSpeed(0), "Toggle Pause");
     ui.button(UiMessage::SimSpeed(1), "Sim 1x");
     ui.button(UiMessage::SimSpeed(10), "Sim 10x");

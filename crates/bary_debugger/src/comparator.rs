@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use bary_ipc::{GridsTelemetry, ServerResponse, WorldTelemetry};
+use bary_ipc::{GridsTelemetry, ServerTelemetry, WorldTelemetry};
 use bary_server::{make_grid_telemetry, make_world_telemetry};
 use bary_sim::World;
 
@@ -34,14 +34,14 @@ impl WorldComparator {
         self.local.clear();
     }
 
-    pub fn on_server_telemetry(&mut self, tlm: &ServerResponse) {
+    pub fn on_server_telemetry(&mut self, tlm: &ServerTelemetry) {
         match tlm {
-            ServerResponse::Summary(tlm) => {
+            ServerTelemetry::World(tlm) => {
                 let frame = self.server.entry(tlm.tick).or_default();
                 frame.world = Some(*tlm);
                 limit_history(&mut self.server, tlm.tick);
             }
-            ServerResponse::Grids(tlm) => {
+            ServerTelemetry::Grids(tlm) => {
                 let frame = self.server.entry(tlm.tick).or_default();
                 frame.grids = Some(tlm.clone());
                 limit_history(&mut self.server, tlm.tick);

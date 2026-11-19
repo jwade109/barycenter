@@ -264,10 +264,14 @@ fn update_terrain_selection_info(client: &mut ClientSpecificInfo, asteroids: &Co
     }
 }
 
-fn toggle_tracking_for_selected_grid(client: &ClientSpecificInfo) -> Option<WorldDelta> {
+fn toggle_tracking_for_selected_grid(
+    client: &ClientSpecificInfo,
+    sender: &mut Sender<WorldDelta>,
+) -> Option<()> {
     let free = client.scene_graph.free()?;
     let grid_id = free.selected_vehicles.first().map(|s| s.grid_id)?;
-    Some(WorldDelta::ToggleTracking(grid_id))
+    sender.send(WorldDelta::ToggleTracking(grid_id));
+    Some(())
 }
 
 fn explode_at_mouseover(client: &ClientSpecificInfo) -> Option<WorldDelta> {
@@ -276,7 +280,7 @@ fn explode_at_mouseover(client: &ClientSpecificInfo) -> Option<WorldDelta> {
     Some(WorldDelta::Explode(loc))
 }
 
-fn ping_on_alt_left_click(client: &ClientSpecificInfo) -> Option<WorldDelta> {
+fn spawn_ping(client: &ClientSpecificInfo) -> Option<WorldDelta> {
     let camera = client.scene_graph.camera()?;
     let screen_pos = client.mouse_screen_position?;
     let pos = screen_to_world(&camera, screen_pos, client.screen_dims);
@@ -296,16 +300,18 @@ fn destroy_top_layer_part_at_mouseover(client: &ClientSpecificInfo) -> Option<Wo
 pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> Sender<WorldDelta> {
     client.ticks += 1;
 
+    let mut deltas = Sender::new();
+
     update_actual_hover_part_info(client, &world.grids);
 
     update_terrain_selection_info(client, &world.asteroids);
 
-    if client.input.just_pressed_debounced(Key::Alt) {
-        client.alt_mode ^= true;
+    if client.is_satisfied("free::toggle_follow") {
+        input_handlers::toggle_following_on_key_f(client);
     }
 
-    if client.input.just_pressed_debounced(Key::KeyF) {
-        input_handlers::toggle_following_on_key_f(client);
+    if client.is_satisfied("free::toggle_grid_tracking") {
+        toggle_tracking_for_selected_grid(client, &mut deltas);
     }
 
     if client.input.just_pressed_debounced(Button::Right) {
@@ -319,24 +325,14 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
         }
     }
 
-    let mut deltas = Sender::new();
-
-    if client.input.just_pressed_debounced(Key::KeyT) {
-        if let Some(d) = toggle_tracking_for_selected_grid(client) {
-            deltas.send(d);
-        }
-    }
-
-    if client.input.just_pressed_debounced(Key::KeyC) {
+    if client.is_satisfied("free::explode_at_mouseover") {
         if let Some(d) = explode_at_mouseover(client) {
             deltas.send(d);
         }
     }
 
-    if client.input.just_pressed_debounced(Button::Left)
-        && client.input.is_key_pressed(Key::ControlLeft)
-    {
-        if let Some(d) = ping_on_alt_left_click(client) {
+    if client.is_satisfied("free::spawn_radio_transmission") {
+        if let Some(d) = spawn_ping(client) {
             deltas.send(d);
         }
     }

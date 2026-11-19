@@ -1,6 +1,6 @@
 use bary_core::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 use std::hash::Hash;
 
 use crate::{PartInstance, PartPrototype, PipeGeometry};
@@ -34,7 +34,6 @@ pub struct Blueprint {
     next_part_id: PartId,
     parts: BTreeMap<PartId, PartInstance>,
     pipes: BTreeMap<PartId, PipeGeometry>,
-    occupied_map: BTreeMap<(PartCoord, PartLayer), PartId>,
 }
 
 impl Blueprint {
@@ -43,7 +42,6 @@ impl Blueprint {
             next_part_id: PartId(0),
             parts: BTreeMap::new(),
             pipes: BTreeMap::new(),
-            occupied_map: BTreeMap::new(),
         }
     }
 
@@ -89,10 +87,6 @@ impl Blueprint {
     ) -> PartId {
         let id = self.get_next_part_id();
         let instance = PartInstance::new(name, layer, region);
-        for p in instance.region.cells() {
-            let k = (p, layer);
-            self.occupied_map.insert(k, id);
-        }
         self.parts.insert(id, instance);
         id
     }
@@ -187,11 +181,7 @@ impl Blueprint {
     }
 
     pub fn remove_part(&mut self, id: PartId) -> bool {
-        if let Some(instance) = self.parts.remove(&id) {
-            let layer = instance.layer();
-            for c in instance.region.cells() {
-                self.occupied_map.remove(&(c, layer));
-            }
+        if self.parts.remove(&id).is_some() {
             return true;
         }
         if self.pipes.remove(&id).is_some() {
@@ -323,8 +313,10 @@ impl Blueprint {
     }
 
     pub fn occupied(&self, p: impl Into<PartCoord>, layer: PartLayer) -> Option<PartId> {
-        let key = (p.into(), layer);
-        self.occupied_map.get(&key).cloned()
+        let p = p.into();
+        self.parts
+            .iter()
+            .find_map(|(id, part)| (part.region.contains(p) && part.layer == layer).then_some(*id))
     }
 }
 

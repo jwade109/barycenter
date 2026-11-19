@@ -38,21 +38,21 @@ pub fn make_piloting_ui(
         ui.button(point_west, "point_west");
         ui.button(point_south, "point_south");
 
-        let rcs_forward = make_instr(Instruction::rcs_forward());
-        let rcs_backward = make_instr(Instruction::rcs_backward());
-        let rcs_right = make_instr(Instruction::rcs_right());
-        let rcs_left = make_instr(Instruction::rcs_left());
+        // let rcs_forward = make_instr(Instruction::rcs_forward());
+        // let rcs_backward = make_instr(Instruction::rcs_backward());
+        // let rcs_right = make_instr(Instruction::rcs_right());
+        // let rcs_left = make_instr(Instruction::rcs_left());
 
         ui.sep();
 
-        ui.heading("RCS Commands");
+        // ui.heading("RCS Commands");
 
-        ui.button(rcs_forward, "Forward");
-        ui.button(rcs_backward, "Backward");
-        ui.button(rcs_right, "Right");
-        ui.button(rcs_left, "Left");
+        // ui.button(rcs_forward, "Forward");
+        // ui.button(rcs_backward, "Backward");
+        // ui.button(rcs_right, "Right");
+        // ui.button(rcs_left, "Left");
 
-        ui.sep();
+        // ui.sep();
 
         ui.button(adrift, "Set Adrift");
 

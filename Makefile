@@ -15,3 +15,6 @@ debugger:
 
 game:
 	cargo run --release --bin client_app -- --use-mp-backend --username kim_mcbudget
+
+run:
+	cargo run --release --bin program_harness

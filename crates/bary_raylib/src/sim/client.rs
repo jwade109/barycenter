@@ -1,11 +1,8 @@
-use std::rc::Rc;
-
-use crate::{AppearingText, SceneGraph, SoundEffects};
+use crate::{AppearingText, Assets, KeybindsSet, SceneGraph, SoundEffects, load_keybinds};
 use bary_core::prelude::*;
 use bary_input::*;
 use bary_sim::Camera;
 use bary_sim::*;
-use raylib::text::Font;
 
 #[derive(Debug, Clone, Copy)]
 pub struct TerrainSelectionInfo {
@@ -84,34 +81,37 @@ pub struct DockingInterface {
     pub child: GridLocation,
 }
 
-/// Information that doesn't *in general* need to be synchronized across
+/// Information that doesn't need to be synchronized across
 /// clients in multiplayer.
-pub struct ClientSpecificInfo {
+pub struct FrontEnd {
     pub player_id: Option<Ent>,
     pub username: String,
     pub ticks: u64,
     pub chat: Chat,
-    // pub camera: Camera,
-    // pub target_camera: Camera,
     pub mouse_screen_position: Option<Vec2>,
     pub screen_dims: Vec2,
     pub scene_graph: SceneGraph,
     pub input: InputState,
     pub alt_mode: bool,
+    pub show_debug_text: bool,
+    pub show_keybinds: bool,
     pub sounds: SoundEffects,
+    pub assets: Assets,
+    pub keybinds: KeybindsSet,
     pub spawner: EntitySpawner,
-
     pub transmissions: Components<ReceivedTransmission>,
     pub animations: Components<AppearingText>,
-
-    ui_font: Rc<Font>,
 }
 
-impl ClientSpecificInfo {
-    pub fn new(username: String, ui_font: Rc<Font>) -> Self {
+pub type ClientSpecificInfo = FrontEnd;
+
+impl FrontEnd {
+    pub fn new(username: String, assets: Assets) -> Self {
         let spawner = EntitySpawner::default();
 
         let animations = Components::default();
+
+        let keybinds = load_keybinds("assets/real_keybinds.yaml");
 
         Self {
             player_id: None,
@@ -123,16 +123,34 @@ impl ClientSpecificInfo {
             scene_graph: SceneGraph::MainMenu,
             input: InputState::default(),
             alt_mode: false,
+            show_debug_text: false,
+            show_keybinds: false,
             sounds: SoundEffects::new(),
             spawner,
             transmissions: Components::default(),
             animations,
-            ui_font,
+            assets,
+            keybinds,
         }
     }
 
     pub fn update(&mut self) {
         self.animations.retain(|_, anim| anim.should_remain());
+    }
+
+    pub fn toggle_debug_text(&mut self) {
+        self.show_debug_text ^= true;
+        self.spawn_animation("Toggled debug view", true);
+    }
+
+    pub fn toggle_alt_mode(&mut self) {
+        self.alt_mode ^= true;
+        self.spawn_animation("Toggled alt mode", true);
+    }
+
+    pub fn toggle_show_keybinds(&mut self) {
+        self.show_keybinds ^= true;
+        self.spawn_animation("Toggled show keybinds", true);
     }
 
     pub fn leave_editor(&mut self) -> bool {
@@ -183,7 +201,11 @@ impl ClientSpecificInfo {
 
     pub fn spawn_animation(&mut self, anim: impl Into<String>, is_debug: bool) {
         let id = self.spawner.spawn();
-        let anim = AppearingText::new(anim.into(), self.ui_font.clone(), is_debug);
+        let anim = AppearingText::new(anim.into(), self.assets.ui_font(), is_debug);
         self.animations.spawn(id, anim);
+    }
+
+    pub fn is_satisfied(&self, id: &str) -> bool {
+        self.keybinds.is_satisfied(&self.input, id)
     }
 }
