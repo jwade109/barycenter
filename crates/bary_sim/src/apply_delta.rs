@@ -160,24 +160,8 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             grid_set_waypoint_to_asteroid_center(world, grid_id, ast_id)?;
             Ok(())
         }
-        WorldDelta::PlayerPilotingEnterGrid { player_id, grid_id } => {
-            set_player_piloting_grid(world, player_id, grid_id)?;
-            Ok(())
-        }
-        WorldDelta::PlayerPilotingExitGrid(player_id) => {
-            player_exit_grid(world, player_id)?;
-            Ok(())
-        }
         WorldDelta::SpawnPlayer(username, iso) => {
             _ = spawn_player(world, username, iso);
-            Ok(())
-        }
-        WorldDelta::SetPlayerPosition(id, iso) => {
-            _ = set_player_position(world, id, iso);
-            Ok(())
-        }
-        WorldDelta::SetPlayerCursorPosition(id, pos) => {
-            _ = set_player_cursor_position(world, id, pos);
             Ok(())
         }
         WorldDelta::MergeGrids(parent, child, offset, rotation) => {

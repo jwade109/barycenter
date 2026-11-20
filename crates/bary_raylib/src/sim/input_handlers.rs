@@ -7,19 +7,6 @@ use bary_sim::*;
 use early_returns::*;
 use log::*;
 
-pub fn drive_ship_on_enter(client: &mut ClientSpecificInfo, world: &World) -> Option<WorldDelta> {
-    let player_id = client.player_id?;
-    let free = client.scene_graph.free()?;
-    let grid_id = free.selected_vehicles.first().map(|s| s.grid_id)?;
-    let player = world.players.try_get(player_id).ok()?;
-
-    if player.is_driving() {
-        Some(WorldDelta::PlayerPilotingExitGrid(player_id))
-    } else {
-        Some(WorldDelta::PlayerPilotingEnterGrid { player_id, grid_id })
-    }
-}
-
 pub fn command_selected_ships_to_waypoint(
     client: &ClientSpecificInfo,
     p: DVec2,

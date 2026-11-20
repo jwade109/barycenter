@@ -112,6 +112,13 @@ impl Computer {
         self.target_pos = Some(iso.tr());
     }
 
+    pub fn set_drift(&mut self) {
+        self.target_angle = None;
+        self.target_vel = None;
+        self.target_pos = None;
+        self.target_odometry = None;
+    }
+
     #[deprecated]
     pub fn enqueue_instruction(&mut self, ti: TimedInstruction) {
         match ti.instruction {
@@ -130,10 +137,7 @@ impl Computer {
                 self.target_odometry = None;
             }
             Instruction::Drift => {
-                self.target_angle = None;
-                self.target_vel = None;
-                self.target_pos = None;
-                self.target_odometry = None;
+                self.set_drift();
             }
             Instruction::DeltaV(dv) => {
                 self.target_odometry = Some(self.thruster_odometry + dv);

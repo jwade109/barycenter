@@ -525,12 +525,6 @@ pub fn rebuild_index_from_islands(
         .collect()
 }
 
-pub fn set_player_piloting_grid(world: &mut World, player_id: Ent, grid_id: Ent) -> BaryResult<()> {
-    let player = world.players.try_get_mut(player_id)?;
-    player.state = PlayerState::PilotingGrid(grid_id, VehicleControl::NULLOPT);
-    Ok(())
-}
-
 pub fn explode_grid_at(loc: GridLocation, world: &mut World) {
     let p = loc.coord.inner();
     let r = 2;
@@ -815,46 +809,10 @@ pub fn get_blueprint_by_id<'a>(
     result.map(|e| &e.blueprint)
 }
 
-pub fn spawn_player(world: &mut World, username: String, iso: Isometry2d) -> BaryResult<Ent> {
-    let already_exists = world.players.values().any(|player| player.name == username);
-
-    if already_exists {
-        return Err(BaryError::PlayerAlreadyExists(username));
-    }
-
-    let player = Player {
-        name: username,
-        cursor_world_position: None,
-        state: PlayerState::Flying(iso),
-    };
+pub fn spawn_player(world: &mut World, username: String, iso: Isometry2d) -> BaryResult<()> {
     let id = world.spawner.spawn();
+    let player = Player { username, iso };
     world.players.spawn(id, player);
-    Ok(id)
-}
-
-pub fn set_player_position(world: &mut World, player_id: Ent, iso: Isometry2d) -> BaryResult<()> {
-    let player = world.players.try_get_mut(player_id)?;
-    player.set_position(iso);
-    Ok(())
-}
-
-pub fn set_player_cursor_position(
-    world: &mut World,
-    player_id: Ent,
-    pos: Option<Vec2>,
-) -> BaryResult<()> {
-    let player = world.players.try_get_mut(player_id)?;
-    player.cursor_world_position = pos;
-    Ok(())
-}
-
-pub fn player_exit_grid(world: &mut World, player_id: Ent) -> BaryResult<()> {
-    let player = world.players.try_get_mut(player_id)?;
-    let grid_id = player
-        .driving_grid()
-        .ok_or(BaryError::PlayerNotDriving(player_id))?;
-    let grid = world.grids.try_get(grid_id)?;
-    player.set_position(grid.particle_location);
     Ok(())
 }
 
@@ -1457,7 +1415,7 @@ pub fn merge_grids(
 
     for cpu_id in &parent.computers {
         let computer = world.computers.try_get_mut(*cpu_id)?;
-        computer.enqueue_instruction(Instruction::Drift.into());
+        computer.set_drift();
     }
 
     Ok(())

@@ -445,6 +445,8 @@ pub fn draw_world(
 
     // draw_parts_zoo(&world.prototypes, &mut c);
 
+    draw_players(&mut c, &world.players);
+
     drop(c);
 
     draw_grid_far_indicators(&world.grids, d, &client, &raylib_camera, assets);
@@ -464,6 +466,13 @@ pub fn draw_world(
     // draw_item_menu(d, (300, 200).into());
 
     // draw_test_isos(&mut d)
+}
+
+fn draw_players(d: &mut RaylibDrawHandle, players: &Components<Player>) {
+    for player in players.values() {
+        draw_circle(d, player.iso.tr(), 3.0, Color::RED);
+        draw_text(d, player.iso, &player.username, 12.0);
+    }
 }
 
 fn draw_excavator(
@@ -1658,11 +1667,7 @@ fn draw_thruster_plumes(
         let base_width = 0.02;
         let max_width = 4.0;
 
-        for (rs, c) in [
-            (1.0, Color::RED),
-            (0.8, Color::ORANGE),
-            (0.5, Color::WHITE),
-        ] {
+        for (rs, c) in [(1.0, Color::RED), (0.8, Color::ORANGE), (0.5, Color::WHITE)] {
             for s in linspace(0.0, 1.0, 12) {
                 let x = s as f64 * max_length;
                 let l = (time_offset * 50.0 + x) % max_length;

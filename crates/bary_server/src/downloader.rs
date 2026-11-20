@@ -91,6 +91,7 @@ impl WorldDownloader {
             TableIdent::Planets => unpack_data(&mut state.world.planets, id, &data),
         };
 
+
         if success {
             state.n_got_entities += 1;
         }

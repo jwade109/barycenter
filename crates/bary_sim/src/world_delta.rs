@@ -79,13 +79,6 @@ pub enum WorldDelta {
         ast_id: Ent,
     },
     SpawnPlayer(String, Isometry2d),
-    PlayerPilotingEnterGrid {
-        player_id: Ent,
-        grid_id: Ent,
-    },
-    PlayerPilotingExitGrid(Ent),
-    SetPlayerPosition(Ent, Isometry2d),
-    SetPlayerCursorPosition(Ent, Option<Vec2>),
     MergeGrids(Ent, Ent, PartCoord, Rotation),
     RenameGrid(Ent, String),
     SetGridBlueprint(Ent, Option<BlueprintId>),

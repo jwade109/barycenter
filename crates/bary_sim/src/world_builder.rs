@@ -27,7 +27,6 @@ enum WorldBuilderCommand {
         mass: f64,
     },
     SpawnPlayer(String, Isometry2d),
-    EnterPiloting,
     BindPlayerToGrid {
         username: String,
     },
@@ -162,11 +161,6 @@ impl WorldBuilder {
         self
     }
 
-    pub fn piloting(mut self) -> Self {
-        self.commands.push(WorldBuilderCommand::EnterPiloting);
-        self
-    }
-
     pub fn build(mut self) -> World {
         let mut world = World::empty();
 
@@ -283,22 +277,8 @@ impl WorldBuilder {
                     };
                     _ = apply_delta(&mut world, delta);
                 }
-                WorldBuilderCommand::SpawnPlayer(name, iso) => {
-                    let player = Player {
-                        name,
-                        cursor_world_position: None,
-                        state: PlayerState::Flying(iso),
-                    };
-                    let id = world.spawner.spawn();
-                    world.players.spawn(id, player);
-                    self.cursor_player = Some(id);
-                }
-                WorldBuilderCommand::EnterPiloting => {
-                    info!("{:?} {:?}", self.cursor_grid, self.cursor_player);
-                    if let Some((player_id, grid_id)) = self.cursor_player.zip(self.cursor_grid) {
-                        let delta = WorldDelta::PlayerPilotingEnterGrid { player_id, grid_id };
-                        _ = apply_delta(&mut world, delta);
-                    }
+                WorldBuilderCommand::SpawnPlayer(username, iso) => {
+                    _ = spawn_player(&mut world, username, iso);
                 }
                 WorldBuilderCommand::SpawnPlanet {
                     name,

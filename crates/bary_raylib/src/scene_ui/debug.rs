@@ -88,7 +88,7 @@ pub fn debug_lines(
         ui.sep();
 
         for player in world.players.values() {
-            ui.text(format!("  {} {}", player.name, player.state));
+            ui.text(format!("  {} {:0.1?}", player.username, player.iso));
         }
 
         ui.text("");

@@ -115,9 +115,10 @@ fn update_actual_hover_part_info(client: &mut ClientSpecificInfo, grids: &Compon
         let grid_screen = get_world_to_screen(&free.camera, grid_pos, screen_dims);
         let d_screen = grid_screen.distance(screen_pos);
 
-        if 20.0 * (grid.bounding_radius() as f64) < dist && d_screen > 80.0 {
+        if 2.5 * (grid.bounding_radius() as f64) < dist && d_screen > 80.0 {
             return;
         }
+
         let origin = grid.origin();
         let coord = PartCoord::from_meters_floored(in_frame(origin, world_pos));
         free.hovered_vehicle = Some(GridLocation::new(grid_id, coord));
@@ -339,12 +340,6 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
 
     if client.input.just_pressed(Button::Right) {
         if let Some(d) = destroy_top_layer_part_at_mouseover(client) {
-            deltas.send(d);
-        }
-    }
-
-    if client.input.just_pressed_debounced(Key::Return) {
-        if let Some(d) = drive_ship_on_enter(client, world) {
             deltas.send(d);
         }
     }

@@ -23,6 +23,7 @@ pub enum BaryError {
     NoTile,
     TileAlreadyExists,
     PlayerNotDriving(Ent),
+    NoPlayerNamed(String),
     PlayerAlreadyExists(String),
     IoError(String),
     SerdeYaml(String),
