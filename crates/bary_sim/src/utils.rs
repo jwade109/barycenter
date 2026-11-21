@@ -811,8 +811,18 @@ pub fn get_blueprint_by_id<'a>(
 
 pub fn spawn_player(world: &mut World, username: String, iso: Isometry2d) -> BaryResult<()> {
     let id = world.spawner.spawn();
-    let player = Player { username, iso };
+    let player = Player {
+        username,
+        iso,
+        controls: None,
+    };
     world.players.spawn(id, player);
+    Ok(())
+}
+
+pub fn set_player_controls(world: &mut World, id: Ent, controls: PlayerControls) -> BaryResult<()> {
+    let player = world.players.try_get_mut(id)?;
+    player.controls = Some(controls);
     Ok(())
 }
 
@@ -960,6 +970,12 @@ pub fn update_world_with_user_controls(
         sys_propagate_grid_rigid_bodies(&mut world.grids);
         sys_propagate_n_body_accel(&mut world.grids, &world.planets);
         sys_report_acceleration_to_cpus(world);
+    }
+
+    {
+        let _timer = timers.scope("players");
+
+        sys_update_players(&mut world.players);
     }
 
     {

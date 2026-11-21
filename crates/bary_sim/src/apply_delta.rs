@@ -161,11 +161,16 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             Ok(())
         }
         WorldDelta::SpawnPlayer(username, iso) => {
-            _ = spawn_player(world, username, iso);
+            spawn_player(world, username, iso)?;
+            Ok(())
+        }
+        WorldDelta::SetPlayerControls(id, controls) => {
+            set_player_controls(world, id, controls)?;
             Ok(())
         }
         WorldDelta::MergeGrids(parent, child, offset, rotation) => {
-            merge_grids(world, parent, child, offset, rotation)
+            merge_grids(world, parent, child, offset, rotation)?;
+            Ok(())
         }
         WorldDelta::RenameGrid(grid_id, name) => {
             rename_grid(world, grid_id, name)?;

@@ -4,7 +4,7 @@ use bary_orbital::TerrainMaterial;
 use bary_parts::BlueprintId;
 use serde::{Deserialize, Serialize};
 
-use crate::{GlobalTileIndex, TimedInstruction};
+use crate::{GlobalTileIndex, PlayerControls, TimedInstruction};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum WorldDelta {
@@ -87,4 +87,5 @@ pub enum WorldDelta {
     SetComputerState(Ent, bool),
     SetGridInstruction(Ent, TimedInstruction),
     SetGridAttitudePD(Ent, f64, f64),
+    SetPlayerControls(Ent, PlayerControls),
 }

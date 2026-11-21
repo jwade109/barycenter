@@ -16,11 +16,13 @@ use std::time::Duration;
 mod comparator;
 mod dialogue;
 mod grid_commander;
+mod player_controller;
 mod plotter;
 
 use crate::comparator::WorldComparator;
 use crate::dialogue::DialogueSender;
 use crate::grid_commander::VehicleDetailWidget;
+use crate::player_controller::*;
 use crate::plotter::*;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -32,6 +34,7 @@ enum Tab {
     VehicleDetailWidget,
     Comparator,
     Dialogue,
+    PlayerController,
 }
 
 impl std::fmt::Display for Tab {
@@ -44,6 +47,7 @@ impl std::fmt::Display for Tab {
             Tab::VehicleDetailWidget => "Grid Commander",
             Tab::Comparator => "Comparator",
             Tab::Dialogue => "Dialogue",
+            Tab::PlayerController => "Players",
         };
         f.write_str(s)
     }
@@ -89,6 +93,9 @@ impl TabViewer for App {
             Tab::Dialogue => {
                 self.dialogue.ui(ui, &mut self.sender);
             }
+            Tab::PlayerController => {
+                self.players.ui(ui, &self.world, &mut deltas);
+            }
         }
 
         for delta in deltas.take() {
@@ -117,12 +124,18 @@ struct App {
     save_name: String,
     comparator: WorldComparator,
     dialogue: DialogueSender,
+    players: PlayerController,
 
     dock_state: DockState<Tab>,
 }
 
 fn default_layout() -> DockState<Tab> {
-    let mut dock_state = DockState::new(vec![Tab::PositionPlot, Tab::Comparator, Tab::Dialogue]);
+    let mut dock_state = DockState::new(vec![
+        Tab::PositionPlot,
+        Tab::Comparator,
+        Tab::Dialogue,
+        Tab::PlayerController,
+    ]);
 
     // Currently, the `DockState` only has one `Surface`: the main one.
     // Let's get mutable access to add more nodes in it.
@@ -170,6 +183,7 @@ impl Default for App {
             save_name: "".to_string(),
             download: WorldDownloader::new(),
             comparator: WorldComparator::new(),
+            players: PlayerController::new(),
             dialogue,
         }
     }
@@ -253,7 +267,9 @@ impl App {
             ServerTelemetry::Conn(tlm) => {
                 self.n_clients = tlm.n_clients;
             }
-            ServerTelemetry::World(tlm) => {}
+            ServerTelemetry::World(_tlm) => {
+                // PASS
+            }
             ServerTelemetry::Grids(tlm) => {
                 self.grid_info = tlm.grids.clone();
                 for (id, gtlm) in tlm.grids {
@@ -326,9 +342,7 @@ impl App {
             ServerResponse::Telemetry(tlm) => {
                 self.on_server_telemetry(tlm);
             }
-            ServerResponse::ClientTelemetry(id, tlm) => {
-                self.on_client_telemetry(id, tlm)
-            }
+            ServerResponse::ClientTelemetry(id, tlm) => self.on_client_telemetry(id, tlm),
             ServerResponse::Ack => {
                 // don't really care
             }

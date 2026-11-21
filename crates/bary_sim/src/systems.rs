@@ -5,8 +5,17 @@ use early_returns::some_or_continue;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
+pub(crate) fn sys_update_players(players: &mut Components<Player>) {
+    for player in players.values_mut() {
+        let ctrl = player.controls.unwrap_or_default();
+        let dir = ctrl.to_dir();
+        let ds = dir * 10.0 * NOMINAL_DT;
+        player.iso.translation += ds;
+    }
+}
+
 /// Updates ring particles.
-pub fn sys_update_ring_particles(particles: &mut Vec<Particle>, current_tick: u64) {
+pub(crate) fn sys_update_ring_particles(particles: &mut Vec<Particle>, current_tick: u64) {
     particles.retain(|p| p.is_alive(current_tick));
 }
 
