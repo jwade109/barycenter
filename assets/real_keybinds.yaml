@@ -112,3 +112,13 @@ player_controller::up:
   primary: UpArrow
   secondary: []
   trigger: IsPressed
+
+player_controller::rotate_ccw:
+  primary: LeftBracket
+  secondary: []
+  trigger: IsPressed
+
+player_controller::rotate_cw:
+  primary: RightBracket
+  secondary: []
+  trigger: IsPressed

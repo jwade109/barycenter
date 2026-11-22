@@ -10,7 +10,9 @@ pub(crate) fn sys_update_players(players: &mut Components<Player>) {
         let ctrl = player.controls.unwrap_or_default();
         let dir = ctrl.to_dir();
         let ds = dir * 10.0 * NOMINAL_DT;
+        let da = ctrl.a.to_i8() as f64 * 3.0 * NOMINAL_DT;
         player.iso.translation += ds;
+        player.iso.rotation = wrap_pi_npi_f64(player.iso.rotation + da);
     }
 }
 

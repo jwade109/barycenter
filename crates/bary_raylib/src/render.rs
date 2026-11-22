@@ -477,6 +477,7 @@ fn draw_players(d: &mut RaylibDrawHandle, players: &Components<Player>) {
             draw_circle(d, player.iso.tr(), 2.0, Color::RED);
             draw_circle(d, player.iso.tr(), 3.0, Color::RED);
         }
+        draw_isometry_axes(d, player.iso, "", DVec2::splat(3.0));
         let text = format!("{} {}\n{:#?}", id, player.username, player.controls);
         draw_text(d, player.iso, &text, 6.0);
     }

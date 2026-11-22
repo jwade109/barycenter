@@ -241,6 +241,12 @@ impl GameApp {
             if self.frontend.is_satisfied("player_controller::up") {
                 ctrl.y = JoystickPosition::Positive;
             }
+            if self.frontend.is_satisfied("player_controller::rotate_ccw") {
+                ctrl.a = JoystickPosition::Positive;
+            }
+            if self.frontend.is_satisfied("player_controller::rotate_cw") {
+                ctrl.a = JoystickPosition::Negative;
+            }
 
             if let Some(id) = self.backend.allocated_player_id() {
                 let delta = WorldDelta::SetPlayerControls(id, ctrl);

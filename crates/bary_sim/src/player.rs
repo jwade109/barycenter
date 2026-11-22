@@ -90,6 +90,7 @@ impl JoystickPosition {
 pub struct PlayerControls {
     pub x: JoystickPosition,
     pub y: JoystickPosition,
+    pub a: JoystickPosition,
 }
 
 impl PlayerControls {
