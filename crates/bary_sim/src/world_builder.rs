@@ -278,7 +278,7 @@ impl WorldBuilder {
                     _ = apply_delta(&mut world, delta);
                 }
                 WorldBuilderCommand::SpawnPlayer(username, iso) => {
-                    _ = spawn_player(&mut world, username, iso);
+                    _ = Player::spawn(&mut world, username, iso);
                 }
                 WorldBuilderCommand::SpawnPlanet {
                     name,

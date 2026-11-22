@@ -191,7 +191,7 @@ impl EditorState {
         ret
     }
 
-    pub fn next_layer(&mut self, is_up: bool) {
+    fn next_layer(&mut self, is_up: bool) {
         self.layer = if is_up {
             enum_iterator::next_cycle(&self.layer)
         } else {
@@ -199,7 +199,7 @@ impl EditorState {
         };
     }
 
-    pub fn rotate_part(&mut self) {
+    fn rotate_part(&mut self) {
         if self.prototype_id.is_some() {
             self.part_rotation = self.part_rotation.next();
         } else {
@@ -207,7 +207,7 @@ impl EditorState {
         }
     }
 
-    pub fn pipette(&mut self, world: &World) {
+    fn pipette(&mut self, world: &World) {
         if self.prototype_id.is_some() {
             self.prototype_id = None;
             return;
@@ -244,7 +244,7 @@ pub struct EditableText {
 }
 
 impl EditableText {
-    pub fn empty() -> Self {
+    fn empty() -> Self {
         Self {
             inner: String::new(),
         }
@@ -262,7 +262,7 @@ impl EditableText {
         self.inner.pop();
     }
 
-    pub fn handle_keys(&mut self, input: &InputState) {
+    fn handle_keys(&mut self, input: &InputState) {
         for event in input.events() {
             if let rdev::EventType::KeyPress(k) = &event.event_type {
                 match k {

@@ -170,4 +170,8 @@ impl ServerNode {
 
         messages
     }
+
+    pub fn clients(&self) -> impl Iterator<Item = (&ClientId, &SocketAddr)> {
+        self.clients.iter().map(|(id, c)| (id, &c.addr))
+    }
 }

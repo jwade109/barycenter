@@ -78,7 +78,6 @@ pub enum WorldDelta {
         grid_id: Ent,
         ast_id: Ent,
     },
-    SpawnPlayer(String, Isometry2d),
     MergeGrids(Ent, Ent, PartCoord, Rotation),
     RenameGrid(Ent, String),
     SetGridBlueprint(Ent, Option<BlueprintId>),
@@ -87,5 +86,8 @@ pub enum WorldDelta {
     SetComputerState(Ent, bool),
     SetGridInstruction(Ent, TimedInstruction),
     SetGridAttitudePD(Ent, f64, f64),
+    // player commands
+    SpawnPlayer(String, Isometry2d),
     SetPlayerControls(Ent, PlayerControls),
+    DespawnPlayer(Ent),
 }

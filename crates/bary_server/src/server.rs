@@ -382,6 +382,21 @@ impl BaryServer {
         let tlm = make_grid_telemetry(&self.world);
         let tlm = ServerTelemetry::Grids(tlm);
         self.node.broadcast(ServerResponse::Telemetry(tlm));
+
+        let tlm = ClientsTelemetry {
+            clients: self
+                .node
+                .clients()
+                .map(|(id, addr)| ClientPlayerAssignment {
+                    client_addr: *addr,
+                    id: *id,
+                    username: self.usernames.get(id).cloned(),
+                    assigned_player: None,
+                })
+                .collect(),
+        };
+        let tlm = ServerTelemetry::Clients(tlm);
+        self.node.broadcast(ServerResponse::Telemetry(tlm));
     }
 
     pub fn update(&mut self) {

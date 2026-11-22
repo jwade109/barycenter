@@ -264,8 +264,11 @@ impl App {
 
     fn on_server_telemetry(&mut self, tlm: ServerTelemetry) {
         match tlm {
-            ServerTelemetry::Conn(tlm) => {
-                self.n_clients = tlm.n_clients;
+            ServerTelemetry::Clients(tlm) => {
+                self.n_clients = tlm.clients.len();
+                for client in tlm.clients {
+                    info!("{:?}", client);
+                }
             }
             ServerTelemetry::World(_tlm) => {
                 // PASS
@@ -345,6 +348,11 @@ impl App {
             ServerResponse::ClientTelemetry(id, tlm) => self.on_client_telemetry(id, tlm),
             ServerResponse::Ack => {
                 // don't really care
+            }
+            ServerResponse::PleaseSendUsername => {
+                _ = self.sender.send(ServerRequest::Introduction {
+                    username: "<debugger>".to_string(),
+                });
             }
             e => {
                 debug!("Unhandled message from server: {e:?}");

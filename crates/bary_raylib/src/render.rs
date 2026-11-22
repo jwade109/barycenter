@@ -339,12 +339,7 @@ fn draw_orbits(d: &mut RaylibDrawHandle, world: &World) {
     }
 }
 
-pub fn draw_world(
-    world: &World,
-    client: &ClientSpecificInfo,
-    assets: &Assets,
-    d: &mut RaylibDrawHandle,
-) {
+pub fn draw_world(world: &World, client: &ClientSpecificInfo, d: &mut RaylibDrawHandle) {
     let camera = some_or_return!(client.scene_graph.camera());
 
     draw_stars(d, &world.stars, &camera, client.screen_dims);
@@ -360,7 +355,7 @@ pub fn draw_world(
 
     draw_origin_and_range_indicators(&mut c);
 
-    draw_asteroids(&mut c, world, assets, &client);
+    draw_asteroids(&mut c, world, &client.assets, &client);
 
     if client.scene_graph.is_real_view() {
         draw_computer_target_isometry(&mut c, &world.computers, &world.parts, &world.grids);
@@ -368,7 +363,13 @@ pub fn draw_world(
 
     draw_excavators(&mut c, world);
 
-    draw_parts(&mut c, world, &raylib_camera, &client.scene_graph, assets);
+    draw_parts(
+        &mut c,
+        world,
+        &raylib_camera,
+        &client.scene_graph,
+        &client.assets,
+    );
 
     draw_selection_info(&mut c, &world.grids, &client);
 
@@ -449,15 +450,15 @@ pub fn draw_world(
 
     drop(c);
 
-    draw_grid_far_indicators(&world.grids, d, &client, &raylib_camera, assets);
+    draw_grid_far_indicators(&world.grids, d, &client, &raylib_camera, &client.assets);
 
     draw_waypoint_far_indicators(&world.computers, d, &raylib_camera);
 
-    draw_selected_grid_info(d, &client, &world, client.screen_dims, assets);
+    draw_selected_grid_info(d, &client, &world, client.screen_dims, &client.assets);
 
-    draw_editor_rename_field(d, client, assets);
+    draw_editor_rename_field(d, client);
 
-    draw_chat(d, &client.chat, client.screen_dims, assets);
+    draw_chat(d, &client.chat, client.screen_dims, &client.assets);
 
     // draw_imgui(d, gui, assets);
 
@@ -945,16 +946,12 @@ pub fn draw_editor_part(d: &mut RaylibDrawHandle, world: &World, client: &Client
     draw_part_arrow(d, pl, grid_pose);
 }
 
-pub fn draw_editor_rename_field(
-    d: &mut RaylibDrawHandle,
-    client: &ClientSpecificInfo,
-    assets: &Assets,
-) {
-    let font = assets.ui_font();
-    let editor = some_or_return!(client.scene_graph.editor());
+pub fn draw_editor_rename_field(d: &mut RaylibDrawHandle, fe: &FrontEnd) {
+    let font = fe.assets.ui_font();
+    let editor = some_or_return!(fe.scene_graph.editor());
     let (field, is_name) = some_or_return!(&editor.vehicle_name_field);
 
-    let pos = glam_to_raylib(client.screen_dims / 2.0);
+    let pos = glam_to_raylib(fe.screen_dims / 2.0);
 
     let font_size = 48.0;
     let spacing = 0.0;

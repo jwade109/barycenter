@@ -1,11 +1,36 @@
 use bary_core::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::World;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Player {
     pub username: String,
     pub iso: Isometry2d,
     pub controls: Option<PlayerControls>,
+}
+
+impl Player {
+    pub fn spawn(world: &mut World, username: String, iso: Isometry2d) -> BaryResult<()> {
+        let id = world.spawner.spawn();
+        let player = Player {
+            username,
+            iso,
+            controls: None,
+        };
+        world.players.spawn(id, player);
+        Ok(())
+    }
+
+    pub fn set_controls(world: &mut World, id: Ent, controls: PlayerControls) -> BaryResult<()> {
+        let player = world.players.try_get_mut(id)?;
+        player.controls = Some(controls);
+        Ok(())
+    }
+
+    pub fn despawn(world: &mut World, id: Ent) -> BaryResult<Player> {
+        world.players.despawn(id)
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]

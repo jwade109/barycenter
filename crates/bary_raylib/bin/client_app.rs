@@ -616,12 +616,7 @@ fn draw(mut d: &mut RaylibDrawHandle, app: &GameApp, ui: Tree<UiMessage>) {
     }
 
     if app.frontend.scene_graph.should_draw_world() {
-        draw_world(
-            app.backend.world(),
-            &app.frontend,
-            &app.frontend.assets,
-            &mut d,
-        );
+        draw_world(app.backend.world(), &app.frontend, &mut d);
     }
 
     draw_ui(&mut d, &app.ui_state, &ui, &app.frontend.assets);

@@ -21,9 +21,17 @@ pub struct GridsTelemetry {
     pub grids: BTreeMap<Ent, GridTelemetry>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, Copy)]
-pub struct ConnectionTelemetry {
-    pub n_clients: usize,
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct ClientPlayerAssignment {
+    pub client_addr: SocketAddr,
+    pub id: ClientId,
+    pub username: Option<String>,
+    pub assigned_player: Option<Ent>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct ClientsTelemetry {
+    pub clients: Vec<ClientPlayerAssignment>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Copy)]
@@ -69,7 +77,7 @@ pub struct ThrusterTelemetry {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum ServerTelemetry {
-    Conn(ConnectionTelemetry),
+    Clients(ClientsTelemetry),
     World(WorldTelemetry),
     Grids(GridsTelemetry),
     Thrusters(ThrusterTelemetry),

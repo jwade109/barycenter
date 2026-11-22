@@ -809,23 +809,6 @@ pub fn get_blueprint_by_id<'a>(
     result.map(|e| &e.blueprint)
 }
 
-pub fn spawn_player(world: &mut World, username: String, iso: Isometry2d) -> BaryResult<()> {
-    let id = world.spawner.spawn();
-    let player = Player {
-        username,
-        iso,
-        controls: None,
-    };
-    world.players.spawn(id, player);
-    Ok(())
-}
-
-pub fn set_player_controls(world: &mut World, id: Ent, controls: PlayerControls) -> BaryResult<()> {
-    let player = world.players.try_get_mut(id)?;
-    player.controls = Some(controls);
-    Ok(())
-}
-
 pub fn get_part_at_layer(
     grid: &VehicleGrid,
     coord: PartCoord,
