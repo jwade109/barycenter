@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use bary_core::prelude::*;
-use bary_ipc::GridTelemetry;
+use bary_ipc::{GridTelemetry, ServerRequest};
 use bary_sim::{Instruction, Sender, WorldDelta};
 
 pub struct VehicleDetailWidget {
@@ -50,7 +50,7 @@ impl VehicleDetailWidget {
         ui: &mut egui::Ui,
         selected: Ent,
         grids: &BTreeMap<Ent, GridTelemetry>,
-        deltas: &mut Sender<WorldDelta>,
+        req: &mut Sender<ServerRequest>,
     ) {
         if ui.button("Select another ship").clicked() {
             self.selected = None;
@@ -68,7 +68,7 @@ impl VehicleDetailWidget {
             ui.text_edit_singleline(&mut self.rename);
             if ui.button("Rename").clicked() {
                 let delta = WorldDelta::RenameGrid(selected, self.rename.clone());
-                deltas.send(delta);
+                req.send(delta.into());
             }
         });
 
@@ -82,7 +82,7 @@ impl VehicleDetailWidget {
             if ui.button("Attitude Hold").clicked() {
                 let instr = Instruction::HoldAttitude(Angle::radians(self.heading));
                 let delta = WorldDelta::SetGridInstruction(selected, instr.into());
-                deltas.send(delta.into());
+                req.send(delta.into());
             }
         });
 
@@ -95,7 +95,7 @@ impl VehicleDetailWidget {
             if ui.button("Velocity Hold").clicked() {
                 let instr = Instruction::HoldVelocity(self.vel);
                 let delta = WorldDelta::SetGridInstruction(selected, instr.into());
-                deltas.send(delta.into());
+                req.send(delta.into());
             }
         });
 
@@ -108,7 +108,7 @@ impl VehicleDetailWidget {
             if ui.button("Position Hold").clicked() {
                 let instr = Instruction::DeltaV(self.delta_v);
                 let delta = WorldDelta::SetGridInstruction(selected, instr.into());
-                deltas.send(delta.into());
+                req.send(delta.into());
             }
         });
 
@@ -122,7 +122,7 @@ impl VehicleDetailWidget {
                 let iso = (self.pos, self.heading as f64).into();
                 let instr = Instruction::HoldPosition(iso);
                 let delta = WorldDelta::SetGridInstruction(selected, instr.into());
-                deltas.send(delta.into());
+                req.send(delta.into());
             }
         });
 
@@ -131,7 +131,7 @@ impl VehicleDetailWidget {
         if ui.button("Drift").clicked() {
             let instr = Instruction::Drift;
             let delta = WorldDelta::SetGridInstruction(selected, instr.into());
-            deltas.send(delta.into());
+            req.send(delta.into());
         }
 
         ui.separator();
@@ -143,7 +143,7 @@ impl VehicleDetailWidget {
             ui.add(egui::DragValue::new(&mut self.kd).speed(0.1));
             if ui.button("Set Coefficients").clicked() {
                 let delta = WorldDelta::SetGridAttitudePD(selected, self.kp, self.kd);
-                deltas.send(delta.into());
+                req.send(delta.into());
             }
         });
     }
@@ -152,10 +152,10 @@ impl VehicleDetailWidget {
         &mut self,
         ui: &mut egui::Ui,
         grids: &BTreeMap<Ent, GridTelemetry>,
-        deltas: &mut Sender<WorldDelta>,
+        req: &mut Sender<ServerRequest>,
     ) {
         if let Some(selected) = self.selected {
-            self.grid_control_panel(ui, selected, grids, deltas);
+            self.grid_control_panel(ui, selected, grids, req);
         } else {
             self.grid_not_selected(ui, grids);
         }

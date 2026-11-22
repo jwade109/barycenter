@@ -71,8 +71,9 @@ impl World {
         }
     }
 
-    pub fn empty_at_ticks(ticks: u64) -> Self {
+    pub fn empty_at_ticks(ticks: u64, next_entity_id: Ent) -> Self {
         let mut s = Self::empty();
+        s.spawner.set_next(next_entity_id);
         s.ticks = ticks;
         s
     }

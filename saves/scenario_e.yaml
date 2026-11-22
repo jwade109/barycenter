@@ -28,5 +28,5 @@
 - !LoadInstruction { instruction: !HoldVelocity [3, 12] }
 - !LoadInstruction { instruction: !HoldAttitude 0.7 }
 
-- !SpawnPlayer [ "kim_mcbudget", { translation: [100, 100], rotation: 0.0 } ]
-- !SpawnPlayer [ "wfbubbajoe", { translation: [140, 110], rotation: 0.0 } ]
+# - !SpawnPlayer [ "kim_mcbudget", { translation: [100, 100], rotation: 0.0 } ]
+# - !SpawnPlayer [ "wfbubbajoe", { translation: [140, 110], rotation: 0.0 } ]

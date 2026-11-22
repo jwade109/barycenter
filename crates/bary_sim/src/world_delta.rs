@@ -90,4 +90,6 @@ pub enum WorldDelta {
     SpawnPlayer(String, Isometry2d),
     SetPlayerControls(Ent, PlayerControls),
     DespawnPlayer(Ent),
+    ConnectPlayer(Ent),
+    DisconnectPlayer(Ent),
 }

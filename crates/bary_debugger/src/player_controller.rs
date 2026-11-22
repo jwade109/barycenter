@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use bary_core::prelude::*;
+use bary_ipc::ServerRequest;
 use bary_sim::{JoystickPosition, PlayerControls, Sender, World, WorldDelta};
 
 pub struct PlayerController {
@@ -49,25 +50,35 @@ impl PlayerController {
         ui: &mut egui::Ui,
         id: Ent,
         world: &World,
-    ) -> Option<PlayerControls> {
+        req: &mut Sender<ServerRequest>,
+    ) {
         if ui.button("Choose a different player").clicked() {
             self.selected_player = None;
-            return None;
+            return;
         }
 
+        ui.label(format!("Selected player is {id}"));
+
         let Some(player) = world.players.get(id) else {
-            ui.label(format!("No player with ID {id}"));
-            return None;
+            self.selected_player = None;
+            return;
         };
+
+        if ui.button("Disconnect").clicked() {
+            req.send(WorldDelta::DisconnectPlayer(id).into());
+        }
 
         let ctrl = self.controls.entry(id).or_default();
 
         ui.label(format!("{:?}", player));
         ui.label(format!("{:?}", ctrl));
 
-        let changed = joystick_pos_ui(ui, ctrl);
+        let send_anyway = ui.button("Send Input Vector").clicked();
 
-        changed.then_some(*ctrl)
+        if joystick_pos_ui(ui, ctrl) || send_anyway {
+            let delta = WorldDelta::SetPlayerControls(id, *ctrl);
+            req.send(delta.into());
+        }
     }
 
     fn select_a_player_ui(&mut self, ui: &mut egui::Ui, world: &World) {
@@ -84,14 +95,15 @@ impl PlayerController {
         }
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui, world: &World, deltas: &mut Sender<WorldDelta>) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, world: &World, req: &mut Sender<ServerRequest>) {
         ui.heading("CONTROL DA PLAYERS");
 
+        if ui.button("Request Player ID").clicked() {
+            req.send(ServerRequest::RequestPlayerId)
+        }
+
         if let Some(id) = self.selected_player {
-            if let Some(ctrl) = self.player_specific_ui(ui, id, world) {
-                let delta = WorldDelta::SetPlayerControls(id, ctrl);
-                deltas.send(delta);
-            }
+            self.player_specific_ui(ui, id, world, req);
         } else {
             self.select_a_player_ui(ui, world);
         }

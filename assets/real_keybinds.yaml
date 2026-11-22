@@ -13,6 +13,11 @@ global::toggle_show_keybinds:
   secondary: [ControlLeft, ShiftLeft]
   trigger: OnClick
 
+global::save_world:
+  primary: KeyS
+  secondary: [ControlLeft, ShiftLeft]
+  trigger: OnClick
+
 global::toggle_alt_mode:
   primary: Alt
   secondary: []
@@ -87,3 +92,23 @@ free::explode_at_mouseover:
   primary: KeyC
   secondary: []
   trigger: OnClick
+
+player_controller::left:
+  primary: LeftArrow
+  secondary: []
+  trigger: IsPressed
+
+player_controller::right:
+  primary: RightArrow
+  secondary: []
+  trigger: IsPressed
+
+player_controller::down:
+  primary: DownArrow
+  secondary: []
+  trigger: IsPressed
+
+player_controller::up:
+  primary: UpArrow
+  secondary: []
+  trigger: IsPressed

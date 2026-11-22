@@ -12,6 +12,9 @@ pub enum ServerRequest {
     Introduction {
         username: String,
     },
+    // sent by a client who wants to join the simulation world
+    // as an embodied player.
+    RequestPlayerId,
     Rebroadcast(String),
     SetSimSpeed(u32),
     Ack,

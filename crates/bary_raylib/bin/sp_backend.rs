@@ -1,5 +1,5 @@
 use crate::backend::{Backend, BackendEvent};
-use bary_core::prelude::WallTimer;
+use bary_core::prelude::{Ent, WallTimer};
 use bary_ipc::*;
 use bary_sim::*;
 use log::*;
@@ -7,6 +7,8 @@ use log::*;
 pub struct SinglePlayerBackend {
     world: World,
     sim_speed: u32,
+    #[allow(unused)]
+    allocated_player_id: Option<Ent>,
     events: Vec<BackendEvent>,
     step_timer: WallTimer,
 }
@@ -16,6 +18,7 @@ impl SinglePlayerBackend {
         Self {
             world,
             sim_speed: 1,
+            allocated_player_id: None,
             events: Vec::new(),
             step_timer: WallTimer::hz(50),
         }
@@ -60,6 +63,10 @@ impl Backend for SinglePlayerBackend {
 
     fn username(&self) -> Option<&str> {
         None
+    }
+
+    fn allocated_player_id(&self) -> Option<Ent> {
+        self.allocated_player_id
     }
 
     fn update(&mut self, controls: &ExternalControls) -> Vec<BackendEvent> {

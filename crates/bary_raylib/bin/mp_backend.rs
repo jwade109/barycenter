@@ -8,6 +8,7 @@ pub struct MultiplayerBackend {
     node: ClientNode,
     async_world_download: WorldDownloader,
     username: String,
+    player_id: Option<Ent>,
     server_handshake_complete: bool,
 }
 
@@ -18,6 +19,7 @@ impl MultiplayerBackend {
             node,
             async_world_download: WorldDownloader::new(),
             username,
+            player_id: None,
             server_handshake_complete: false,
         }
     }
@@ -79,6 +81,8 @@ impl MultiplayerBackend {
     fn on_rcv_fragment(&mut self, fragment: DownloadFragment, sender: &mut Sender<BackendEvent>) {
         if let Some((world, name)) = self.async_world_download.on_fragment(fragment) {
             self.world = world;
+            self.player_id = None;
+            self.node.send(ServerRequest::RequestPlayerId);
             sender.send(BackendEvent::FinishedWorldDownload(name));
         }
     }
@@ -89,6 +93,7 @@ impl MultiplayerBackend {
 
     fn on_rcv_take_your_hat_off(&mut self) {
         self.server_handshake_complete = true;
+        self.node.send(ServerRequest::RequestPlayerId);
     }
 
     fn update(&mut self) -> Vec<BackendEvent> {
@@ -121,6 +126,11 @@ impl MultiplayerBackend {
                     self.on_rcv_take_your_hat_off();
                     continue;
                 }
+                ServerResponse::YourPlayerIdIs(id) => {
+                    self.player_id = Some(id);
+                    info!("Got player ID {id} from server");
+                    continue;
+                }
                 ServerResponse::Ack => {
                     continue;
                 }
@@ -138,6 +148,10 @@ impl MultiplayerBackend {
         }
 
         events.take()
+    }
+
+    pub fn allocated_player_id(&self) -> Option<Ent> {
+        self.player_id
     }
 }
 
@@ -172,5 +186,9 @@ impl Backend for MultiplayerBackend {
 
     fn update(&mut self, _controls: &ExternalControls) -> Vec<BackendEvent> {
         self.update()
+    }
+
+    fn allocated_player_id(&self) -> Option<Ent> {
+        self.allocated_player_id()
     }
 }

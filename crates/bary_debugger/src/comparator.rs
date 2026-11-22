@@ -57,7 +57,14 @@ impl WorldComparator {
         limit_history(&mut self.local, world.ticks);
     }
 
-    pub fn diff(&self, ui: &mut egui::Ui, server: &GridsTelemetry, local: &GridsTelemetry) {
+    pub fn world_diff(&self, ui: &mut egui::Ui, server: &WorldTelemetry, local: &WorldTelemetry) {
+        ui.label(server.tick.to_string());
+        ui.label(server.next_id.to_string());
+        ui.label(local.next_id.to_string());
+        ui.end_row();
+    }
+
+    pub fn grid_diff(&self, ui: &mut egui::Ui, server: &GridsTelemetry, local: &GridsTelemetry) {
         for (id, server_grid) in &server.grids {
             let Some(local_grid) = local.grids.get(id) else {
                 continue;
@@ -81,8 +88,12 @@ impl WorldComparator {
                 continue;
             };
 
+            if let (Some(s), Some(l)) = (&server_frame.world, &local_frame.world) {
+                self.world_diff(ui, s, l);
+            }
+
             if let (Some(s), Some(l)) = (&server_frame.grids, &local_frame.grids) {
-                self.diff(ui, s, l);
+                self.grid_diff(ui, s, l);
             }
         }
     }

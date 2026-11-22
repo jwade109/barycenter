@@ -161,7 +161,7 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             Ok(())
         }
         WorldDelta::SpawnPlayer(username, iso) => {
-            Player::spawn(world, username, iso)?;
+            Player::spawn(world, username, iso);
             Ok(())
         }
         WorldDelta::SetPlayerControls(id, controls) => {
@@ -208,6 +208,14 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
         }
         WorldDelta::SetGridAttitudePD(grid_id, kp, kd) => {
             set_grid_attitude_pd(world, grid_id, kp, kd)?;
+            Ok(())
+        }
+        WorldDelta::ConnectPlayer(id) => {
+            Player::connect(world, id)?;
+            Ok(())
+        }
+        WorldDelta::DisconnectPlayer(id) => {
+            Player::disconnect(world, id)?;
             Ok(())
         }
     }

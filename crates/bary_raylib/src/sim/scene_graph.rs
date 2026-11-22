@@ -13,7 +13,6 @@ pub enum Scene {
     Pilot(Ent),
     Editor(Ent),
     Free,
-    Part(Ent),
 }
 
 #[derive(Debug)]
@@ -94,7 +93,6 @@ pub enum SceneGraph {
     Editor(EditorState),
     Free(FreeFlying),
     Piloting(PilotingState),
-    Part(PartFocusState),
 }
 
 impl SceneGraph {
@@ -107,7 +105,6 @@ impl SceneGraph {
             SceneGraph::Editor(..) => true,
             SceneGraph::Free(..) => true,
             SceneGraph::Piloting(..) => true,
-            SceneGraph::Part(..) => true,
         }
     }
 
@@ -126,7 +123,6 @@ impl SceneGraph {
             (_, Scene::MainMenu) => Self::MainMenu,
             (_, Scene::Kicked) => Self::Kicked,
             (_, Scene::Settings) => Self::Settings,
-            (_, Scene::Part(id)) => Self::Part(PartFocusState::new(id)),
         }
     }
 
@@ -184,7 +180,6 @@ impl SceneGraph {
             SceneGraph::Editor(editor) => Some(editor.camera),
             SceneGraph::Free(free) => Some(free.camera),
             SceneGraph::Piloting(piloting) => Some(piloting.camera),
-            SceneGraph::Part(..) => None,
         }
     }
 }

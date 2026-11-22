@@ -206,11 +206,6 @@ pub fn process_event(world: &World, client: &mut ClientSpecificInfo, on_gui: boo
     for event in events {
         match event.event_type {
             rdev::EventType::KeyPress(key) => match key {
-                Key::KeyS => {
-                    if client.input.is_key_pressed(Key::ControlLeft) {
-                        input_handlers::save_world_and_alert_chat(world, client);
-                    }
-                }
                 Key::KeyC => {
                     input_handlers::editor_copy_on_control_c(world, client);
                 }

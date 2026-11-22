@@ -1481,17 +1481,18 @@ fn sys_update_transmissions(world: &mut World, events: &mut Sender<SimulationEve
         true
     });
 
-    for (grid_id, grid) in world.grids.iter() {
-        if chance(0.0001) {
-            let msg = format!("Hello world, my name is {}", grid.name);
-            let pos = grid.particle_location.tr();
-            let tr = RadioTransmission::new(pos)
-                .with_range(30000.0)
-                .with_source(*grid_id)
-                .with_message(msg);
-            new_transmissions.send(tr);
-        }
-    }
+    // TODO(nondeterminism)
+    // for (grid_id, grid) in world.grids.iter() {
+    //     if chance(0.0001) {
+    //         let msg = format!("Hello world, my name is {}", grid.name);
+    //         let pos = grid.particle_location.tr();
+    //         let tr = RadioTransmission::new(pos)
+    //             .with_range(30000.0)
+    //             .with_source(*grid_id)
+    //             .with_message(msg);
+    //         new_transmissions.send(tr);
+    //     }
+    // }
 
     for tr in new_transmissions.take() {
         let id = world.spawner.spawn();

@@ -263,11 +263,14 @@ impl App {
     }
 
     fn on_server_telemetry(&mut self, tlm: ServerTelemetry) {
+        self.comparator.on_server_telemetry(&tlm);
+
         match tlm {
             ServerTelemetry::Clients(tlm) => {
                 self.n_clients = tlm.clients.len();
                 for client in tlm.clients {
-                    info!("{:?}", client);
+                    // TODO
+                    // info!("{:?}", client);
                 }
             }
             ServerTelemetry::World(_tlm) => {

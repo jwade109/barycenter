@@ -10,6 +10,7 @@ pub fn make_world_telemetry(world: &World) -> WorldTelemetry {
         thrusters: world.thrusters.len(),
         parts: world.parts.len(),
         blueprints: world.blueprints.len(),
+        next_id: world.spawner.next(),
     }
 }
 

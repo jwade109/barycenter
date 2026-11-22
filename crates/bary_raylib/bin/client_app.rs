@@ -204,9 +204,6 @@ impl GameApp {
             SceneGraph::Piloting(..) => {
                 self.frontend.keybinds.set_active("piloting");
             }
-            SceneGraph::Part(..) => {
-                self.frontend.keybinds.set_active("part");
-            }
         }
 
         self.frontend.mouse_screen_position = raylib
@@ -228,6 +225,30 @@ impl GameApp {
         }
 
         self.frontend.update();
+
+        if self.frontend.input_timer.tick() {
+            let mut ctrl = PlayerControls::default();
+
+            if self.frontend.is_satisfied("player_controller::left") {
+                ctrl.x = JoystickPosition::Negative;
+            }
+            if self.frontend.is_satisfied("player_controller::right") {
+                ctrl.x = JoystickPosition::Positive;
+            }
+            if self.frontend.is_satisfied("player_controller::down") {
+                ctrl.y = JoystickPosition::Negative;
+            }
+            if self.frontend.is_satisfied("player_controller::up") {
+                ctrl.y = JoystickPosition::Positive;
+            }
+
+            if let Some(id) = self.backend.allocated_player_id() {
+                let delta = WorldDelta::SetPlayerControls(id, ctrl);
+                self.backend.request_delta(delta);
+            } else {
+                error!("No allocated player ID");
+            }
+        }
     }
 
     pub fn on_rcv_backend_event(&mut self, event: BackendEvent) {
@@ -275,8 +296,10 @@ impl GameApp {
             }
             ServerResponse::Driver { deltas, .. } => {
                 for delta in deltas {
-                    let s = format!("{:?}", delta);
-                    self.frontend.spawn_animation(s, true);
+                    if !matches!(delta, WorldDelta::SetPlayerControls(..)) {
+                        let s = format!("{:?}", delta);
+                        self.frontend.spawn_animation(s, true);
+                    }
                 }
             }
             ServerResponse::ClientConnected(id, addr) => {
@@ -513,9 +536,6 @@ fn make_gui(raylib: &Raylib, app: &mut GameApp, timers: &DebugTimers) -> Tree<Ui
         SceneGraph::Editor(editor) => {
             make_editor_ui(&mut ui, editor, app.backend.world());
         }
-        SceneGraph::Part(state) => {
-            part_info_modal(&mut ui, state, app.backend.world(), &app.frontend.assets);
-        }
         SceneGraph::ListSaves => {
             list_saves_scene_ui(&mut ui);
         }
@@ -686,6 +706,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if app.frontend.is_satisfied("global::toggle_alt_mode") {
             app.frontend.toggle_alt_mode();
+        }
+
+        if app.frontend.is_satisfied("global::save_world") {
+            save_world_and_alert_chat(app.backend.world(), &mut app.frontend);
         }
     }
 

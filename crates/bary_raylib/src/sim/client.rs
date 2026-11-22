@@ -101,6 +101,7 @@ pub struct FrontEnd {
     pub spawner: EntitySpawner,
     pub transmissions: Components<ReceivedTransmission>,
     pub animations: Components<AppearingText>,
+    pub input_timer: WallTimer,
 }
 
 pub type ClientSpecificInfo = FrontEnd;
@@ -131,6 +132,7 @@ impl FrontEnd {
             animations,
             assets,
             keybinds,
+            input_timer: WallTimer::hz(20),
         }
     }
 

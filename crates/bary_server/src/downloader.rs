@@ -38,11 +38,12 @@ impl WorldDownloader {
             DownloadFragment::Start {
                 name,
                 n_entities,
+                next_entity_id,
                 ticks,
             } => {
                 self.state = Some(PartialDownloadState {
                     name,
-                    world: World::empty_at_ticks(ticks),
+                    world: World::empty_at_ticks(ticks, next_entity_id),
                     n_expected_entities: n_entities,
                     n_got_entities: 0,
                 });
@@ -90,7 +91,6 @@ impl WorldDownloader {
             TableIdent::Players => unpack_data(&mut state.world.players, id, &data),
             TableIdent::Planets => unpack_data(&mut state.world.planets, id, &data),
         };
-
 
         if success {
             state.n_got_entities += 1;

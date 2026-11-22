@@ -84,11 +84,17 @@ pub fn sync_frame_from_world(world: &World) -> SyncFrame {
     }
 }
 
+#[derive(Debug, Default)]
+struct ClientInfo {
+    username: Option<String>,
+    allocated_player_id: Option<Ent>,
+}
+
 pub struct BaryServer {
     world: World,
     save_file: Option<PathBuf>,
     client_telemetry: HashMap<ClientId, ClientTelemetry>,
-    usernames: HashMap<ClientId, String>,
+    client_info: HashMap<ClientId, ClientInfo>,
     tick_rate: u32,
     node: ServerNode,
     update_timer: WallTimer,
@@ -108,7 +114,7 @@ impl BaryServer {
             world,
             save_file: None,
             client_telemetry: HashMap::new(),
-            usernames: HashMap::new(),
+            client_info: HashMap::new(),
             tick_rate: 1,
             node,
             update_timer: WallTimer::hz(TICKS_PER_SECOND as u32),
@@ -152,8 +158,10 @@ impl BaryServer {
         self.node.send(id, ServerResponse::Ack);
     }
 
-    fn nack(&mut self, id: ClientId) {
-        self.node.send(id, ServerResponse::Nack);
+    fn nack(&mut self, id: ClientId, reason: impl Into<String>) {
+        let reason = reason.into();
+        error!("Nack to {id}: {reason}");
+        self.node.send(id, ServerResponse::Nack(reason));
     }
 
     #[allow(unused)]
@@ -174,6 +182,7 @@ impl BaryServer {
                 let fragment = DownloadFragment::Start {
                     name,
                     n_entities: tr.entities.len(),
+                    next_entity_id: self.world.spawner.next(),
                     ticks: self.world.ticks,
                 };
                 let msg = ServerResponse::Download(fragment);
@@ -200,6 +209,41 @@ impl BaryServer {
 
         self.transactions
             .retain(|_client, tr| !tr.entities.is_empty());
+    }
+
+    fn on_request_player_id(&mut self, id: ClientId) {
+        let Some(username) = self.client_info.get(&id).and_then(|s| s.username.clone()) else {
+            return self.nack(id, "No info available for this client");
+        };
+
+        let player_id = if let Some(player_id) = Player::find_by_name(&self.world, &username) {
+            let delta = WorldDelta::ConnectPlayer(player_id);
+            match apply_delta(&mut self.world, delta.clone()) {
+                Ok(()) => {
+                    self.queued_deltas.push(delta);
+                }
+                Err(e) => {
+                    error!("Failed to connect player: {e:?}");
+                }
+            }
+            info!("Found existing player for username {username}");
+            player_id
+        } else {
+            info!("Spawning a new player for username {username}");
+            let iso = Isometry2d::ZERO;
+            let delta = WorldDelta::SpawnPlayer(username.clone(), iso);
+            self.queued_deltas.push(delta);
+            let id = Player::spawn(&mut self.world, username.clone(), iso);
+            self.send_driver_packet();
+            id
+        };
+
+        let client_info = self.client_info.entry(id).or_default();
+        client_info.allocated_player_id = Some(player_id);
+
+        let reply = ServerResponse::YourPlayerIdIs(player_id);
+        info!("For client {}, player ID is {}", id, player_id);
+        self.node.send(id, reply);
     }
 
     fn on_accept_message(&mut self, client_id: ClientId, msg: ServerRequest) {
@@ -242,6 +286,9 @@ impl BaryServer {
             ServerRequest::RequestParams => {
                 self.send_param_update(client_id);
             }
+            ServerRequest::RequestPlayerId => {
+                self.on_request_player_id(client_id);
+            }
             e => {
                 let e = format!("{e:?}");
                 self.on_unsupported_message(e);
@@ -251,8 +298,7 @@ impl BaryServer {
 
     fn on_accept_world_delta(&mut self, id: ClientId, delta: WorldDelta) {
         if let Err(e) = apply_delta(&mut self.world, delta.clone()) {
-            error!("Failed to apply delta: {e}");
-            self.nack(id);
+            self.nack(id, format!("Failed to apply delta: {e}"));
         } else {
             debug!("Successfully applied delta: {delta:?}");
             self.queued_deltas.push(delta.clone());
@@ -261,23 +307,19 @@ impl BaryServer {
     }
 
     fn on_accept_introduction(&mut self, id: ClientId, username: String) {
-        if !self.usernames.contains_key(&id) {
-            info!("Client {id} has introduced themselves as {username}");
-            self.usernames.insert(id, username.clone());
-            self.node
-                .broadcast(ServerResponse::PlayerConnected(username));
-            self.node.send(id, ServerResponse::SuccessfullyConnected);
-        } else {
-            error!("Client {id} has reintroduced themselves");
-            self.nack(id);
+        let info = self.client_info.entry(id).or_default();
+        if info.username.is_some() {
+            return self.nack(id, "Client has reintroduced themselves");
         }
+        info!("Client {id} has introduced themselves as {username}");
+        info.username = Some(username.clone());
+        self.node
+            .broadcast(ServerResponse::PlayerConnected(username));
     }
 
     fn begin_async_world_download(&mut self, id: ClientId) {
         if self.transactions.contains_key(&id) {
-            error!("Transaction already underway for client {id}");
-            self.nack(id);
-            return;
+            return self.nack(id, "Transaction already underway");
         }
         let tr = PaginatedTransaction::from_world(&self.world);
         self.transactions.insert(id, tr);
@@ -296,7 +338,7 @@ impl BaryServer {
             Ok(world) => {
                 self.world = world;
                 self.save_file = Some(path.to_path_buf());
-                self.tick_rate = 0;
+                self.tick_rate = 1;
                 info!("Loaded {}", path.display());
                 self.node.broadcast(ServerResponse::HaveNewSave);
             }
@@ -311,17 +353,7 @@ impl BaryServer {
         Some(())
     }
 
-    fn ensure_client_is_connected(&mut self, id: ClientId) -> Option<()> {
-        if !self.usernames.contains_key(&id) {
-            error!("Client {id} is not connected!");
-            self.node.send(id, ServerResponse::Nack);
-            return None;
-        }
-        Some(())
-    }
-
     fn on_accept_client_tlm(&mut self, id: ClientId, tlm: ClientTelemetry) {
-        self.ensure_client_is_connected(id);
         self.client_telemetry.insert(id, tlm.clone());
         self.node
             .broadcast(ServerResponse::ClientTelemetry(id, tlm));
@@ -369,9 +401,26 @@ impl BaryServer {
         info!("Client {id} disconnected");
         self.node
             .broadcast(ServerResponse::ClientDisconnected(id, addr));
-        if let Some(username) = self.usernames.remove(&id) {
+
+        let Some(info) = self.client_info.remove(&id) else {
+            return;
+        };
+
+        if let Some(username) = info.username {
             self.node
                 .broadcast(ServerResponse::PlayerDisconnected(username));
+        }
+
+        if let Some(id) = info.allocated_player_id {
+            let delta = WorldDelta::DisconnectPlayer(id);
+            match apply_delta(&mut self.world, delta.clone()) {
+                Ok(()) => {
+                    self.queued_deltas.push(delta);
+                }
+                Err(e) => {
+                    error!("Failed to disconnect player: {e:?}");
+                }
+            }
         }
     }
 
@@ -387,11 +436,17 @@ impl BaryServer {
             clients: self
                 .node
                 .clients()
-                .map(|(id, addr)| ClientPlayerAssignment {
-                    client_addr: *addr,
-                    id: *id,
-                    username: self.usernames.get(id).cloned(),
-                    assigned_player: None,
+                .map(|(id, addr)| {
+                    let info = self.client_info.get(id);
+                    let username = info.and_then(|c| c.username.clone());
+                    let assigned_player = info.and_then(|c| c.allocated_player_id);
+
+                    ClientPlayerAssignment {
+                        client_addr: *addr,
+                        id: *id,
+                        username,
+                        assigned_player,
+                    }
                 })
                 .collect(),
         };

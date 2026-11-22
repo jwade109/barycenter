@@ -20,7 +20,6 @@ pub fn make_part_info_gui(ui: &mut UiBuilder, world: &World, client: &ClientSpec
 
         for (_, part_id) in occ.iter() {
             ui.sep();
-            ui.button(Scene::Part(part_id), format!("Go to Part {}", part_id));
             get_part_info_modal(ui, part_id, world, &client.assets, None);
         }
     });

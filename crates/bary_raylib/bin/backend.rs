@@ -1,3 +1,4 @@
+use bary_core::prelude::Ent;
 use bary_ipc::{ClientNode, ServerResponse};
 use bary_sim::{ExternalControls, World, WorldDelta};
 
@@ -27,6 +28,8 @@ pub trait Backend {
     fn network(&self) -> Option<&ClientNode>;
 
     fn username(&self) -> Option<&str>;
+
+    fn allocated_player_id(&self) -> Option<Ent>;
 
     fn update(&mut self, controls: &ExternalControls) -> Vec<BackendEvent>;
 }

@@ -42,6 +42,7 @@ pub struct WorldTelemetry {
     pub thrusters: usize,
     pub parts: usize,
     pub blueprints: usize,
+    pub next_id: Ent,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -62,6 +63,7 @@ pub enum DownloadFragment {
     Start {
         name: String,
         n_entities: usize,
+        next_entity_id: Ent,
         ticks: u64,
     },
     Entity(EntityData),
@@ -89,7 +91,7 @@ pub enum ServerResponse {
     Pong,
     Ping,
     Ack,
-    Nack,
+    Nack(String),
     ClientConnected(ClientId, SocketAddr),
     ClientDisconnected(ClientId, SocketAddr),
     Unsupported(String),
@@ -128,6 +130,8 @@ pub enum ServerResponse {
     NewSimSpeed(u32),
     /// forwarded telemetry from other clients
     ClientTelemetry(ClientId, ClientTelemetry),
+    /// sent by server in response to [ServerRequest::RequestPlayerId]
+    YourPlayerIdIs(Ent),
 }
 
 impl ServerResponse {

@@ -5,31 +5,66 @@ use crate::World;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Player {
+    pub is_connected: bool,
     pub username: String,
     pub iso: Isometry2d,
     pub controls: Option<PlayerControls>,
 }
 
 impl Player {
-    pub fn spawn(world: &mut World, username: String, iso: Isometry2d) -> BaryResult<()> {
+    pub fn spawn(world: &mut World, username: String, iso: Isometry2d) -> Ent {
         let id = world.spawner.spawn();
         let player = Player {
+            is_connected: true,
             username,
             iso,
             controls: None,
         };
         world.players.spawn(id, player);
-        Ok(())
+        id
     }
 
+    /// Sets the given player's persistent control inputs.
+    /// Control inputs define how a player changes state as time
+    /// advances, rather than in instantaneous events.
+    /// If the player is not connected, will also mark as connected.
     pub fn set_controls(world: &mut World, id: Ent, controls: PlayerControls) -> BaryResult<()> {
         let player = world.players.try_get_mut(id)?;
+        player.is_connected = true;
         player.controls = Some(controls);
         Ok(())
     }
 
+    /// Removes a player from the world.
     pub fn despawn(world: &mut World, id: Ent) -> BaryResult<Player> {
         world.players.despawn(id)
+    }
+
+    /// Marks a player as "connected". Connected players have full agency
+    /// within the simulated world.
+    pub fn connect(world: &mut World, id: Ent) -> BaryResult<()> {
+        let player = world.players.try_get_mut(id)?;
+        player.is_connected = true;
+        player.controls = None;
+        Ok(())
+    }
+
+    /// Marks a player as "disconnected". Disconnected players have a reduced
+    /// role in the world (and may be entirely incorporeal),
+    /// but are still considered extant entities.
+    pub fn disconnect(world: &mut World, id: Ent) -> BaryResult<()> {
+        let player = world.players.try_get_mut(id)?;
+        player.is_connected = false;
+        player.controls = None;
+        Ok(())
+    }
+
+    /// Finds an arbitrary player with the given username, if one exists.
+    pub fn find_by_name(world: &World, username: &str) -> Option<Ent> {
+        world
+            .players
+            .iter()
+            .find_map(|(id, player)| (player.username == username).then_some(*id))
     }
 }
 
