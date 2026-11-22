@@ -472,7 +472,8 @@ pub fn draw_world(world: &World, client: &ClientSpecificInfo, d: &mut RaylibDraw
 fn draw_players(d: &mut RaylibDrawHandle, players: &Components<Player>) {
     for player in players.values() {
         draw_circle(d, player.iso.tr(), 3.0, Color::RED);
-        draw_text(d, player.iso, &player.username, 12.0);
+        let text = format!("{}\n{:#?}", player.username, player.controls);
+        draw_text(d, player.iso, &text, 12.0);
     }
 }
 
