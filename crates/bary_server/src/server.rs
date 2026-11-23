@@ -233,7 +233,7 @@ impl BaryServer {
             let iso = Isometry2d::ZERO;
             let delta = WorldDelta::SpawnPlayer(username.clone(), iso);
             self.queued_deltas.push(delta);
-            let id = Player::spawn(&mut self.world, username.clone(), iso);
+            let id = Player::spawn(&mut self.world, username.clone(), iso, Isometry2d::ZERO);
             self.send_driver_packet();
             id
         };

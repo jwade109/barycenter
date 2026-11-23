@@ -161,7 +161,7 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             Ok(())
         }
         WorldDelta::SpawnPlayer(username, iso) => {
-            Player::spawn(world, username, iso);
+            Player::spawn(world, username, iso, Isometry2d::ZERO);
             Ok(())
         }
         WorldDelta::SetPlayerControls(id, controls) => {

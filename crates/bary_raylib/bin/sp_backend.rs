@@ -69,10 +69,10 @@ impl Backend for SinglePlayerBackend {
         self.allocated_player_id
     }
 
-    fn update(&mut self, controls: &ExternalControls) -> Vec<BackendEvent> {
+    fn update(&mut self) -> Vec<BackendEvent> {
         if self.step_timer.tick() {
             for _ in 0..self.sim_speed {
-                let response = update_world_with_user_controls(&mut self.world, controls);
+                let response = update_world(&mut self.world);
                 let events = response.events.take();
                 if !events.is_empty() {
                     self.events.extend(

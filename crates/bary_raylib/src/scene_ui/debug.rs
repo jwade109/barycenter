@@ -50,7 +50,7 @@ pub fn debug_lines(
         ui.text(format!("FPS:       {}", fps));
         ui.text(format!("Memory:    {:0.3} KB", size as f64 / 1000.0));
 
-        if let Some(cam) = client.scene_graph.camera() {
+        if let Some(cam) = client.scene_graph.camera(world) {
             ui.text(format!(
                 "Camera:    {:0.1} {:0.1} {:0.1}",
                 cam.isometry.tr(),
@@ -88,7 +88,7 @@ pub fn debug_lines(
         ui.sep();
 
         for player in world.players.values() {
-            ui.text(format!("  {} {:0.1?}", player.username, player.iso));
+            ui.text(format!("  {} {:0.1?}", player.username, player.pos));
         }
 
         ui.text("");

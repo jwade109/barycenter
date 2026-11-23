@@ -18,6 +18,13 @@ impl Default for Camera {
 }
 
 impl Camera {
+    pub fn new(iso: impl Into<Isometry2d>, zoom: f32) -> Self {
+        Self {
+            isometry: iso.into(),
+            zoom,
+        }
+    }
+
     pub fn world_to_screen(&self, p: DVec2, screen_width: DVec2) -> DVec2 {
         let delta = p - self.isometry.translation;
         let delta = rotate_f64(delta, -self.isometry.rotation as f64);

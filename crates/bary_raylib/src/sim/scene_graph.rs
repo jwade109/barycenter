@@ -1,7 +1,7 @@
 use crate::{EditorState, FreeFlying};
 use bary_core::prelude::*;
 use bary_input::InputState;
-use bary_sim::Camera;
+use bary_sim::{Camera, World};
 use rdev::Key;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,25 +31,16 @@ impl PartFocusState {
 }
 
 #[derive(Debug)]
-pub struct PilotingState {
-    pub ownship: Ent,
-    pub target: Option<Ent>,
-    pub camera: Camera,
-    pub target_rotation: f64,
-    pub target_zoom: f32,
+pub struct LockedState {
+    pub player_id: Ent,
+    pub zoom: f32,
 }
 
-impl PilotingState {
-    pub fn new(ownship: Ent) -> Self {
+impl LockedState {
+    pub fn new(player_id: Ent) -> Self {
         Self {
-            ownship,
-            target: None,
-            camera: Camera {
-                isometry: Isometry2d::ZERO,
-                zoom: 0.03,
-            },
-            target_rotation: 0.0,
-            target_zoom: 0.03,
+            player_id,
+            zoom: 10.0,
         }
     }
 
@@ -62,25 +53,17 @@ impl PilotingState {
             } = event.event_type
             {
                 if delta_y > 0 {
-                    self.target_zoom *= scale;
+                    self.zoom *= scale;
                 } else if delta_y < 0 {
-                    self.target_zoom /= scale;
+                    self.zoom /= scale;
                 }
             }
         }
+    }
 
-        let angular_speed = 2.5f64.to_radians();
-
-        if input.is_key_pressed(Key::KeyQ) {
-            self.target_rotation += angular_speed;
-        }
-        if input.is_key_pressed(Key::KeyE) {
-            self.target_rotation -= angular_speed;
-        }
-
-        self.camera.isometry.rotation +=
-            (self.target_rotation - self.camera.isometry.rotation) * 0.25;
-        self.camera.zoom += (self.target_zoom - self.camera.zoom) * 0.25;
+    pub fn get_camera(&self, world: &World) -> Option<Camera> {
+        let player = world.players.get(self.player_id)?;
+        Some(Camera::new(player.pos, self.zoom))
     }
 }
 
@@ -92,7 +75,7 @@ pub enum SceneGraph {
     Settings,
     Editor(EditorState),
     Free(FreeFlying),
-    Piloting(PilotingState),
+    LockedToPlayer(LockedState),
 }
 
 impl SceneGraph {
@@ -104,7 +87,7 @@ impl SceneGraph {
             SceneGraph::Settings => false,
             SceneGraph::Editor(..) => true,
             SceneGraph::Free(..) => true,
-            SceneGraph::Piloting(..) => true,
+            SceneGraph::LockedToPlayer(..) => true,
         }
     }
 
@@ -115,9 +98,9 @@ impl SceneGraph {
             (Self::Editor(state), Scene::Free) => {
                 Self::Free(FreeFlying::new(state.camera, Some(state.vehicle)))
             }
-            (_, Scene::Pilot(id)) => Self::Piloting(PilotingState::new(id)),
-            (SceneGraph::Piloting(pilot), Scene::Free) => {
-                Self::Free(FreeFlying::new(pilot.camera, Some(pilot.ownship)))
+            (_, Scene::Pilot(id)) => Self::LockedToPlayer(LockedState::new(id)),
+            (SceneGraph::LockedToPlayer(pilot), Scene::Free) => {
+                Self::Free(FreeFlying::new(Camera::default(), None))
             }
             (_, Scene::Free) => Self::Free(FreeFlying::at_zero()),
             (_, Scene::MainMenu) => Self::MainMenu,
@@ -171,7 +154,7 @@ impl SceneGraph {
         }
     }
 
-    pub fn camera(&self) -> Option<Camera> {
+    pub fn camera(&self, world: &World) -> Option<Camera> {
         match self {
             SceneGraph::MainMenu => None,
             SceneGraph::ListSaves => None,
@@ -179,7 +162,7 @@ impl SceneGraph {
             SceneGraph::Settings => None,
             SceneGraph::Editor(editor) => Some(editor.camera),
             SceneGraph::Free(free) => Some(free.camera),
-            SceneGraph::Piloting(piloting) => Some(piloting.camera),
+            SceneGraph::LockedToPlayer(locked) => locked.get_camera(world),
         }
     }
 }

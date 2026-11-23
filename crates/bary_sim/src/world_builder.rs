@@ -26,9 +26,10 @@ enum WorldBuilderCommand {
         radius: f64,
         mass: f64,
     },
-    SpawnPlayer(String, Isometry2d),
-    BindPlayerToGrid {
+    SpawnPlayer {
         username: String,
+        pos: Isometry2d,
+        vel: Isometry2d,
     },
     LoadInstruction(TimedInstruction),
     SetAttitudePD(f64, f64),
@@ -154,9 +155,17 @@ impl WorldBuilder {
         self
     }
 
-    pub fn player(mut self, name: &str, pos: impl Into<Vec2>) -> Self {
-        let iso = Isometry2d::from_pos(pos.into());
-        let cmd = WorldBuilderCommand::SpawnPlayer(name.to_string(), iso);
+    pub fn player(
+        mut self,
+        name: &str,
+        pos: impl Into<Isometry2d>,
+        vel: impl Into<Isometry2d>,
+    ) -> Self {
+        let cmd = WorldBuilderCommand::SpawnPlayer {
+            username: name.to_string(),
+            pos: pos.into(),
+            vel: vel.into(),
+        };
         self.commands.push(cmd);
         self
     }
@@ -277,8 +286,11 @@ impl WorldBuilder {
                     };
                     _ = apply_delta(&mut world, delta);
                 }
-                WorldBuilderCommand::SpawnPlayer(username, iso) => {
-                    _ = Player::spawn(&mut world, username, iso);
+                WorldBuilderCommand::SpawnPlayer { username, pos, vel } => {
+                    let player_id = Player::spawn(&mut world, username, pos, vel);
+                    if let Some(id) = self.cursor_planet {
+                        _ = Player::set_orbital_parent(&mut world, player_id, Some(id));
+                    }
                 }
                 WorldBuilderCommand::SpawnPlanet {
                     name,
@@ -290,11 +302,6 @@ impl WorldBuilder {
                     let id =
                         spawn_planet(&mut world, name, pos, vel, mass, radius, self.cursor_planet);
                     self.cursor_planet = Some(id);
-                }
-                WorldBuilderCommand::BindPlayerToGrid { username } => {
-                    if let Some(grid_id) = self.cursor_grid {
-                        set_controlling_player(&mut world, grid_id, username);
-                    }
                 }
                 WorldBuilderCommand::LoadInstruction(ti) => {
                     if let Some(grid_id) = self.cursor_grid {

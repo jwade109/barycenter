@@ -18,6 +18,11 @@
     radius: 100
     mass: 3000000000000000
 
+- !SpawnPlayer
+    username: "kim_mcbudget"
+    pos: { translation: [200, 0], rotation: 0.3 }
+    vel: { translation: [0, 45], rotation: 0.3 }
+
 - !SpawnShip [["pollux", 0], "Bob", { translation: [130.0, 30.0], rotation: 2.0 }]
 - !SetVelocity { translation: [0.0, 45.0], rotation: 0 }
 

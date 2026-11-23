@@ -1,6 +1,6 @@
 use bary_core::prelude::Ent;
 use bary_ipc::{ClientNode, ServerResponse};
-use bary_sim::{ExternalControls, World, WorldDelta};
+use bary_sim::{World, WorldDelta};
 
 #[derive(Debug)]
 pub enum BackendEvent {
@@ -31,5 +31,5 @@ pub trait Backend {
 
     fn allocated_player_id(&self) -> Option<Ent>;
 
-    fn update(&mut self, controls: &ExternalControls) -> Vec<BackendEvent>;
+    fn update(&mut self) -> Vec<BackendEvent>;
 }

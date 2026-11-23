@@ -5,17 +5,6 @@ use early_returns::some_or_continue;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
-pub(crate) fn sys_update_players(players: &mut Components<Player>) {
-    for player in players.values_mut() {
-        let ctrl = player.controls.unwrap_or_default();
-        let dir = ctrl.to_dir();
-        let ds = dir * 10.0 * NOMINAL_DT;
-        let da = ctrl.a.to_i8() as f64 * 3.0 * NOMINAL_DT;
-        player.iso.translation += ds;
-        player.iso.rotation = wrap_pi_npi_f64(player.iso.rotation + da);
-    }
-}
-
 /// Updates ring particles.
 pub(crate) fn sys_update_ring_particles(particles: &mut Vec<Particle>, current_tick: u64) {
     particles.retain(|p| p.is_alive(current_tick));
@@ -72,16 +61,10 @@ pub fn sys_propagate_n_body_accel(
 /// its command, thruster states will not change.
 /// Returns a list of grids which have changed their
 /// thruster states.
-pub fn sys_update_thrusters(
-    thrusters: &mut Components<Thruster>,
-    grids: &Components<VehicleGrid>,
-    parts: &Components<Part>,
-    computers: &Components<Computer>,
-    controls: &ExternalControls,
-) -> BTreeSet<Ent> {
+pub fn sys_update_thrusters(world: &mut World) -> BTreeSet<Ent> {
     let mut needs_update = BTreeSet::new();
 
-    for (grid_id, grid) in grids.iter() {
+    for (grid_id, grid) in world.grids.iter() {
         if grid.thrusters.is_empty() {
             continue;
         }
@@ -89,7 +72,7 @@ pub fn sys_update_thrusters(
         let Some(cpu_id) = grid.computers.first() else {
             continue;
         };
-        let Ok(cpu) = computers.try_get(*cpu_id) else {
+        let Ok(cpu) = world.computers.try_get(*cpu_id) else {
             continue;
         };
         if !cpu.fired_this_tick() {
@@ -98,17 +81,13 @@ pub fn sys_update_thrusters(
 
         let mut thruster_changed = false;
 
-        let ctrl = controls
-            .controls
-            .get(*grid_id)
-            .cloned()
-            .unwrap_or(*cpu.get_current_control());
+        let ctrl = cpu.get_current_control();
 
         for thruster_id in &grid.thrusters {
-            let Ok(thruster) = thrusters.try_get_mut(*thruster_id) else {
+            let Ok(thruster) = world.thrusters.try_get_mut(*thruster_id) else {
                 continue;
             };
-            let Ok(part) = parts.try_get(*thruster_id) else {
+            let Ok(part) = world.parts.try_get(*thruster_id) else {
                 continue;
             };
 
@@ -153,39 +132,44 @@ pub fn sys_update_thrusters(
 }
 
 /// Appends grid locations to tracker entities.
-pub fn sys_update_trackers(
-    trackers: &mut Components<Tracker>,
-    grids: &Components<VehicleGrid>,
-    ticks: u64,
-) {
-    if ticks % 20 > 0 {
+pub fn sys_update_trackers(world: &mut World) {
+    if world.ticks % 20 > 0 {
         return;
     }
 
     let mut to_despawn = BTreeSet::new();
 
-    for (grid_id, grid) in grids.iter() {
+    for (grid_id, grid) in world.grids.iter() {
         let is_controllable = !grid.computers.is_empty();
-        if trackers.try_get(*grid_id).is_err() && is_controllable {
+        if world.tracking.try_get(*grid_id).is_err() && is_controllable {
             let tracker = Tracker::default();
-            trackers.spawn(*grid_id, tracker);
+            world.tracking.spawn(*grid_id, tracker);
         }
     }
 
-    for (grid_id, tracker) in trackers.iter_mut() {
-        let Ok(grid) = grids.try_get(*grid_id) else {
-            to_despawn.insert(*grid_id);
-            continue;
-        };
-        tracker.add(
-            grid.origin(),
-            grid.particle_location,
-            grid.centroid_isometry(),
-        );
+    for (player_id, _) in world.players.iter() {
+        if world.tracking.try_get(*player_id).is_err() {
+            let tracker = Tracker::default();
+            world.tracking.spawn(*player_id, tracker);
+        }
+    }
+
+    for (id, tracker) in world.tracking.iter_mut() {
+        if let Ok(grid) = world.grids.try_get(*id) {
+            tracker.add(
+                grid.origin(),
+                grid.particle_location,
+                grid.centroid_isometry(),
+            );
+        } else if let Ok(player) = world.players.try_get(*id) {
+            tracker.add(player.pos, player.pos, player.pos);
+        } else {
+            to_despawn.insert(*id);
+        }
     }
 
     for id in to_despawn {
-        _ = trackers.despawn(id);
+        _ = world.tracking.despawn(id);
     }
 }
 

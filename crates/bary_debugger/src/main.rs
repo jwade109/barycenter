@@ -240,7 +240,7 @@ impl App {
 
         ui.separator();
 
-        for name in ["scenario_c", "scenario_d", "scenario_e"] {
+        for name in ["scenario_c", "scenario_d", "scenario_e", "scenario_f"] {
             let path = format!("saves/{}.yaml", name);
             if ui.button(format!("Load {}", name)).clicked() {
                 _ = self.sender.send(ServerRequest::LoadSave(path));
@@ -316,14 +316,22 @@ impl App {
         self.server_ticks = ticks;
 
         for delta in deltas {
+            let s = format!("{:?}", delta);
             if let Err(e) = apply_delta(&mut self.world, delta) {
-                error!("Failed to apply delta from server: {e}");
+                error!("Failed to apply delta ({s}) from server: {e}");
             }
         }
 
         while self.world.ticks < self.server_ticks {
             update_world(&mut self.world);
             self.comparator.update_local(&self.world);
+
+            for (id, player) in self.world.players.iter() {
+                let name = format!("player_{}_{}", id, player.username);
+                let x = player.pos.tr().x;
+                let y = player.pos.tr().y;
+                self.pos.add(&name, x, y);
+            }
         }
     }
 

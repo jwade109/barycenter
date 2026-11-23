@@ -126,26 +126,11 @@ impl GameApp {
     fn update_in_world(&mut self) {
         let deltas = pre_simulation_update(self.backend.world(), &mut self.frontend);
 
-        let keybinds = PilotingKeybinds {
-            left: Key::KeyA,
-            right: Key::KeyD,
-            forward: Key::KeyW,
-            backward: Key::KeyS,
-            mode: Button::Middle,
-        };
-
-        let mut controls = Components::default();
-
-        if let SceneGraph::Piloting(pilot) = &self.frontend.scene_graph {
-            let ctrl = keyboard_control_law(&self.frontend.input, keybinds);
-            controls.spawn(pilot.ownship, ctrl);
-        }
-
-        let controls = ExternalControls { controls };
-
-        for event in self.backend.update(&controls) {
+        for event in self.backend.update() {
             self.on_rcv_backend_event(event);
         }
+
+        self.frontend.player_id = self.backend.allocated_player_id();
 
         let post_deltas = post_simulation_update(
             self.backend.world(),
@@ -201,8 +186,8 @@ impl GameApp {
             SceneGraph::Free(..) => {
                 self.frontend.keybinds.set_active("freecamera");
             }
-            SceneGraph::Piloting(..) => {
-                self.frontend.keybinds.set_active("piloting");
+            SceneGraph::LockedToPlayer(..) => {
+                self.frontend.keybinds.set_active("locked_to_player");
             }
         }
 
@@ -251,8 +236,6 @@ impl GameApp {
             if let Some(id) = self.backend.allocated_player_id() {
                 let delta = WorldDelta::SetPlayerControls(id, ctrl);
                 self.backend.request_delta(delta);
-            } else {
-                error!("No allocated player ID");
             }
         }
     }
@@ -536,8 +519,9 @@ fn make_gui(raylib: &Raylib, app: &mut GameApp, timers: &DebugTimers) -> Tree<Ui
             app.frontend.transmissions.clear();
             make_transmission_ui(&mut ui, &app.frontend.transmissions);
         }
-        SceneGraph::Piloting(piloting) => {
-            make_piloting_ui(&mut ui, piloting, app.backend.world(), &app.frontend.assets);
+        SceneGraph::LockedToPlayer(locked) => {
+            kicked_scene_ui(&mut ui);
+            // make_piloting_ui(&mut ui, piloting, app.backend.world(), &app.frontend.assets);
         }
         SceneGraph::Editor(editor) => {
             make_editor_ui(&mut ui, editor, app.backend.world());
@@ -628,7 +612,7 @@ fn draw_animations(d: &mut RaylibDrawHandle, animations: &Components<AppearingTe
     }
 }
 
-fn draw(mut d: &mut RaylibDrawHandle, app: &GameApp, ui: Tree<UiMessage>) {
+fn draw(d: &mut RaylibDrawHandle, app: &GameApp, ui: Tree<UiMessage>) {
     d.clear_background(Color::BLACK);
 
     if let Some(blob) = &app.frontend.assets.blob {
@@ -642,17 +626,17 @@ fn draw(mut d: &mut RaylibDrawHandle, app: &GameApp, ui: Tree<UiMessage>) {
     }
 
     if app.frontend.scene_graph.should_draw_world() {
-        draw_world(app.backend.world(), &app.frontend, &mut d);
+        draw_world(app.backend.world(), &app.frontend, d);
     }
 
-    draw_ui(&mut d, &app.ui_state, &ui, &app.frontend.assets);
+    draw_ui(d, &app.ui_state, &ui, &app.frontend.assets);
 
-    draw_animations(&mut d, &app.frontend.animations);
+    draw_animations(d, &app.frontend.animations);
 
-    draw_mouse_screen_position(&mut d, app.frontend.mouse_screen_position);
+    draw_mouse_screen_position(d, app.frontend.mouse_screen_position);
 
     draw_terminal(
-        &mut d,
+        d,
         &app.terminal,
         &app.frontend.assets,
         Color::BLACK.alpha(0.8),
@@ -716,6 +700,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if app.frontend.is_satisfied("global::save_world") {
             save_world_and_alert_chat(app.backend.world(), &mut app.frontend);
+        }
+
+        if app.frontend.is_satisfied("global::toggle_camera_lock") {
+            app.frontend.toggle_camera_lock(app.backend.world());
         }
     }
 

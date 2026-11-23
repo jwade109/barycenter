@@ -103,6 +103,12 @@ impl std::ops::AddAssign for Isometry2d {
     }
 }
 
+impl std::ops::MulAssign<f64> for Isometry2d {
+    fn mul_assign(&mut self, rhs: f64) {
+        *self = *self * rhs;
+    }
+}
+
 impl From<(f32, f32, f32)> for Isometry2d {
     fn from((x, y, r): (f32, f32, f32)) -> Self {
         Self {

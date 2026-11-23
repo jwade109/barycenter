@@ -1,4 +1,6 @@
-use crate::{AppearingText, Assets, KeybindsSet, SceneGraph, SoundEffects, load_keybinds};
+use crate::{
+    AppearingText, Assets, KeybindsSet, LockedState, SceneGraph, SoundEffects, load_keybinds,
+};
 use bary_core::prelude::*;
 use bary_input::*;
 use bary_sim::Camera;
@@ -140,19 +142,60 @@ impl FrontEnd {
         self.animations.retain(|_, anim| anim.should_remain());
     }
 
+    /// Toggles whether the debug menu is shown.
     pub fn toggle_debug_text(&mut self) {
         self.show_debug_text ^= true;
         self.spawn_animation("Toggled debug view", true);
     }
 
+    /// Toggles whether "alt" mode is shown; shows additional debug rendering.
     pub fn toggle_alt_mode(&mut self) {
         self.alt_mode ^= true;
         self.spawn_animation("Toggled alt mode", true);
     }
 
+    /// Toggles whether the keybinds debug menu is shown.
     pub fn toggle_show_keybinds(&mut self) {
         self.show_keybinds ^= true;
         self.spawn_animation("Toggled show keybinds", true);
+    }
+
+    fn go_to_scene_free(&mut self, camera: Camera) {
+        self.spawn_animation("Free Camera", true);
+        self.scene_graph = SceneGraph::Free(FreeFlying::new(camera, None))
+    }
+
+    fn go_to_player_locked(&mut self) {
+        if let Some(id) = self.player_id {
+            self.spawn_animation("Locked Camera", true);
+            self.scene_graph = SceneGraph::LockedToPlayer(LockedState::new(id));
+        } else {
+            self.spawn_animation("No player to lock to", true);
+        }
+    }
+
+    pub fn toggle_camera_lock(&mut self, world: &World) {
+        let camera = self.scene_graph.camera(world).unwrap_or_default();
+        match &self.scene_graph {
+            SceneGraph::Free(..) => {
+                self.go_to_player_locked();
+            }
+            SceneGraph::LockedToPlayer(..) => {
+                self.go_to_scene_free(camera);
+            }
+            _ => {
+                self.spawn_animation("Invalid state to toggle lock", true);
+            }
+        }
+    }
+
+    pub fn try_enter_camera_locked(&mut self) {
+        if let Some(id) = self.player_id {
+            self.scene_graph = SceneGraph::LockedToPlayer(LockedState::new(id));
+            self.spawn_animation("Locked to Player", true);
+        } else {
+            self.spawn_animation("Cannot lock camera", true);
+        }
     }
 
     pub fn leave_editor(&mut self) -> bool {
@@ -196,7 +239,6 @@ impl FrontEnd {
         match &self.scene_graph {
             SceneGraph::Editor(e) => Some(e.vehicle),
             SceneGraph::Free(f) => f.selected_vehicles.first().map(|s| s.grid_id),
-            SceneGraph::Piloting(p) => Some(p.ownship),
             _ => None,
         }
     }

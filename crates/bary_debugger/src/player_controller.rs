@@ -87,7 +87,7 @@ impl PlayerController {
                 "{} {} {}",
                 id,
                 player.username,
-                distance_str_v(player.iso.tr())
+                distance_str_v(player.pos.tr())
             );
             if ui.button(label).clicked() {
                 self.selected_player = Some(*id);

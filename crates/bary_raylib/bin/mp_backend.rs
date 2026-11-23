@@ -184,7 +184,7 @@ impl Backend for MultiplayerBackend {
         Some(&self.username)
     }
 
-    fn update(&mut self, _controls: &ExternalControls) -> Vec<BackendEvent> {
+    fn update(&mut self) -> Vec<BackendEvent> {
         self.update()
     }
 

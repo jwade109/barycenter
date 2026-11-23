@@ -902,19 +902,9 @@ pub fn insert_pipe(
     )
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct ExternalControls {
-    pub controls: Components<VehicleControl>,
-}
-
 pub struct WorldUpdate {
     pub timers: DebugTimers,
     pub events: Sender<SimulationEvent>,
-}
-
-pub fn update_world(world: &mut World) -> WorldUpdate {
-    let controls = ExternalControls::default();
-    update_world_with_user_controls(world, &controls)
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -923,10 +913,7 @@ pub enum SimulationEvent {
     Piloting(String, Ent),
 }
 
-pub fn update_world_with_user_controls(
-    world: &mut World,
-    controls: &ExternalControls,
-) -> WorldUpdate {
+pub fn update_world(world: &mut World) -> WorldUpdate {
     let mut events = Sender::new();
 
     world.ticks += 1;
@@ -938,14 +925,7 @@ pub fn update_world_with_user_controls(
         let _timer = timers.scope("grid_motion");
 
         sys_update_ring_particles(&mut world.particles, world.ticks);
-        let dirty_set = sys_update_thrusters(
-            &mut world.thrusters,
-            &world.grids,
-            &world.parts,
-            &world.computers,
-            controls,
-        );
-
+        let dirty_set = sys_update_thrusters(world);
         world.grid_acceleration_updates += dirty_set.len() as u64;
         sys_update_grid_acceleration_c(dirty_set, &mut world.grids, &world.thrusters, &world.parts);
         sys_update_computers(world);
@@ -958,13 +938,13 @@ pub fn update_world_with_user_controls(
     {
         let _timer = timers.scope("players");
 
-        sys_update_players(&mut world.players);
+        Player::update_all(world);
     }
 
     {
         let _timer = timers.scope("update_trackers");
 
-        sys_update_trackers(&mut world.tracking, &world.grids, world.ticks);
+        sys_update_trackers(world);
     }
 
     {

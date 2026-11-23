@@ -13,6 +13,11 @@ global::toggle_show_keybinds:
   secondary: [ControlLeft, ShiftLeft]
   trigger: OnClick
 
+global::toggle_camera_lock:
+  primary: KeyL
+  secondary: [ControlLeft, ShiftLeft]
+  trigger: OnClick
+
 global::save_world:
   primary: KeyS
   secondary: [ControlLeft, ShiftLeft]
@@ -90,6 +95,11 @@ free::toggle_grid_tracking:
 
 free::explode_at_mouseover:
   primary: KeyC
+  secondary: []
+  trigger: OnClick
+
+free::toggle_vehicle_zoom:
+  primary: KeyV
   secondary: []
   trigger: OnClick
 

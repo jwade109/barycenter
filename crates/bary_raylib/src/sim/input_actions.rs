@@ -136,23 +136,6 @@ fn update_actual_hover_part_info(client: &mut ClientSpecificInfo, grids: &Compon
     }
 }
 
-fn set_target_camera_if_docking(
-    world: &World,
-    docking: &DockingInterface,
-    target: &mut Camera,
-) -> Option<()> {
-    let grid_a = world.grids.get(docking.parent.grid_id)?;
-    let grid_b = world.grids.get(docking.child.grid_id)?;
-
-    let u = grid_a.centroid_isometry().tr();
-    let v = grid_b.centroid_isometry().tr();
-
-    let c = (u + v) / 2.0;
-
-    target.isometry.translation = c;
-    Some(())
-}
-
 fn set_target_camera_if_following(
     follow: Option<Ent>,
     lock_rotation: bool,
@@ -276,8 +259,8 @@ fn explode_at_mouseover(client: &ClientSpecificInfo) -> Option<WorldDelta> {
     Some(WorldDelta::Explode(loc))
 }
 
-fn spawn_ping(client: &ClientSpecificInfo) -> Option<WorldDelta> {
-    let camera = client.scene_graph.camera()?;
+fn spawn_ping(client: &ClientSpecificInfo, world: &World) -> Option<WorldDelta> {
+    let camera = client.scene_graph.camera(world)?;
     let screen_pos = client.mouse_screen_position?;
     let pos = screen_to_world(&camera, screen_pos, client.screen_dims);
     Some(WorldDelta::Ping(pos))
@@ -302,34 +285,14 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
 
     update_terrain_selection_info(client, &world.asteroids);
 
-    if client.is_satisfied("free::toggle_follow") {
-        input_handlers::toggle_following_on_key_f(client);
-    }
-
-    if client.is_satisfied("free::toggle_grid_tracking") {
-        toggle_tracking_for_selected_grid(client, &mut deltas);
-    }
-
     if client.input.just_pressed_debounced(Button::Right) {
         if let Some(mouse_pos) = client.mouse_screen_position {
-            if let Some(camera) = client.scene_graph.camera() {
+            if let Some(camera) = client.scene_graph.camera(world) {
                 if let Some(free) = client.scene_graph.free_mut() {
                     let world_pos = screen_to_world(&camera, mouse_pos, client.screen_dims);
                     free.waypoint_widget = Some(world_pos);
                 }
             }
-        }
-    }
-
-    if client.is_satisfied("free::explode_at_mouseover") {
-        if let Some(d) = explode_at_mouseover(client) {
-            deltas.send(d);
-        }
-    }
-
-    if client.is_satisfied("free::spawn_radio_transmission") {
-        if let Some(d) = spawn_ping(client) {
-            deltas.send(d);
         }
     }
 
@@ -356,16 +319,36 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
         }
     }
 
+    if client.is_satisfied("free::toggle_follow") {
+        input_handlers::toggle_following_on_key_f(client);
+    }
+
+    if client.is_satisfied("free::toggle_grid_tracking") {
+        toggle_tracking_for_selected_grid(client, &mut deltas);
+    }
+
+    if client.is_satisfied("free::explode_at_mouseover") {
+        if let Some(d) = explode_at_mouseover(client) {
+            deltas.send(d);
+        }
+    }
+
+    if client.is_satisfied("free::spawn_radio_transmission") {
+        if let Some(d) = spawn_ping(client, world) {
+            deltas.send(d);
+        }
+    }
+
     deltas
 }
 
-fn zoom_in_on_key_v(client: &mut ClientSpecificInfo) {
-    if !client.input.just_pressed_debounced(Key::KeyV) {
+fn zoom_in_on_key_v(frontend: &mut FrontEnd) {
+    if !frontend.is_satisfied("free::toggle_vehicle_zoom") {
         return;
     }
 
-    let grid_id = some_or_return!(client.focused_grid_id());
-    let free = some_or_return!(client.scene_graph.free_mut());
+    let grid_id = some_or_return!(frontend.focused_grid_id());
+    let free = some_or_return!(frontend.scene_graph.free_mut());
     if free.target_camera.zoom < ZOOM_NEAR_VEHICLE {
         free.target_camera.zoom = ZOOM_NEAR_VEHICLE;
     } else {
@@ -414,17 +397,13 @@ pub fn post_simulation_update(
 
     match &mut client.scene_graph {
         SceneGraph::Free(fly) => {
-            if let Some(docking) = fly.docking_interface() {
-                set_target_camera_if_docking(world, &docking, &mut fly.target_camera);
-            } else {
-                set_target_camera_if_following(
-                    fly.follow_vehicle,
-                    fly.lock_rotation,
-                    &world.grids,
-                    &mut fly.target_camera,
-                    &mut fly.camera,
-                );
-            }
+            set_target_camera_if_following(
+                fly.follow_vehicle,
+                fly.lock_rotation,
+                &world.grids,
+                &mut fly.target_camera,
+                &mut fly.camera,
+            );
 
             if !is_terminal_focused {
                 camera_moves_with_wasd(
@@ -460,11 +439,7 @@ pub fn post_simulation_update(
 
             animate_camera_towards_target(&editor.target_camera, &mut editor.camera);
         }
-        SceneGraph::Piloting(pilot) => {
-            if let Some(grid) = world.grids.get(pilot.ownship) {
-                pilot.camera.isometry.translation = grid.centroid_isometry().tr();
-            }
-
+        SceneGraph::LockedToPlayer(pilot) => {
             pilot.step(&client.input);
         }
         _ => (),

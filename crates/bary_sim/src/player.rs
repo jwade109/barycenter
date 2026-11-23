@@ -1,24 +1,29 @@
 use bary_core::prelude::*;
+use early_returns::some_or_return;
 use serde::{Deserialize, Serialize};
 
-use crate::World;
+use crate::{NOMINAL_DT, Planet, World};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Player {
     pub is_connected: bool,
     pub username: String,
-    pub iso: Isometry2d,
+    pub pos: Isometry2d,
+    pub vel: Isometry2d,
     pub controls: Option<PlayerControls>,
+    pub orbital_parent: Option<Ent>,
 }
 
 impl Player {
-    pub fn spawn(world: &mut World, username: String, iso: Isometry2d) -> Ent {
+    pub fn spawn(world: &mut World, username: String, pos: Isometry2d, vel: Isometry2d) -> Ent {
         let id = world.spawner.spawn();
         let player = Player {
             is_connected: true,
             username,
-            iso,
+            pos,
+            vel,
             controls: None,
+            orbital_parent: None,
         };
         world.players.spawn(id, player);
         id
@@ -65,6 +70,47 @@ impl Player {
             .players
             .iter()
             .find_map(|(id, player)| (player.username == username).then_some(*id))
+    }
+
+    pub fn set_orbital_parent(
+        world: &mut World,
+        player_id: Ent,
+        orbital_parent: Option<Ent>,
+    ) -> BaryResult<()> {
+        let player = world.players.try_get_mut(player_id)?;
+        player.orbital_parent = orbital_parent;
+        Ok(())
+    }
+
+    fn update_orbital_dynamics(&mut self, planets: &Components<Planet>) {
+        let planet_id = some_or_return!(self.orbital_parent);
+        let planet = some_or_return!(planets.get(planet_id));
+        let v = self.pos.translation - planet.pos.translation;
+        let accel = planet.gravity(v);
+        self.vel.translation += accel * NOMINAL_DT;
+    }
+
+    fn update(&mut self, planets: &Components<Planet>) {
+        self.update_orbital_dynamics(planets);
+
+        let ctrl = self.controls.unwrap_or_default();
+        let body_fixed_dir = ctrl.to_dir();
+        let world_dir = rotate_f64(body_fixed_dir, self.pos.rotation);
+        let acc = Isometry2d::new(world_dir * 20.0, ctrl.a.to_i8() as f64 * 6.0);
+
+        self.vel += acc * NOMINAL_DT;
+        self.pos += self.vel * NOMINAL_DT;
+
+        self.pos.rotation = wrap_pi_npi_f64(self.pos.rotation);
+
+        self.vel.rotation *= 0.97;
+    }
+
+    /// Updates all players.
+    pub(crate) fn update_all(world: &mut World) {
+        for player in world.players.values_mut() {
+            player.update(&world.planets);
+        }
     }
 }
 

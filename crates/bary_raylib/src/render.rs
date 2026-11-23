@@ -125,7 +125,7 @@ fn draw_trackers(d: &mut RaylibDrawHandle, trackers: &Components<Tracker>, detai
     }
 }
 
-fn draw_hovered_inventory(d: &mut RaylibDrawHandle, world: &World, client: &ClientSpecificInfo) {
+fn draw_hovered_inventory(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
     let _free = some_or_return!(client.scene_graph.free());
     let loc = some_or_return!(client.hovered_grid_loc());
     let grid = ok_or_return!(world.grids.try_get(loc.grid_id));
@@ -212,7 +212,7 @@ fn draw_docking_interface(
 fn draw_grid_far_indicators(
     grids: &Components<VehicleGrid>,
     d: &mut RaylibDrawHandle,
-    client: &ClientSpecificInfo,
+    client: &FrontEnd,
     camera: &Camera2D,
     assets: &Assets,
 ) {
@@ -317,14 +317,14 @@ fn draw_planets(d: &mut RaylibDrawHandle, world: &World) {
     }
 }
 
-fn draw_orbit(d: &mut RaylibDrawHandle, planet_pos: DVec2, orbit: &SparseOrbit) {
+fn draw_orbit(d: &mut RaylibDrawHandle, planet_pos: DVec2, orbit: &SparseOrbit, color: Color) {
     if orbit.is_hyperbolic() {
         return;
     }
     let mut iso = Isometry2d::new(planet_pos, 0.0).offset(orbit.center());
     iso.rotation = orbit.arg_periapsis;
     let dims = DVec2::new(orbit.semi_major_axis, orbit.semi_minor_axis()) * 2.0;
-    draw_ellipse(d, iso, dims, Color::ORANGE);
+    draw_ellipse(d, iso, dims, color);
 }
 
 fn draw_orbits(d: &mut RaylibDrawHandle, world: &World) {
@@ -334,13 +334,23 @@ fn draw_orbits(d: &mut RaylibDrawHandle, world: &World) {
         let pos = grid.particle_location.tr() - planet.pos.tr();
         let vel = grid.velocity.tr() - planet.vel.tr();
         if let Some(orbit) = SparseOrbit::from_pv((pos, vel), planet.body, Nanotime::zero()) {
-            draw_orbit(d, planet.pos.tr(), &orbit);
+            draw_orbit(d, planet.pos.tr(), &orbit, Color::ORANGE);
+        }
+    }
+
+    for player in world.players.values() {
+        let parent_id = some_or_continue!(player.orbital_parent);
+        let planet = some_or_continue!(world.planets.get(parent_id));
+        let pos = player.pos.tr() - planet.pos.tr();
+        let vel = player.vel.tr() - planet.vel.tr();
+        if let Some(orbit) = SparseOrbit::from_pv((pos, vel), planet.body, Nanotime::zero()) {
+            draw_orbit(d, planet.pos.tr(), &orbit, Color::TEAL);
         }
     }
 }
 
-pub fn draw_world(world: &World, client: &ClientSpecificInfo, d: &mut RaylibDrawHandle) {
-    let camera = some_or_return!(client.scene_graph.camera());
+pub fn draw_world(world: &World, client: &FrontEnd, d: &mut RaylibDrawHandle) {
+    let camera = some_or_return!(client.scene_graph.camera(world));
 
     draw_stars(d, &world.stars, &camera, client.screen_dims);
 
@@ -355,10 +365,10 @@ pub fn draw_world(world: &World, client: &ClientSpecificInfo, d: &mut RaylibDraw
 
     draw_origin_and_range_indicators(&mut c);
 
-    draw_asteroids(&mut c, world, &client.assets, &client);
+    draw_asteroids(&mut c, world, &client);
 
     if client.scene_graph.is_real_view() {
-        draw_computer_target_isometry(&mut c, &world.computers, &world.parts, &world.grids);
+        draw_computer_targets(&mut c, world);
     }
 
     draw_excavators(&mut c, world);
@@ -373,24 +383,9 @@ pub fn draw_world(world: &World, client: &ClientSpecificInfo, d: &mut RaylibDraw
 
     draw_selection_info(&mut c, &world.grids, &client);
 
-    draw_lights(
-        &mut c,
-        &world.grids,
-        &world.parts,
-        &world.computers,
-        &world.lights,
-        world.ticks as u32,
-        &client,
-    );
+    draw_lights(&mut c, world, &client);
 
-    draw_thruster_plumes(
-        &mut c,
-        &world.grids,
-        &world.parts,
-        &world.thrusters,
-        &client,
-        world.ticks,
-    );
+    draw_thruster_plumes(&mut c, world, &client);
 
     draw_trackers(&mut c, &world.tracking, client.alt_mode);
 
@@ -400,7 +395,7 @@ pub fn draw_world(world: &World, client: &ClientSpecificInfo, d: &mut RaylibDraw
 
     if client.alt_mode {
         draw_grid_outlines(&mut c, &world.grids);
-        draw_thruster_classification(&mut c, &world.grids, &world.parts, &world.thrusters);
+        draw_thruster_classification(&mut c, world);
     }
 
     draw_outline_hovered_parts(&mut c, &world.grids, &world.parts, &client);
@@ -419,9 +414,6 @@ pub fn draw_world(world: &World, client: &ClientSpecificInfo, d: &mut RaylibDraw
     draw_radio_transmissions(&mut c, &world.transmissions);
 
     draw_transmission_rx_locations(&mut c, &client.transmissions);
-
-    // draw_isometry_axes(&mut c, world.camera.isometry, "CAM", Vec2::splat(5.0));
-    // draw_isometry_axes(&mut c, world.target_camera.isometry, "", Vec2::splat(5.0));
 
     draw_editor_part(&mut c, world, client);
 
@@ -444,15 +436,11 @@ pub fn draw_world(world: &World, client: &ClientSpecificInfo, d: &mut RaylibDraw
         _ = draw_docking_interface(&mut c, world, &docking);
     }
 
-    // draw_parts_zoo(&world.prototypes, &mut c);
-
-    draw_players(&mut c, &world.players);
+    draw_players(&mut c, &world.players, client.alt_mode);
 
     drop(c);
 
     draw_grid_far_indicators(&world.grids, d, &client, &raylib_camera, &client.assets);
-
-    draw_waypoint_far_indicators(&world.computers, d, &raylib_camera);
 
     draw_selected_grid_info(d, &client, &world, client.screen_dims, &client.assets);
 
@@ -469,17 +457,25 @@ pub fn draw_world(world: &World, client: &ClientSpecificInfo, d: &mut RaylibDraw
     // draw_test_isos(&mut d)
 }
 
-fn draw_players(d: &mut RaylibDrawHandle, players: &Components<Player>) {
+fn draw_players(d: &mut RaylibDrawHandle, players: &Components<Player>, alt_mode: bool) {
     for (id, player) in players.iter() {
         if player.is_connected {
-            fill_circle(d, player.iso.tr(), 4.0, Color::RED);
+            fill_circle(d, player.pos.tr(), 0.2, Color::GRAY);
+            draw_isometry_axes(d, player.pos, "", DVec2::splat(0.6));
         } else {
-            draw_circle(d, player.iso.tr(), 2.0, Color::RED);
-            draw_circle(d, player.iso.tr(), 3.0, Color::RED);
+            draw_circle(d, player.pos.tr(), 0.2, Color::TEAL);
+            draw_circle(d, player.pos.tr(), 0.5, Color::BLUE);
         }
-        draw_isometry_axes(d, player.iso, "", DVec2::splat(3.0));
-        let text = format!("{} {}\n{:#?}", id, player.username, player.controls);
-        draw_text(d, player.iso, &text, 6.0);
+        if alt_mode {
+            let text = format!(
+                "{} {} {} {:?}",
+                id,
+                player.username,
+                velocity_str_v(player.vel.tr()),
+                player.controls
+            );
+            draw_text(d, player.pos, &text, 0.2);
+        }
     }
 }
 
@@ -541,11 +537,7 @@ fn draw_animation(d: &mut RaylibDrawHandle, assets: &Assets) {
     }
 }
 
-pub fn draw_selected_part_cursors(
-    d: &mut RaylibDrawHandle,
-    world: &World,
-    client: &ClientSpecificInfo,
-) {
+pub fn draw_selected_part_cursors(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
     let free = some_or_return!(client.scene_graph.free());
     for loc in &free.selected_vehicles {
         let grid = ok_or_continue!(world.grids.try_get(loc.grid_id));
@@ -575,11 +567,7 @@ pub fn draw_selected_part_cursors(
     }
 }
 
-pub fn draw_editor_selection_region(
-    d: &mut RaylibDrawHandle,
-    client: &ClientSpecificInfo,
-    world: &World,
-) {
+pub fn draw_editor_selection_region(d: &mut RaylibDrawHandle, client: &FrontEnd, world: &World) {
     let editor = some_or_return!(client.scene_graph.editor());
     let grid = ok_or_return!(world.grids.try_get(editor.vehicle));
     let hovered = some_or_return!(editor.hovered);
@@ -624,11 +612,7 @@ pub fn draw_grid_lattice_point(
     draw_rectangle(d, iso, dims, color, 0.03);
 }
 
-pub fn draw_hovered_part_cursor(
-    d: &mut RaylibDrawHandle,
-    world: &World,
-    client: &ClientSpecificInfo,
-) {
+pub fn draw_hovered_part_cursor(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
     let gridloc = some_or_return!(client.hovered_grid_loc());
     let grid = ok_or_return!(world.grids.try_get(gridloc.grid_id));
 
@@ -734,7 +718,7 @@ fn draw_outline_hovered_parts(
     d: &mut RaylibDrawHandle,
     grids: &Components<VehicleGrid>,
     parts: &Components<Part>,
-    client: &ClientSpecificInfo,
+    client: &FrontEnd,
 ) {
     let loc = some_or_return!(client.hovered_grid_loc());
     let grid = ok_or_return!(grids.try_get(loc.grid_id));
@@ -789,7 +773,7 @@ fn get_orbital_parent_name(world: &World, parent: Ent) -> Option<&str> {
 
 fn draw_selected_grid_info(
     d: &mut RaylibDrawHandle,
-    client: &ClientSpecificInfo,
+    client: &FrontEnd,
     world: &World,
     screen_dims: Vec2,
     assets: &Assets,
@@ -868,17 +852,12 @@ pub fn is_zoomed_out(camera: &Camera2D) -> bool {
     camera.zoom > 0.1
 }
 
-pub fn draw_thruster_classification(
-    d: &mut RaylibDrawHandle,
-    grids: &Components<VehicleGrid>,
-    parts: &Components<Part>,
-    thrusters: &Components<Thruster>,
-) {
-    for grid in grids.values() {
+pub fn draw_thruster_classification(d: &mut RaylibDrawHandle, world: &World) {
+    for grid in world.grids.values() {
         let root = grid.origin();
         for thruster_id in &grid.thrusters {
-            let part = ok_or_continue!(parts.try_get(*thruster_id));
-            let thruster = ok_or_continue!(thrusters.try_get(*thruster_id));
+            let part = ok_or_continue!(world.parts.try_get(*thruster_id));
+            let thruster = ok_or_continue!(world.thrusters.try_get(*thruster_id));
             let part_iso = part.region.center_isometry();
             let wrench = body_frame_wrench(
                 thruster.max_thrust(),
@@ -941,7 +920,7 @@ pub fn draw_grid_outlines(d: &mut RaylibDrawHandle, grids: &Components<VehicleGr
     }
 }
 
-pub fn draw_editor_part(d: &mut RaylibDrawHandle, world: &World, client: &ClientSpecificInfo) {
+pub fn draw_editor_part(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
     let editor = some_or_return!(client.scene_graph.editor());
     let proto_id = some_or_return!(editor.prototype_id);
     let coord = some_or_return!(editor.hovered);
@@ -988,7 +967,7 @@ pub fn draw_editor_rename_field(d: &mut RaylibDrawHandle, fe: &FrontEnd) {
     draw_text_centered(d, font.as_ref(), &text, pos, font_size, text_color);
 }
 
-pub fn get_hovered_prototype(client: &ClientSpecificInfo, world: &World) -> Option<Ent> {
+pub fn get_hovered_prototype(client: &FrontEnd, world: &World) -> Option<Ent> {
     let editor = client.scene_graph.editor()?;
     let layer = editor.layer?;
     let coord = editor.hovered?;
@@ -1124,18 +1103,13 @@ pub fn draw_parts(
     }
 }
 
-pub fn draw_computer_target_isometry(
-    d: &mut RaylibDrawHandle,
-    computers: &Components<Computer>,
-    parts: &Components<Part>,
-    grids: &Components<VehicleGrid>,
-) {
-    for (cpu_id, cpu) in computers.iter() {
-        let Ok(part) = parts.try_get(*cpu_id) else {
+pub fn draw_computer_targets(d: &mut RaylibDrawHandle, world: &World) {
+    for (cpu_id, cpu) in world.computers.iter() {
+        let Ok(part) = world.parts.try_get(*cpu_id) else {
             continue;
         };
 
-        let Ok(grid) = grids.try_get(part.grid_id) else {
+        let Ok(grid) = world.grids.try_get(part.grid_id) else {
             continue;
         };
 
@@ -1245,33 +1219,7 @@ fn draw_transmission_rx_locations(
     }
 }
 
-fn draw_waypoint_far_indicators(
-    computers: &Components<Computer>,
-    d: &mut RaylibDrawHandle,
-    camera: &Camera2D,
-) {
-    if camera.zoom > ZOOM_NEAR_FAR_THRESHOLD {
-        return;
-    }
-
-    let marker_radius = 11.0f32;
-
-    for cpu in computers.values() {
-        if !cpu.is_on() {
-            continue;
-        }
-
-        let Some(wp) = cpu.current_waypoint() else {
-            continue;
-        };
-
-        let pos = glam_to_raylib_swap_y(wp.translation);
-        let pos = d.get_world_to_screen2D(pos, camera);
-        d.draw_circle_lines_v(pos, marker_radius, Color::GRAY);
-    }
-}
-
-fn draw_waypoint_widget(d: &mut RaylibDrawHandle, client: &ClientSpecificInfo) {
+fn draw_waypoint_widget(d: &mut RaylibDrawHandle, client: &FrontEnd) {
     let free = some_or_return!(client.scene_graph.free());
     if free.selected_vehicles.is_empty() {
         return;
@@ -1421,7 +1369,7 @@ pub fn draw_ellipse(d: &mut RaylibDrawHandle, iso: Isometry2d, dims: DVec2, colo
 fn draw_selection_info(
     d: &mut RaylibDrawHandle,
     grids: &Components<VehicleGrid>,
-    client: &ClientSpecificInfo,
+    client: &FrontEnd,
 ) {
     let free = some_or_return!(client.scene_graph.free());
     if let Some(gridloc) = free.hovered_vehicle {
@@ -1626,32 +1574,25 @@ fn draw_grid_lines(
     }
 }
 
-fn draw_thruster_plumes(
-    d: &mut RaylibDrawHandle,
-    grids: &Components<VehicleGrid>,
-    parts: &Components<Part>,
-    thrusters: &Components<Thruster>,
-    client: &ClientSpecificInfo,
-    ticks: u64,
-) {
-    let camera = some_or_return!(client.scene_graph.camera());
+fn draw_thruster_plumes(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
+    let camera = some_or_return!(client.scene_graph.camera(world));
 
     if camera.zoom < 2.0 {
         return;
     }
 
-    let time_offset = apparent_elapsed_time(ticks).subsec_millis() as f64 / 1000.0;
+    let time_offset = apparent_elapsed_time(world.ticks).subsec_millis() as f64 / 1000.0;
 
-    for (e, t) in thrusters.iter() {
+    for (e, t) in world.thrusters.iter() {
         if t.clamped_throttle() < 0.001 {
             continue;
         }
 
-        let Ok(part) = parts.try_get(*e) else {
+        let Ok(part) = world.parts.try_get(*e) else {
             continue;
         };
 
-        let Ok(grid) = grids.try_get(part.grid_id) else {
+        let Ok(grid) = world.grids.try_get(part.grid_id) else {
             continue;
         };
 
@@ -1690,27 +1631,19 @@ fn draw_thruster_plumes(
     }
 }
 
-fn draw_lights(
-    d: &mut RaylibDrawHandle,
-    grids: &Components<VehicleGrid>,
-    parts: &Components<Part>,
-    computers: &Components<Computer>,
-    lights: &Components<Light>,
-    ticks: u32,
-    client: &ClientSpecificInfo,
-) {
-    let camera = some_or_return!(client.scene_graph.camera());
+fn draw_lights(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
+    let camera = some_or_return!(client.scene_graph.camera(world));
 
     if camera.zoom < 2.0 {
         return;
     }
 
-    for grid in grids.values() {
+    for grid in world.grids.values() {
         let Some(cpu_id) = grid.computers.first() else {
             continue;
         };
 
-        let Ok(cpu) = computers.try_get(*cpu_id) else {
+        let Ok(cpu) = world.computers.try_get(*cpu_id) else {
             continue;
         };
 
@@ -1721,16 +1654,16 @@ fn draw_lights(
         let origin = grid.origin();
 
         for light_id in &grid.lights {
-            let Ok(light) = lights.try_get(*light_id) else {
+            let Ok(light) = world.lights.try_get(*light_id) else {
                 continue;
             };
-            let Ok(part) = parts.try_get(*light_id) else {
+            let Ok(part) = world.parts.try_get(*light_id) else {
                 continue;
             };
 
             let rate = 3;
 
-            if !light.is_on(ticks * rate) {
+            if !light.is_on(world.ticks as u32 * rate) {
                 continue;
             }
 
@@ -1837,40 +1770,38 @@ fn draw_terrain_chunk(
     drew_tiles
 }
 
-fn is_chunk_onscreen(rock_iso: Isometry2d, chunk: ChunkIndex, client: &ClientSpecificInfo) -> bool {
-    if let Some(camera) = client.scene_graph.camera() {
-        let dims = client.screen_dims;
-        let bb = chunk.bb();
-        for corner in bb.corners().iter().chain(&[bb.center]) {
-            let w = rock_iso * Isometry2d::from_pos(*corner);
-            let s = get_world_to_screen(&camera, w.translation, dims);
-            if s.min_element() > 0.0 && s.y < dims.y && s.x < dims.x {
-                return true;
-            }
+fn is_chunk_onscreen(
+    camera: Camera,
+    rock_iso: Isometry2d,
+    chunk: ChunkIndex,
+    client: &FrontEnd,
+) -> bool {
+    let dims = client.screen_dims;
+    let bb = chunk.bb();
+    for corner in bb.corners().iter().chain(&[bb.center]) {
+        let w = rock_iso * Isometry2d::from_pos(*corner);
+        let s = get_world_to_screen(&camera, w.translation, dims);
+        if s.min_element() > 0.0 && s.y < dims.y && s.x < dims.x {
+            return true;
         }
-        // TODO stopgap; implement better BB collisions
-        for corner in bb.corners().iter().chain(&[bb.center]) {
-            let corner = (corner - bb.center) * 0.5 + bb.center;
-            let w = rock_iso * Isometry2d::from_pos(corner);
-            let s = get_world_to_screen(&camera, w.translation, dims);
-            if s.min_element() > 0.0 && s.y < dims.y && s.x < dims.x {
-                return true;
-            }
+    }
+    // TODO stopgap; implement better BB collisions
+    for corner in bb.corners().iter().chain(&[bb.center]) {
+        let corner = (corner - bb.center) * 0.5 + bb.center;
+        let w = rock_iso * Isometry2d::from_pos(corner);
+        let s = get_world_to_screen(&camera, w.translation, dims);
+        if s.min_element() > 0.0 && s.y < dims.y && s.x < dims.x {
+            return true;
         }
     }
     false
 }
 
-fn draw_asteroid(
-    d: &mut RaylibDrawHandle,
-    rock: &BigRock,
-    assets: &Assets,
-    world: &World,
-    client: &ClientSpecificInfo,
-) {
-    let camera = some_or_return!(client.scene_graph.camera());
+fn draw_asteroid(d: &mut RaylibDrawHandle, rock: &BigRock, world: &World, client: &FrontEnd) {
+    let camera = some_or_return!(client.scene_graph.camera(world));
 
-    let spritesheet = assets
+    let spritesheet = client
+        .assets
         .terrain_spritesheet
         .as_ref()
         .expect("No terrain spritesheet");
@@ -1910,7 +1841,7 @@ fn draw_asteroid(
             for x in min.0.x..=max.0.x {
                 for y in min.0.y..=max.0.y {
                     let c = ChunkIndex((x, y).into());
-                    if is_chunk_onscreen(rock.iso, c, &client) {
+                    if is_chunk_onscreen(camera, rock.iso, c, &client) {
                         if let Some(id) = rock.chunks.get(&c) {
                             chunks_to_draw.push((c, *id));
                         }
@@ -1959,14 +1890,9 @@ fn draw_asteroid(
     }
 }
 
-fn draw_asteroids(
-    d: &mut RaylibDrawHandle,
-    world: &World,
-    assets: &Assets,
-    client: &ClientSpecificInfo,
-) {
+fn draw_asteroids(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
     for (_id, rock) in world.asteroids.iter() {
-        draw_asteroid(d, rock, assets, world, client);
+        draw_asteroid(d, rock, world, client);
     }
 }
 
@@ -2193,7 +2119,7 @@ fn draw_node(
 
 // pub fn draw_debug_info(
 //     world: &World,
-//     client: &ClientSpecificInfo,
+//     client: &FrontEnd,
 //     assets: &Assets,
 //     timers: &DebugTimers,
 //     node: &ClientNode,

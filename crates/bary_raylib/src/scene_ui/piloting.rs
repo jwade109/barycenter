@@ -1,15 +1,8 @@
-use crate::{Assets, PilotingState, Scene, UiBuilder, get_part_info_modal};
-use bary_core::prelude::{Rotation, Vec2};
+use crate::{Assets, Scene, UiBuilder, get_part_info_modal};
+use bary_core::prelude::{Ent, Rotation, Vec2};
 use bary_sim::{Instruction, World, WorldDelta};
 
-pub fn make_piloting_ui(
-    ui: &mut UiBuilder,
-    piloting: &mut PilotingState,
-    world: &World,
-    assets: &Assets,
-) {
-    let grid_id = piloting.ownship;
-
+pub fn make_piloting_ui(ui: &mut UiBuilder, grid_id: Ent, world: &World, assets: &Assets) {
     ui.window_at("piloting", Vec2::splat(40.0), |ui| {
         let Some(grid) = world.grids.get(grid_id) else {
             ui.heading(format!("Failed to find vehicle {grid_id}"));
