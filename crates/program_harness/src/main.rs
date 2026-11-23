@@ -18,21 +18,24 @@ fn main() -> std::io::Result<()> {
     simple_logger::init().unwrap();
 
     let programs = Arc::new(Mutex::new(vec![
-        run_program("cargo", &["run", "--release", "--bin", "server"])?,
-        run_program("cargo", &["run", "--release", "--bin", "bary_debugger"])?,
         run_program(
             "cargo",
-            &[
-                "run",
-                "--release",
-                "--bin",
-                "client_app",
-                "--",
-                "--use-mp-backend",
-                "--username",
-                "kim_mcbudget",
-            ],
+            &["run", "--release", "--bin", "server", "--", "saves/"],
         )?,
+        run_program("cargo", &["run", "--release", "--bin", "bary_debugger"])?,
+        // run_program(
+        //     "cargo",
+        //     &[
+        //         "run",
+        //         "--release",
+        //         "--bin",
+        //         "client_app",
+        //         "--",
+        //         "--use-mp-backend",
+        //         "--username",
+        //         "kim_mcbudget",
+        //     ],
+        // )?,
     ]));
 
     let is_running = Arc::new(AtomicBool::new(true));

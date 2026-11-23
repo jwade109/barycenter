@@ -40,7 +40,7 @@ impl LockedState {
     pub fn new(player_id: Ent) -> Self {
         Self {
             player_id,
-            zoom: 10.0,
+            zoom: 100.0,
         }
     }
 

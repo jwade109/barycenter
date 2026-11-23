@@ -1,17 +1,22 @@
 use crate::{World, WorldBuilder};
 use bary_core::prelude::*;
 use log::*;
+use postcard::to_allocvec;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub fn save_world(dir: impl AsRef<Path>, world: &World, overwrite: bool) -> BaryResult<()> {
+pub fn save_world(
+    dir: impl AsRef<Path>,
+    world: &World,
+    overwrite: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let dir = dir.as_ref();
 
     if std::fs::exists(dir)? {
         if overwrite {
             std::fs::remove_dir_all(dir)?;
         } else {
-            return Err(BaryError::SaveAlreadyExists);
+            return Err(BaryError::SaveAlreadyExists.into());
         }
     }
 
@@ -19,55 +24,55 @@ pub fn save_world(dir: impl AsRef<Path>, world: &World, overwrite: bool) -> Bary
 
     info!("Saving world to {}", dir.display());
 
-    let s = bincode::serialize(&world.ticks).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.ticks)?;
     std::fs::write(dir.join("ticks.bin"), s)?;
 
     save(&world.spawner, &dir, "spawner.bin")?;
     save(&world.blueprints, &dir, "blueprints.bin")?;
 
-    let s = bincode::serialize(&world.prototypes).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.prototypes)?;
     std::fs::write(dir.join("prototypes.bin"), s)?;
 
-    let s = bincode::serialize(&world.grids).map_err(|_| BaryError::BincodeError)?;
+    let s = to_allocvec(&world.grids)?;
     std::fs::write(dir.join("grids.bin"), s)?;
 
-    let s = bincode::serialize(&world.parts).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.parts)?;
     std::fs::write(dir.join("parts.bin"), s)?;
 
-    let s = bincode::serialize(&world.thrusters).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.thrusters)?;
     std::fs::write(dir.join("thrusters.bin"), s)?;
 
-    let s = bincode::serialize(&world.computers).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.computers)?;
     std::fs::write(dir.join("computers.bin"), s)?;
 
-    let s = bincode::serialize(&world.lights).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.lights)?;
     std::fs::write(dir.join("lights.bin"), s)?;
 
-    let s = bincode::serialize(&world.inventories).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.inventories)?;
     std::fs::write(dir.join("inventories.bin"), s)?;
 
-    let s = bincode::serialize(&world.machines).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.machines)?;
     std::fs::write(dir.join("machines.bin"), s)?;
 
-    let s = bincode::serialize(&world.debug_portals).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.debug_portals)?;
     std::fs::write(dir.join("debug_portals.bin"), s)?;
 
-    let s = bincode::serialize(&world.pipes).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.pipes)?;
     std::fs::write(dir.join("pipes.bin"), s)?;
 
-    let s = bincode::serialize(&world.excavators).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.excavators)?;
     std::fs::write(dir.join("excavators.bin"), s)?;
 
-    let s = bincode::serialize(&world.asteroids).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.asteroids)?;
     std::fs::write(dir.join("asteroids.bin"), s)?;
 
-    let s = bincode::serialize(&world.planets).map_err(|_| BaryError::BincodeError)?;
+    let s = bincode::serialize(&world.planets)?;
     std::fs::write(dir.join("planets.bin"), s)?;
 
-    let s = comp(bincode::serialize(&world.terrain_chunks).map_err(|_| BaryError::BincodeError)?);
+    let s = comp(bincode::serialize(&world.terrain_chunks)?);
     std::fs::write(dir.join("terrain_chunks.bin"), s)?;
 
-    let s = comp(bincode::serialize(&world.terrain_tiles).map_err(|_| BaryError::BincodeError)?);
+    let s = comp(bincode::serialize(&world.terrain_tiles)?);
     std::fs::write(dir.join("terrain_tiles.bin"), s)?;
 
     save(&world.players, dir, "players.bin")?;
@@ -97,11 +102,11 @@ fn save<T: Serialize>(val: &T, dir: &Path, name: &str) -> BaryResult<()> {
     Ok(())
 }
 
-pub fn load_yaml_scenario(path: impl AsRef<Path>) -> BaryResult<World> {
+pub fn load_yaml_scenario(path: impl AsRef<Path>) -> Result<World, Box<dyn std::error::Error>> {
     Ok(WorldBuilder::new().assets().parse_file(path)?.build())
 }
 
-pub fn load_world(dir: impl AsRef<Path>) -> BaryResult<World> {
+pub fn load_world(dir: impl AsRef<Path>) -> Result<World, Box<dyn std::error::Error>> {
     let dir = dir.as_ref();
     info!("Loading world from {}", dir.display());
 
@@ -133,7 +138,7 @@ pub fn load_world(dir: impl AsRef<Path>) -> BaryResult<World> {
     world.pipes = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
 
     let s = std::fs::read(dir.join("grids.bin"))?;
-    world.grids = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.grids = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("parts.bin"))?;
     world.parts = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;

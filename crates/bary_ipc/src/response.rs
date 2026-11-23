@@ -2,7 +2,7 @@ use bary_core::prelude::{Ent, Isometry2d, ParamValue, TableIdent};
 use bary_sim::{SimulationEvent, WorldDelta};
 use enum_discriminant::discriminant;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, net::SocketAddr};
+use std::{collections::BTreeMap, net::SocketAddr, path::PathBuf};
 
 use crate::{ClientId, ClientTelemetry, SyncFrame};
 
@@ -89,12 +89,10 @@ pub enum ServerTelemetry {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum ServerResponse {
     Pong,
-    Ping,
     Ack,
     Nack(String),
     ClientConnected(ClientId, SocketAddr),
     ClientDisconnected(ClientId, SocketAddr),
-    Unsupported(String),
     ServerSays(String),
     /// broadcasted to all clients when the server loads a new world
     HaveNewSave,
@@ -132,6 +130,8 @@ pub enum ServerResponse {
     ClientTelemetry(ClientId, ClientTelemetry),
     /// sent by server in response to [ServerRequest::RequestPlayerId]
     YourPlayerIdIs(Ent),
+    /// list of available save files
+    SaveFiles(Vec<PathBuf>),
 }
 
 impl ServerResponse {

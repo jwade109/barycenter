@@ -1,6 +1,8 @@
 use bary_core::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
+
+use crate::World;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Tracker {
@@ -31,5 +33,47 @@ impl Tracker {
         Self::enqueue(&mut self.origin, o);
         Self::enqueue(&mut self.center_of_mass, com);
         Self::enqueue(&mut self.centroid, c);
+    }
+
+    /// Appends grid locations to tracker entities.
+    pub(crate) fn update_all(world: &mut World) {
+        if world.ticks % 20 > 0 {
+            return;
+        }
+
+        let mut to_despawn = BTreeSet::new();
+
+        for (grid_id, grid) in world.grids.iter() {
+            let is_controllable = !grid.computers.is_empty();
+            if world.tracking.try_get(*grid_id).is_err() && is_controllable {
+                let tracker = Tracker::default();
+                world.tracking.spawn(*grid_id, tracker);
+            }
+        }
+
+        for (player_id, _) in world.players.iter() {
+            if world.tracking.try_get(*player_id).is_err() {
+                let tracker = Tracker::default();
+                world.tracking.spawn(*player_id, tracker);
+            }
+        }
+
+        for (id, tracker) in world.tracking.iter_mut() {
+            if let Ok(grid) = world.grids.try_get(*id) {
+                tracker.add(
+                    grid.origin(),
+                    grid.particle_location,
+                    grid.centroid_isometry(),
+                );
+            } else if let Ok(player) = world.players.try_get(*id) {
+                tracker.add(player.pos, player.pos, player.pos);
+            } else {
+                to_despawn.insert(*id);
+            }
+        }
+
+        for id in to_despawn {
+            _ = world.tracking.despawn(id);
+        }
     }
 }

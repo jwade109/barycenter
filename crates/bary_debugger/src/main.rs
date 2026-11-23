@@ -10,6 +10,7 @@ use egui::{Id, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
 use log::*;
 use std::collections::{BTreeMap, VecDeque};
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -109,6 +110,7 @@ struct App {
     telemetry: BTreeMap<u8, ServerResponse>,
     logs: VecDeque<ServerResponse>,
 
+    available_save_files: Vec<PathBuf>,
     grid_info: BTreeMap<Ent, GridTelemetry>,
 
     server_ticks: u64,
@@ -169,6 +171,7 @@ impl Default for App {
         Self {
             sender: request_sender,
             receiver: response_receiver,
+            available_save_files: Vec::new(),
             telemetry: BTreeMap::new(),
             logs: VecDeque::new(),
             server_ticks: 0,
@@ -195,6 +198,7 @@ fn background_thread(
     response_sender: mpsc::Sender<ServerResponse>,
 ) {
     client.send(ServerRequest::Ping);
+    client.send(ServerRequest::ListAvailableSaves);
 
     loop {
         for msg in client.update() {
@@ -240,11 +244,26 @@ impl App {
 
         ui.separator();
 
-        for name in ["scenario_c", "scenario_d", "scenario_e", "scenario_f"] {
-            let path = format!("saves/{}.yaml", name);
-            if ui.button(format!("Load {}", name)).clicked() {
-                _ = self.sender.send(ServerRequest::LoadSave(path));
+        if ui.button("Request Save File Manifest").clicked() {
+            _ = self.sender.send(ServerRequest::ListAvailableSaves);
+        }
+
+        ui.separator();
+
+        if self.available_save_files.is_empty() {
+            ui.label("(No save files available");
+        }
+
+        for name in &self.available_save_files {
+            if ui.button(format!("Load {}", name.display())).clicked() {
+                _ = self.sender.send(ServerRequest::LoadSave(name.clone()));
             }
+        }
+
+        ui.separator();
+
+        if ui.button("Save World").clicked() {
+            _ = self.sender.send(ServerRequest::SaveWorld);
         }
 
         ui.separator();
@@ -365,8 +384,53 @@ impl App {
                     username: "<debugger>".to_string(),
                 });
             }
-            e => {
-                debug!("Unhandled message from server: {e:?}");
+            ServerResponse::Pong => {
+                debug!("Got a pong!");
+            }
+            ServerResponse::Nack(message) => {
+                error!("Got a NACK from the server: {message}");
+            }
+            ServerResponse::ClientConnected(client_id, socket_addr) => {
+                debug!("Notify: client {client_id} ({socket_addr}) has connected");
+            }
+            ServerResponse::ClientDisconnected(client_id, socket_addr) => {
+                debug!("Notify: client {client_id} ({socket_addr}) has disconnected");
+            }
+            ServerResponse::ServerSays(message) => {
+                info!("Server says: {message:?}");
+            }
+            ServerResponse::SyncFrame(sync_frame) => {
+                // PASS
+            }
+            ServerResponse::Kicked => {
+                warn!("We've been kicked from the server!");
+            }
+            ServerResponse::SuccessfullyConnected => {
+                info!("We've successfully connected!");
+            }
+            ServerResponse::PlayerConnected(username) => {
+                info!("Player {username:?} has connected");
+            }
+            ServerResponse::PlayerDisconnected(username) => {
+                info!("Player {username:?} has disconnected");
+            }
+            ServerResponse::ChatMessage(client_id, message) => {
+                info!("Client {client_id} says: {message:?}");
+            }
+            ServerResponse::Simulation(event) => {
+                debug!("Sim event: {event:?}")
+            }
+            ServerResponse::Parameters(params) => {
+                debug!("Parameters: {params:?}")
+            }
+            ServerResponse::NewSimSpeed(speed) => {
+                debug!("New sim speed: {speed}");
+            }
+            ServerResponse::YourPlayerIdIs(id) => {
+                info!("Got new allocated player ID: {id}");
+            }
+            ServerResponse::SaveFiles(saves) => {
+                self.available_save_files = saves;
             }
         }
     }

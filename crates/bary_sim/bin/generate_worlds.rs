@@ -2,7 +2,7 @@ use bary_core::prelude::*;
 use bary_factory::*;
 use bary_sim::*;
 
-fn scenario_a() -> BaryResult<()> {
+fn scenario_a() -> Result<(), Box<dyn std::error::Error>> {
     let world = WorldBuilder::new()
         .assets()
         .planet("Lado", Isometry2d::ZERO, Isometry2d::ZERO, 3E15, 100.0)
@@ -46,7 +46,7 @@ fn scenario_a() -> BaryResult<()> {
     save_world("saves/scenario_a", &world, true)
 }
 
-fn scenario_b() -> BaryResult<()> {
+fn scenario_b() -> Result<(), Box<dyn std::error::Error>> {
     let world = WorldBuilder::new()
         .assets()
         .blueprint(("pollux", 0))
@@ -67,7 +67,7 @@ fn scenario_b() -> BaryResult<()> {
     save_world("saves/scenario_b", &world, true)
 }
 
-fn scenario_c() -> BaryResult<()> {
+fn scenario_c() -> Result<(), Box<dyn std::error::Error>> {
     let world = WorldBuilder::new()
         .assets()
         .parse_file("scenario_c.yaml")?
@@ -76,7 +76,7 @@ fn scenario_c() -> BaryResult<()> {
     save_world("saves/scenario_c", &world, true)
 }
 
-fn main() -> BaryResult<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     simple_logger::init_with_level(log::Level::Trace).unwrap();
 
     scenario_a()?;

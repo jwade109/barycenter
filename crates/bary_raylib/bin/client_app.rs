@@ -11,7 +11,7 @@ use clap::Parser;
 use log::*;
 use raylib::prelude::*;
 use rdev::{Button, Key};
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 
 mod backend;
 mod mp_backend;
@@ -499,6 +499,8 @@ struct Args {
     run_server: bool,
     #[arg(long)]
     use_mp_backend: bool,
+    #[arg(short = 's', long, default_value = "saves/")]
+    save_files_dir: PathBuf,
 }
 
 fn make_gui(raylib: &Raylib, app: &mut GameApp, timers: &DebugTimers) -> Tree<UiMessage> {
@@ -592,7 +594,7 @@ fn server_thread(args: Args) {
 
     info!("Starting server in background thread");
 
-    let mut server = match BaryServer::new(args.server_port) {
+    let mut server = match BaryServer::new(args.save_files_dir, args.server_port) {
         Ok(server) => server,
         Err(e) => {
             error!("Failed to start server: {e:?}");

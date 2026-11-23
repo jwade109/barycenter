@@ -19,6 +19,7 @@ image = "0.25.10"
 anyhow = "1.0.102"
 serde_yaml = "0.9.34"
 simple_logger = "5.2.0"
+postcard = { version = "1.2.0", features = ["alloc"] }
 
 [[bin]]
 name = "ship2png"

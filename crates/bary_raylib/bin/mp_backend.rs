@@ -39,7 +39,7 @@ impl MultiplayerBackend {
         self.node.send(ServerRequest::SetSimSpeed(speed));
     }
 
-    fn load_save(&mut self, path: impl Into<String>) {
+    fn load_save(&mut self, path: impl Into<PathBuf>) {
         self.node.send(ServerRequest::LoadSave(path.into()));
     }
 

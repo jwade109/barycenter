@@ -42,19 +42,6 @@ pub fn sys_propagate_planets(planets: &mut Components<Planet>) {
     }
 }
 
-pub fn sys_propagate_n_body_accel(
-    grids: &mut Components<VehicleGrid>,
-    planets: &Components<Planet>,
-) {
-    for grid in grids.values_mut() {
-        let planet_id = some_or_continue!(grid.orbital_parent);
-        let planet = some_or_continue!(planets.get(planet_id));
-        let v = grid.particle_location.translation - planet.pos.translation;
-        let accel = planet.gravity(v);
-        grid.velocity.translation += accel * NOMINAL_DT;
-    }
-}
-
 /// Updates vehicle thruster states according to the
 /// primary computer on the parent grid. If the grid
 /// has no computer, or that computer has not changed
@@ -129,48 +116,6 @@ pub fn sys_update_thrusters(world: &mut World) -> BTreeSet<Ent> {
     }
 
     needs_update
-}
-
-/// Appends grid locations to tracker entities.
-pub fn sys_update_trackers(world: &mut World) {
-    if world.ticks % 20 > 0 {
-        return;
-    }
-
-    let mut to_despawn = BTreeSet::new();
-
-    for (grid_id, grid) in world.grids.iter() {
-        let is_controllable = !grid.computers.is_empty();
-        if world.tracking.try_get(*grid_id).is_err() && is_controllable {
-            let tracker = Tracker::default();
-            world.tracking.spawn(*grid_id, tracker);
-        }
-    }
-
-    for (player_id, _) in world.players.iter() {
-        if world.tracking.try_get(*player_id).is_err() {
-            let tracker = Tracker::default();
-            world.tracking.spawn(*player_id, tracker);
-        }
-    }
-
-    for (id, tracker) in world.tracking.iter_mut() {
-        if let Ok(grid) = world.grids.try_get(*id) {
-            tracker.add(
-                grid.origin(),
-                grid.particle_location,
-                grid.centroid_isometry(),
-            );
-        } else if let Ok(player) = world.players.try_get(*id) {
-            tracker.add(player.pos, player.pos, player.pos);
-        } else {
-            to_despawn.insert(*id);
-        }
-    }
-
-    for id in to_despawn {
-        _ = world.tracking.despawn(id);
-    }
 }
 
 pub fn get_excavator_tiles(

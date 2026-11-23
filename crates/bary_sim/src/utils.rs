@@ -931,7 +931,7 @@ pub fn update_world(world: &mut World) -> WorldUpdate {
         sys_update_computers(world);
         sys_propagate_planets(&mut world.planets);
         sys_propagate_grid_rigid_bodies(&mut world.grids);
-        sys_propagate_n_body_accel(&mut world.grids, &world.planets);
+        VehicleGrid::propagate_gravity(world);
         sys_report_acceleration_to_cpus(world);
     }
 
@@ -944,7 +944,7 @@ pub fn update_world(world: &mut World) -> WorldUpdate {
     {
         let _timer = timers.scope("update_trackers");
 
-        sys_update_trackers(world);
+        Tracker::update_all(world);
     }
 
     {
@@ -1634,13 +1634,13 @@ mod tests {
         }
 
         let r = save_world(save_path, &world, false);
-        assert_eq!(r, Ok(()));
+        assert!(r.is_ok());
 
         let r = save_world(save_path, &world, false);
-        assert_eq!(r, Err(BaryError::SaveAlreadyExists));
+        assert!(r.is_err());
 
         let r = save_world(save_path, &world, true);
-        assert_eq!(r, Ok(()));
+        assert!(r.is_ok());
 
         let world = load_world(save_path).expect("Expected successful load");
 

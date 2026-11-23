@@ -8,7 +8,7 @@ mp_client:
 	cargo run --release -- -a 127.0.0.1:5000 --username mattmarti
 
 server:
-	cargo run --release --bin server_tui
+	cargo run --release --bin server -- saves/
 
 debugger:
 	cargo run --release --bin bary_param_editor

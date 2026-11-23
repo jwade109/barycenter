@@ -93,6 +93,7 @@ struct ClientInfo {
 pub struct BaryServer {
     world: World,
     save_file: Option<PathBuf>,
+    save_files_dir: PathBuf,
     client_telemetry: HashMap<ClientId, ClientTelemetry>,
     client_info: HashMap<ClientId, ClientInfo>,
     tick_rate: u32,
@@ -102,17 +103,33 @@ pub struct BaryServer {
     transactions: HashMap<ClientId, PaginatedTransaction>,
 }
 
+fn list_save_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut ret = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        ret.push(entry.path());
+    }
+    Ok(ret)
+}
+
 impl BaryServer {
-    pub fn new(port: u16) -> BaryResult<Self> {
+    pub fn new(save_files_dir: impl Into<PathBuf>, port: u16) -> BaryResult<Self> {
         info!("Creating a new server node on port {port}");
 
         let node = ServerNode::new(port);
 
         let world = World::empty();
 
+        let save_files_dir = save_files_dir.into();
+
+        for save in list_save_files(&save_files_dir)? {
+            info!("Found save file: {}", save.display());
+        }
+
         Ok(Self {
             world,
             save_file: None,
+            save_files_dir,
             client_telemetry: HashMap::new(),
             client_info: HashMap::new(),
             tick_rate: 1,
@@ -189,7 +206,7 @@ impl BaryServer {
                 self.node.send(*client, msg);
                 tr.has_sent_header = true;
             }
-            for _ in 0..100 {
+            for _ in 0..500 {
                 if let Some(data) = tr.entities.pop() {
                     info!("[{client}] Sending entity {}", data);
                     let fragment = DownloadFragment::Entity(data);
@@ -246,6 +263,18 @@ impl BaryServer {
         self.node.send(id, reply);
     }
 
+    fn on_request_list_available_saves(&mut self, id: ClientId) {
+        match list_save_files(&self.save_files_dir) {
+            Ok(saves) => {
+                let response = ServerResponse::SaveFiles(saves);
+                self.node.send(id, response);
+            }
+            Err(e) => {
+                self.nack(id, format!("Filesystem error: {e:?}"));
+            }
+        }
+    }
+
     fn on_accept_message(&mut self, client_id: ClientId, msg: ServerRequest) {
         debug!("Got a command: {:?}", msg);
 
@@ -289,9 +318,17 @@ impl BaryServer {
             ServerRequest::RequestPlayerId => {
                 self.on_request_player_id(client_id);
             }
-            e => {
-                let e = format!("{e:?}");
-                self.on_unsupported_message(e);
+            ServerRequest::Ack => {
+                info!("Client {client_id} has ACKed");
+            }
+            ServerRequest::Nack => {
+                info!("Client {client_id} has NACKed");
+            }
+            ServerRequest::ListAvailableSaves => {
+                self.on_request_list_available_saves(client_id);
+            }
+            ServerRequest::SaveWorld => {
+                self.on_request_save_world(client_id);
             }
         }
     }
@@ -326,14 +363,8 @@ impl BaryServer {
         info!("Started async world download for {id}");
     }
 
-    fn on_unsupported_message(&mut self, desc: String) {
-        warn!("Unsupported message type!");
-        self.node.broadcast(ServerResponse::Unsupported(desc));
-    }
-
     pub fn load_world(&mut self, path: impl AsRef<Path>) {
         let path = path.as_ref();
-        warn!("Trying to load save file: {}", path.display());
         match load_world(path) {
             Ok(world) => {
                 self.world = world;
@@ -344,6 +375,17 @@ impl BaryServer {
             }
             Err(e) => {
                 error!("Failed to load world: {e}");
+            }
+        }
+    }
+
+    pub fn on_request_save_world(&mut self, id: ClientId) {
+        let now = chrono::offset::Local::now();
+        let save_path = format!("saves/world-{}/", now.format("%Y-%m-%d-%H-%M-%S%.3f"));
+        match save_world(&save_path, &self.world, false) {
+            Ok(()) => self.ack(id),
+            Err(e) => {
+                self.nack(id, format!("Failed to save world to {save_path}: {e:?}"));
             }
         }
     }

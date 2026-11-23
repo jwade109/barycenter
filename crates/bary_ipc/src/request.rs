@@ -3,11 +3,10 @@ use bary_core::prelude::{Ent, Isometry2d, ParamValue, TableIdent};
 use bary_parts::PartPrototype;
 use bary_sim::{Computer, Part, Thruster, WorldDelta};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum ServerRequest {
-    Pong,
     Ping,
     Introduction {
         username: String,
@@ -19,30 +18,20 @@ pub enum ServerRequest {
     SetSimSpeed(u32),
     Ack,
     Nack,
-    Unsupported,
-    FindGridByName(String),
-    Entity(Ent),
-    PrintEntityInfo(TableIdent),
-    GridInfo(Ent, String, Isometry2d),
-    Proto(Ent, PartPrototype),
-    Part(Ent, Part),
-    Thruster(Ent, Thruster),
-    Computer(Ent, Computer),
-    RequestServerStatistics,
-    SetWaypoint(Ent, Isometry2d),
-    CameraPosition(Isometry2d),
     /// request from the client for table blobs
     DownloadTable(TableIdent),
-    /// client requests all blobs
-    ClientBlobRequestAll,
     /// information sent consistently by each client
     ClientTelemetry(ClientTelemetry),
     /// request by the client to perform a certain [`WorldDelta`]
     RequestDelta(WorldDelta),
+    /// request for a list of available save files to load
+    ListAvailableSaves,
     /// directive for the server to load a new save file
-    LoadSave(String),
+    LoadSave(PathBuf),
     /// directive for the server to send paginated world data
     BeginWorldDownload,
+    /// commands the server to save the world to disk
+    SaveWorld,
     /// gets parameters
     RequestParams,
     /// sets parameters

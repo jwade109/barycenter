@@ -1,9 +1,10 @@
 use bary_core::prelude::*;
 use bary_parts::*;
+use early_returns::some_or_continue;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use crate::RadioTransmission;
+use crate::{NOMINAL_DT, RadioTransmission, World};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VehicleGrid {
@@ -212,5 +213,15 @@ impl VehicleGrid {
         ret.sort_by_key(|e| -(e.len() as i32));
 
         ret
+    }
+
+    pub(crate) fn propagate_gravity(world: &mut World) {
+        for grid in world.grids.values_mut() {
+            let planet_id = some_or_continue!(grid.orbital_parent);
+            let planet = some_or_continue!(world.planets.get(planet_id));
+            let v = grid.particle_location.translation - planet.pos.translation;
+            let accel = planet.gravity(v);
+            grid.velocity.translation += accel * NOMINAL_DT;
+        }
     }
 }
