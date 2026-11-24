@@ -11,6 +11,7 @@ pub enum WorldDelta {
     ClearAll,
     Ping(DVec2),
     SpawnShipAt(String, BlueprintId, Isometry2d),
+    SpawnPartInNewGrid(String),
     FastForwardTo(u64),
     SetWaypoint {
         grid_id: Ent,

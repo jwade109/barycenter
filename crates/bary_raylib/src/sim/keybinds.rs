@@ -99,14 +99,30 @@ pub struct KeybindsSet {
     bindings: BTreeMap<String, Keybind>,
 }
 
+fn split_keybinds_name(s: &str) -> (&str, &str) {
+    let mut split = s.split("::");
+    let first = split.next().unwrap();
+    let second = split.next().unwrap();
+    (first, second)
+}
+
 impl KeybindsSet {
-    pub fn is_satisfied(&self, input: &InputState, key: &str) -> bool {
+    pub fn is_satisfied_ignoring_groups(&self, input: &InputState, key: &str) -> bool {
         if let Some(kb) = self.bindings.get(key) {
             kb.is_satisfied(input)
         } else {
             warn!("{key} is not an active keybind!");
             false
         }
+    }
+
+    pub fn is_satisfied(&self, input: &InputState, key: &str) -> bool {
+        let (group, _) = split_keybinds_name(key);
+        if !self.active_groups.contains(group) {
+            return false;
+        }
+
+        self.is_satisfied_ignoring_groups(input, key)
     }
 
     pub fn active_groups(&self) -> impl Iterator<Item = &String> {

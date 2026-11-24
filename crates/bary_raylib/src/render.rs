@@ -224,6 +224,15 @@ fn draw_grid_far_indicators(
 
     let mut markers = Vec::new();
 
+    struct Marker<'a> {
+        id: Ent,
+        screen_pos: Vector2,
+        moved_screen_pos: Vector2,
+        angle: f32,
+        name: &'a str,
+        is_controllable: bool,
+    };
+
     for (id, grid) in grids.iter() {
         let loc = grid.centroid_isometry();
         let p = glam_to_raylib_swap_y(loc.translation);
@@ -231,28 +240,38 @@ fn draw_grid_far_indicators(
         let angle = loc.rotation as f32 - camera.rotation.to_radians();
         let empty = !grid.computers.is_empty();
 
-        markers.push((*id, q, q, angle, grid.name.clone(), empty));
+        let marker = Marker {
+            id: *id,
+            screen_pos: q,
+            moved_screen_pos: q,
+            angle,
+            name: grid.name.as_str(),
+            is_controllable: !grid.computers.is_empty(),
+        };
+
+        markers.push(marker);
     }
 
-    // move the markers apart
-    for _ in 0..10 {
+    for _ in 0..4 {
         for i in 0..markers.len() {
-            for j in 0..markers.len() {
-                if i <= j {
+            let mut push = Vector2::zero();
+
+            for other in &markers {
+                let current_marker = &markers[i];
+
+                if current_marker.id == other.id {
                     continue;
                 }
 
-                let p1 = markers[i].1;
-                let p2 = markers[j].1;
-                let delta = p2 - p1;
-                let dist = delta.length();
-                if dist < marker_radius * 2.0 {
-                    let u = delta.normalized();
-                    let delta = marker_radius * 2.0 - dist;
-                    markers[j].1 += u * delta / 2.0;
-                    markers[i].1 -= u * delta / 2.0;
-                }
+                let ds = current_marker.moved_screen_pos - other.moved_screen_pos;
+
+                let ds = ds.normalized() * 30.0 / (0.3 + ds.length());
+
+                push += ds;
             }
+
+            let marker = markers.get_mut(i).unwrap();
+            marker.moved_screen_pos += push;
         }
     }
 
@@ -273,31 +292,33 @@ fn draw_grid_far_indicators(
     let font = assets.ui_font();
 
     // draw the markers
-    for (id, p, q, angle, name, is_controllable) in markers {
-        let color = if is_controllable {
+    for marker in markers {
+        let color = if marker.is_controllable {
             Color::ORANGE
         } else {
             Color::GRAY
         };
-        d.draw_line_v(p, q, color);
-        if is_controllable {
-            let (v1, v2, v3) = get_triangle(q, angle);
+        d.draw_line_v(marker.screen_pos, marker.moved_screen_pos, color);
+        if marker.is_controllable {
+            let (v1, v2, v3) = get_triangle(marker.moved_screen_pos, marker.angle);
             d.draw_triangle(v1, v2, v3, color);
+        } else {
+            d.draw_circle_lines_v(marker.moved_screen_pos, 6.0, Color::ORANGE);
         }
 
         if let Some(free) = client.scene_graph.free() {
-            let is_hovered = Some(id) == free.hovered_vehicle.map(|g| g.grid_id);
+            let is_hovered = Some(marker.id) == free.hovered_vehicle.map(|g| g.grid_id);
 
-            if !name.is_empty() {
+            if !marker.name.is_empty() {
                 let color = if is_hovered {
                     Color::WHITE
-                } else if is_controllable && client.input.is_key_pressed(rdev::Key::ShiftLeft) {
+                } else if client.input.is_key_pressed(rdev::Key::ShiftLeft) {
                     Color::WHITE.alpha(0.4)
                 } else {
                     Color::WHEAT.alpha(0.0)
                 };
-                let q = q - Vector2::new(0.0, 35.0);
-                draw_text_centered(d, &font, &name, q, 30.0, color);
+                let q = marker.moved_screen_pos - Vector2::new(0.0, 35.0);
+                draw_text_centered(d, &font, marker.name, q, 30.0, color);
             }
         }
     }
@@ -436,6 +457,8 @@ pub fn draw_world(world: &World, client: &FrontEnd, d: &mut RaylibDrawHandle) {
         _ = draw_docking_interface(&mut c, world, &docking);
     }
 
+    draw_parts_under_players(&mut c, world);
+
     draw_players(&mut c, &world.players, client.alt_mode);
 
     drop(c);
@@ -455,6 +478,31 @@ pub fn draw_world(world: &World, client: &FrontEnd, d: &mut RaylibDrawHandle) {
     // draw_item_menu(d, (300, 200).into());
 
     // draw_test_isos(&mut d)
+}
+
+fn draw_parts_under_players(d: &mut RaylibDrawHandle, world: &World) {
+    for player in world.players.values() {
+        // TODO(optimization) spatial data structure for grids!
+        for grid in world.grids.values() {
+            let player_in_grid_local = grid.origin().in_frame(player.pos.tr());
+            let p = PartCoord::from_meters_floored(player_in_grid_local);
+            let parts = grid.get_parts_at(p);
+            if let Some(parts) = parts {
+                draw_grid_coord(d, grid.origin(), p, Color::RED);
+                for (layer, part_id) in parts.iter() {
+                    let part = world.parts.get(part_id).expect("Expected a part");
+                    draw_grid_region(
+                        d,
+                        grid.origin(),
+                        part.region,
+                        Color::WHITE.alpha(0.1),
+                        Color::PURPLE,
+                        1.0,
+                    );
+                }
+            }
+        }
+    }
 }
 
 fn draw_players(d: &mut RaylibDrawHandle, players: &Components<Player>, alt_mode: bool) {
@@ -593,11 +641,11 @@ pub fn draw_editor_selection_region(d: &mut RaylibDrawHandle, client: &FrontEnd,
 
 pub fn draw_grid_coord(
     d: &mut RaylibDrawHandle,
-    grid: &VehicleGrid,
+    origin: Isometry2d,
     coord: PartCoord,
     color: Color,
 ) {
-    let iso = grid.origin().offset(coord.to_meters());
+    let iso = origin.offset(coord.to_meters());
     draw_rectangle(d, iso, Vec2::splat(PartCoord::CELL_WIDTH), color, 0.03);
 }
 
@@ -626,7 +674,7 @@ pub fn draw_hovered_part_cursor(d: &mut RaylibDrawHandle, world: &World, client:
         Color::GRAY
     };
 
-    draw_grid_coord(d, grid, gridloc.coord, color);
+    draw_grid_coord(d, grid.origin(), gridloc.coord, color);
 }
 
 pub fn draw_mouse_screen_position(d: &mut RaylibDrawHandle, mouse_screen_position: Option<Vec2>) {
@@ -917,6 +965,13 @@ pub fn draw_grid_outlines(d: &mut RaylibDrawHandle, grids: &Components<VehicleGr
         draw_line(d, origin.translation, x_axis, Color::RED);
         draw_line(d, origin.translation, y_axis, Color::GREEN);
         draw_circle(d, origin.translation, 0.15, Color::BLUE);
+
+        draw_circle(
+            d,
+            grid.centroid_isometry().tr(),
+            grid.bounding_radius(),
+            Color::PURPLE,
+        );
     }
 }
 
@@ -1118,6 +1173,12 @@ pub fn draw_computer_targets(d: &mut RaylibDrawHandle, world: &World) {
         };
 
         draw_isometry_axes(d, pose, &grid.name, DVec2::new(1.0, 0.4));
+
+        for (occ, _) in &grid.occupancy {
+            let coord = PartCoord::new(*occ);
+            let origin = pose.offset(-grid.centroid());
+            draw_grid_coord(d, origin, coord, Color::TEAL);
+        }
     }
 }
 

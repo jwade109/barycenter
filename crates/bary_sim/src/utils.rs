@@ -932,6 +932,7 @@ pub fn update_world(world: &mut World) -> WorldUpdate {
         sys_propagate_planets(&mut world.planets);
         sys_propagate_grid_rigid_bodies(&mut world.grids);
         VehicleGrid::propagate_gravity(world);
+        VehicleGrid::handle_collisions(world);
         sys_report_acceleration_to_cpus(world);
     }
 

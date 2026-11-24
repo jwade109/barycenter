@@ -29,6 +29,7 @@ pub fn command_selected_ships_to_waypoint(
 
         let waypont = p.lerp(q, s);
         let rotation = DVec2::X.angle_to(q - p);
+        let rotation = if rotation.is_nan() { 0.0 } else { rotation };
         let waypoint = Isometry2d::new(waypont, rotation);
 
         let delta = WorldDelta::SetWaypoint {

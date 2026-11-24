@@ -337,7 +337,9 @@ impl BaryServer {
         if let Err(e) = apply_delta(&mut self.world, delta.clone()) {
             self.nack(id, format!("Failed to apply delta: {e}"));
         } else {
-            debug!("Successfully applied delta: {delta:?}");
+            if !matches!(delta, WorldDelta::SetPlayerControls(..)) {
+                info!("Successfully applied delta: {delta:?}");
+            }
             self.queued_deltas.push(delta.clone());
             self.send_driver_packet();
         }

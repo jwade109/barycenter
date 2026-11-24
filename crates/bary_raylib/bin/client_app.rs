@@ -1,6 +1,6 @@
 use bary_core::prelude::*;
 use bary_input::{InputHandler, InputState};
-use bary_ipc::*;
+use bary_ipc::{ServerEvent::Message, *};
 use bary_orbital::VehicleControl;
 use bary_raylib::*;
 use bary_server::*;
@@ -187,7 +187,7 @@ impl GameApp {
                 self.frontend.keybinds.set_active("freecamera");
             }
             SceneGraph::LockedToPlayer(..) => {
-                self.frontend.keybinds.set_active("locked_to_player");
+                self.frontend.keybinds.set_active("player_controller");
             }
         }
 
@@ -316,8 +316,13 @@ impl GameApp {
             ServerResponse::Telemetry(_) => {
                 // PASS
             }
-            ServerResponse::ClientTelemetry(id, tlm) => {
+            ServerResponse::ClientTelemetry(..) => {
                 // info!("Got TLM from client {id}: {tlm:?}");
+            }
+            ServerResponse::Nack(message) => {
+                error!("Got NACK from server: {message}");
+                let s = format!("Nack from server:\n{message}");
+                self.frontend.spawn_animation(s, true);
             }
             _ => error!("Unsupported message from server: {:?}", msg),
         }
@@ -528,8 +533,9 @@ fn make_gui(raylib: &Raylib, app: &mut GameApp, timers: &DebugTimers) -> Tree<Ui
             make_transmission_ui(&mut ui, &app.frontend.transmissions);
         }
         SceneGraph::LockedToPlayer(locked) => {
-            kicked_scene_ui(&mut ui);
-            // make_piloting_ui(&mut ui, piloting, app.backend.world(), &app.frontend.assets);
+            ui.window_at("locked_info", Vec2::splat(20.0), |ui| {
+                ui.text(format!("Camera locked to player\n{:#?}", locked));
+            });
         }
         SceneGraph::Editor(editor) => {
             make_editor_ui(&mut ui, editor, app.backend.world());
@@ -561,7 +567,7 @@ fn make_gui(raylib: &Raylib, app: &mut GameApp, timers: &DebugTimers) -> Tree<Ui
 }
 
 fn make_keybinds_ui(ui: &mut UiBuilder, app: &GameApp) {
-    ui.window("keybinds", |ui| {
+    ui.window_at("keybinds", Vec2::splat(20.0), |ui| {
         for gid in app.frontend.keybinds.active_groups() {
             ui.text(gid);
         }
@@ -569,9 +575,16 @@ fn make_keybinds_ui(ui: &mut UiBuilder, app: &GameApp) {
         ui.sep();
 
         for (id, kb) in app.frontend.keybinds.iter() {
+            let is_on_ig_gr = app.frontend.is_satisfied_ignoring_groups(id);
             let is_on = app.frontend.is_satisfied(id);
             let prefix = if is_on { "##" } else { "  " };
-            let color = if is_on { Color::TEAL } else { Color::WHITE };
+            let color = if is_on {
+                Color::TEAL
+            } else if is_on_ig_gr {
+                Color::ORANGE
+            } else {
+                Color::WHITE
+            };
             let s = format!("{prefix} {:50} {}", id, kb);
             ui.colored_text(s, color);
         }

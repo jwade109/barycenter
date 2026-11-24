@@ -44,7 +44,7 @@ impl Computer {
             prototype,
             thruster_odometry: DVec2::ZERO,
             grid_info: None,
-            attitude_pd: PDCtrl::new(30.0, 50.0),
+            attitude_pd: PDCtrl::new(3.0, 20.0),
             target_angle: None,
             target_pos: None,
             target_vel: None,

@@ -81,10 +81,10 @@ pub enum SceneGraph {
 impl SceneGraph {
     pub fn should_draw_world(&self) -> bool {
         match self {
-            SceneGraph::MainMenu => false,
-            SceneGraph::ListSaves => false,
-            SceneGraph::Kicked => false,
-            SceneGraph::Settings => false,
+            SceneGraph::MainMenu => true,
+            SceneGraph::ListSaves => true,
+            SceneGraph::Kicked => true,
+            SceneGraph::Settings => true,
             SceneGraph::Editor(..) => true,
             SceneGraph::Free(..) => true,
             SceneGraph::LockedToPlayer(..) => true,

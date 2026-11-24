@@ -12,7 +12,8 @@ use std::{
 #[derive(Debug, Clone, Deserialize, Serialize)]
 enum WorldBuilderCommand {
     LoadBlueprint(BlueprintId),
-    SpawnShip(BlueprintId, Option<String>, Isometry2d),
+    SpawnShip(BlueprintId, String, Isometry2d),
+    SpawnPart(String),
     SetVelocity(Isometry2d),
     ModifyWorld(WorldDelta),
     InsertDebugSource(PartCoord, Item),
@@ -84,7 +85,6 @@ impl WorldBuilder {
         iso: impl Into<Isometry2d>,
     ) -> Self {
         let name = name.into();
-        let name = if name.is_empty() { None } else { Some(name) };
         let cmd = WorldBuilderCommand::SpawnShip(bp_id.into(), name, iso.into());
         self.commands.push(cmd);
         self
@@ -218,9 +218,10 @@ impl WorldBuilder {
                     }
                 }
                 WorldBuilderCommand::SpawnShip(bp_id, name, iso) => {
-                    let id = match name {
-                        Some(name) => spawn_grid_with_bp_id(&mut world, &bp_id, &name),
-                        None => spawn_grid_with_random_name(&mut world, bp_id),
+                    let id = if name.is_empty() {
+                        spawn_grid_with_random_name(&mut world, bp_id)
+                    } else {
+                        spawn_grid_with_bp_id(&mut world, &bp_id, &name)
                     };
 
                     match id {
@@ -235,6 +236,10 @@ impl WorldBuilder {
                             error!("Failed to spawn grid: {e:?}");
                         }
                     }
+                }
+                WorldBuilderCommand::SpawnPart(name) => {
+                    let delta = WorldDelta::SpawnPartInNewGrid(name);
+                    _ = apply_delta(&mut world, delta);
                 }
                 WorldBuilderCommand::SetVelocity(vel) => {
                     if let Some(id) = self.cursor_grid {

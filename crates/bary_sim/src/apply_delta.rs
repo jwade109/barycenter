@@ -32,6 +32,21 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             set_grid_pose(world, grid_id, iso)?;
             Ok(())
         }
+        WorldDelta::SpawnPartInNewGrid(name) => {
+            let proto_id =
+                get_proto_by_name(&world.prototypes, &name).ok_or(BaryError::BadPartName)?;
+            let proto = world.prototypes.try_get(proto_id)?;
+            let layer = proto.layer;
+            let region = GridRegion::new(PartCoord::ZERO, Rotation::East, proto.dims);
+            let grid_id = spawn_empty_grid(world, &format!("part-{name}"));
+            let instance = &PartInstance {
+                name,
+                layer,
+                region,
+            };
+            insert_part(grid_id, world, instance, true)?;
+            Ok(())
+        }
         WorldDelta::FastForwardTo(tick) => {
             if world.ticks < tick {
                 let delta = tick - world.ticks;
@@ -46,22 +61,25 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             Ok(())
         }
         WorldDelta::SetWaypoint { grid_id, waypoint } => {
-            _ = set_primary_computer_waypoint(grid_id, waypoint, world);
-            _ = set_primary_computer_state(grid_id, true, world);
+            if waypoint.rotation.is_nan() {
+                return Err(BaryError::NaN);
+            }
+            set_primary_computer_waypoint(grid_id, waypoint, world)?;
+            set_primary_computer_state(grid_id, true, world)?;
             Ok(())
         }
         WorldDelta::SetWaypointByName { name, waypoint } => {
             if let Some(grid_id) = get_grid_by_name(&world.grids, &name) {
-                _ = set_primary_computer_waypoint(grid_id, waypoint, world);
-                _ = set_primary_computer_state(grid_id, true, world);
-                _ = toggle_tracking(world, grid_id);
+                set_primary_computer_waypoint(grid_id, waypoint, world)?;
+                set_primary_computer_state(grid_id, true, world)?;
+                toggle_tracking(world, grid_id)?;
+                Ok(())
             } else {
-                warn!("Failed to find grid with name {name}");
+                Err(BaryError::NoGridNamed(name))
             }
-            Ok(())
         }
         WorldDelta::DespawnGrid(grid_id) => {
-            _ = despawn_grid(world, grid_id);
+            despawn_grid(world, grid_id)?;
             Ok(())
         }
         WorldDelta::InsertPart {

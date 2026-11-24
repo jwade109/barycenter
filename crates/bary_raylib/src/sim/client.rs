@@ -284,4 +284,8 @@ impl FrontEnd {
     pub fn is_satisfied(&self, id: &str) -> bool {
         self.keybinds.is_satisfied(&self.input, id)
     }
+
+    pub fn is_satisfied_ignoring_groups(&self, id: &str) -> bool {
+        self.keybinds.is_satisfied_ignoring_groups(&self.input, id)
+    }
 }

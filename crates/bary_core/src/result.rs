@@ -2,6 +2,7 @@ use crate::prelude::*;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum BaryError {
+    NaN,
     EntityNotFound(Ent),
     BadPartName,
     BadBlueprint,
@@ -10,6 +11,7 @@ pub enum BaryError {
     SaveAlreadyExists,
     NoPrimaryComputer,
     GridSpaceOccupied,
+    NoGridNamed(String),
     NoPartsAt(PartCoord),
     NoPartsInLayer(PartLayer),
     NoInvSlot(usize),

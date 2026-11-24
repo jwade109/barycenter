@@ -1,6 +1,7 @@
 use bary_core::prelude::*;
 use bary_parts::*;
 use early_returns::some_or_continue;
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -224,4 +225,74 @@ impl VehicleGrid {
             grid.velocity.translation += accel * NOMINAL_DT;
         }
     }
+
+    pub(crate) fn handle_collisions(world: &mut World) {
+        let mut collisions = Vec::new();
+        // TODO(optimization) need a spatial data structure
+        // for grids!
+        for (a_id, first) in world.grids.iter() {
+            for (b_id, second) in world.grids.iter() {
+                if b_id <= a_id {
+                    continue;
+                }
+
+                let collision_distance =
+                    first.bounding_radius() as f64 + second.bounding_radius() as f64;
+
+                let p = first.centroid_isometry().tr();
+                let q = second.centroid_isometry().tr();
+                let r = q - p;
+
+                let u = first.velocity.tr();
+                let v = second.velocity.tr();
+                let w = v - u;
+
+                let moving_towards = w.dot(r) < 0.0;
+
+                let close_enough = r.length_squared() < collision_distance.powi(2);
+
+                if close_enough && moving_towards {
+                    let info = CollisionInfo {
+                        primary: *a_id,
+                        secondary: *b_id,
+                        primary_mass: first.parts_mass(),
+                        secondary_mass: second.parts_mass(),
+                        primary_pos: p,
+                        secondary_pos: q,
+                        delta_pos: r,
+                        primary_vel: u,
+                        secondary_vel: v,
+                        delta_vel: w,
+                    };
+
+                    collisions.push(info);
+                }
+            }
+        }
+
+        for col in collisions {
+            let grid = world.grids.try_get_mut(col.primary).unwrap();
+            grid.velocity.translation += col.delta_vel;
+            let grid = world.grids.try_get_mut(col.secondary).unwrap();
+            grid.velocity.translation -= col.delta_vel;
+            warn!("Collision: {col:?}");
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CollisionInfo {
+    pub primary: Ent,
+    pub secondary: Ent,
+
+    pub primary_mass: Mass,
+    pub secondary_mass: Mass,
+
+    pub primary_pos: DVec2,
+    pub secondary_pos: DVec2,
+    pub delta_pos: DVec2,
+
+    pub primary_vel: DVec2,
+    pub secondary_vel: DVec2,
+    pub delta_vel: DVec2,
 }

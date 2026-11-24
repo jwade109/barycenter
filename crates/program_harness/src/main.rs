@@ -22,7 +22,7 @@ fn main() -> std::io::Result<()> {
             "cargo",
             &["run", "--release", "--bin", "server", "--", "saves/"],
         )?,
-        run_program("cargo", &["run", "--release", "--bin", "bary_debugger"])?,
+        // run_program("cargo", &["run", "--release", "--bin", "bary_debugger"])?,
         run_program(
             "cargo",
             &[

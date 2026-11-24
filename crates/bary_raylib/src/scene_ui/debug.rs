@@ -13,7 +13,7 @@ pub fn debug_lines(
     user_id: Option<Ent>,
     fps: u32,
 ) {
-    ui.window("debug_ui", |ui| {
+    ui.window_at("debug_ui", Vec2::splat(20.0), |ui| {
         let size = size_in_bytes(world);
 
         ui.text("Barycenter Client".to_string());

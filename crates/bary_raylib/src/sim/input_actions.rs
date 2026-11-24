@@ -319,21 +319,21 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
         }
     }
 
-    if client.is_satisfied("free::toggle_follow") {
+    if client.is_satisfied("freecamera::toggle_follow") {
         input_handlers::toggle_following_on_key_f(client);
     }
 
-    if client.is_satisfied("free::toggle_grid_tracking") {
+    if client.is_satisfied("freecamera::toggle_grid_tracking") {
         toggle_tracking_for_selected_grid(client, &mut deltas);
     }
 
-    if client.is_satisfied("free::explode_at_mouseover") {
+    if client.is_satisfied("freecamera::explode_at_mouseover") {
         if let Some(d) = explode_at_mouseover(client) {
             deltas.send(d);
         }
     }
 
-    if client.is_satisfied("free::spawn_radio_transmission") {
+    if client.is_satisfied("freecamera::spawn_radio_transmission") {
         if let Some(d) = spawn_ping(client, world) {
             deltas.send(d);
         }
@@ -343,7 +343,7 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
 }
 
 fn zoom_in_on_key_v(frontend: &mut FrontEnd) {
-    if !frontend.is_satisfied("free::toggle_vehicle_zoom") {
+    if !frontend.is_satisfied("freecamera::toggle_vehicle_zoom") {
         return;
     }
 

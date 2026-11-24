@@ -33,22 +33,22 @@ global::toggle_alt_mode:
   secondary: []
   trigger: OnClick
 
-free::go_forward:
+freecamera::go_forward:
   primary: KeyW
   secondary: []
   trigger: IsPressed
 
-free::go_backward:
+freecamera::go_backward:
   primary: KeyS
   secondary: []
   trigger: IsPressed
 
-free::go_left:
+freecamera::go_left:
   primary: KeyA
   secondary: []
   trigger: IsPressed
 
-free::go_right:
+freecamera::go_right:
   primary: KeyD
   secondary: []
   trigger: IsPressed
@@ -73,68 +73,68 @@ piloting::go_right:
   secondary: []
   trigger: IsPressed
 
-global::rotate_cam_ccw:
+freecamera::rotate_cam_ccw:
   primary: KeyQ
   secondary: []
   trigger: IsPressed
 
-global::rotate_cam_cw:
+freecamera::rotate_cam_cw:
   primary: KeyE
   secondary: []
   trigger: IsPressed
 
-free::toggle_follow:
+freecamera::toggle_follow:
   primary: KeyF
   secondary: []
   trigger: OnClick
 
-free::spawn_radio_transmission:
+freecamera::spawn_radio_transmission:
   primary: KeyB
   secondary: []
   trigger: OnClick
 
-free::toggle_grid_tracking:
+freecamera::toggle_grid_tracking:
   primary: KeyT
   secondary: []
   trigger: OnClick
 
-free::explode_at_mouseover:
+freecamera::explode_at_mouseover:
   primary: KeyC
   secondary: []
   trigger: OnClick
 
-free::toggle_vehicle_zoom:
+freecamera::toggle_vehicle_zoom:
   primary: KeyV
   secondary: []
   trigger: OnClick
 
 player_controller::left:
-  primary: LeftArrow
+  primary: KeyA
   secondary: []
   trigger: IsPressed
 
 player_controller::right:
-  primary: RightArrow
+  primary: KeyD
   secondary: []
   trigger: IsPressed
 
 player_controller::down:
-  primary: DownArrow
+  primary: KeyS
   secondary: []
   trigger: IsPressed
 
 player_controller::up:
-  primary: UpArrow
+  primary: KeyW
   secondary: []
   trigger: IsPressed
 
 player_controller::rotate_ccw:
-  primary: LeftBracket
+  primary: KeyQ
   secondary: []
   trigger: IsPressed
 
 player_controller::rotate_cw:
-  primary: RightBracket
+  primary: KeyE
   secondary: []
   trigger: IsPressed
 
