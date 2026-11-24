@@ -39,7 +39,7 @@ pub fn send_in_chunks(
 
 impl Client {
     fn send(&mut self, response: ServerResponse) -> std::io::Result<usize> {
-        let payload = bincode::serialize(&response).unwrap();
+        let payload = postcard::to_allocvec(&response).unwrap();
         let packet = self.framer.frame(payload);
         if let Some(packet) = packet {
             send_in_chunks(&mut self.socket, &packet.to_bytes(), MTU_CHUNK_SIZE)
@@ -88,7 +88,7 @@ impl Client {
         }
 
         for packet in self.framer.parse() {
-            if let Ok(request) = bincode::deserialize::<ServerRequest>(packet.payload()) {
+            if let Ok(request) = postcard::from_bytes::<ServerRequest>(packet.payload()) {
                 debug!("Got a request: {request:?}");
                 requests.push(request);
             } else {

@@ -232,6 +232,12 @@ impl GameApp {
             if self.frontend.is_satisfied("player_controller::rotate_cw") {
                 ctrl.a = JoystickPosition::Negative;
             }
+            if self
+                .frontend
+                .is_satisfied("player_controller::relative_braking")
+            {
+                ctrl.is_relative_braking = true;
+            }
 
             if let Some(id) = self.backend.allocated_player_id() {
                 let delta = WorldDelta::SetPlayerControls(id, ctrl);
@@ -245,7 +251,7 @@ impl GameApp {
             BackendEvent::FinishedWorldDownload(name) => {
                 let message = format!("Finished world download \"{name}\"");
                 self.frontend.spawn_animation(message, true);
-                self.frontend.scene_graph = SceneGraph::Free(FreeFlying::at_zero());
+                self.frontend.go_to_world();
             }
             BackendEvent::Server(response) => {
                 self.on_rcv_server_msg(response);
@@ -702,6 +708,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if app.frontend.is_satisfied("global::save_world") {
             save_world_and_alert_chat(app.backend.world(), &mut app.frontend);
+        }
+
+        if app.frontend.is_satisfied("global::download_world") {
+            app.backend.request_world_download();
         }
 
         if app.frontend.is_satisfied("global::toggle_camera_lock") {

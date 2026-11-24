@@ -80,6 +80,6 @@ impl World {
 }
 
 pub fn size_in_bytes(world: &World) -> usize {
-    let bytes = bincode::serialize(world).unwrap();
+    let bytes = postcard::to_allocvec(world).unwrap();
     bytes.len()
 }

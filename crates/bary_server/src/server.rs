@@ -13,7 +13,7 @@ use crate::{make_grid_telemetry, make_world_telemetry};
 fn table_to_blob<T: Serialize>(entities: &Components<T>) -> Option<BTreeMap<Ent, Vec<u8>>> {
     let mut ret = BTreeMap::new();
     for (id, entity) in entities.iter() {
-        let bytes = bincode::serialize(entity).ok()?;
+        let bytes = postcard::to_allocvec(entity).ok()?;
         ret.insert(*id, bytes);
     }
     Some(ret)
@@ -69,11 +69,11 @@ impl PaginatedTransaction {
 }
 
 pub fn sync_frame_from_world(world: &World) -> SyncFrame {
-    let grid_bytes = bincode::serialize(&world.grids).unwrap();
+    let grid_bytes = postcard::to_allocvec(&world.grids).unwrap();
     let grid_hash = u128::from_be_bytes(md5::compute(&grid_bytes).0);
-    let inv_bytes = bincode::serialize(&world.inventories).unwrap();
+    let inv_bytes = postcard::to_allocvec(&world.inventories).unwrap();
     let inv_hash = u128::from_be_bytes(md5::compute(&inv_bytes).0);
-    let thr_bytes = bincode::serialize(&world.thrusters).unwrap();
+    let thr_bytes = postcard::to_allocvec(&world.thrusters).unwrap();
     let thr_hash = u128::from_be_bytes(md5::compute(&thr_bytes).0);
     SyncFrame {
         tick: world.ticks,

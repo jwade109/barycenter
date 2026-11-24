@@ -249,6 +249,38 @@ impl FrontEnd {
         self.animations.spawn(id, anim);
     }
 
+    pub fn go_to_world(&mut self) {
+        let world_entry = if let Some(id) = self.player_id {
+            SceneGraph::LockedToPlayer(LockedState::new(id))
+        } else {
+            SceneGraph::Free(FreeFlying::at_zero())
+        };
+
+        match self.scene_graph {
+            SceneGraph::MainMenu => {
+                self.scene_graph = world_entry;
+            }
+            SceneGraph::ListSaves => {
+                self.scene_graph = world_entry;
+            }
+            SceneGraph::Kicked => {
+                self.scene_graph = world_entry;
+            }
+            SceneGraph::Settings => {
+                self.scene_graph = world_entry;
+            }
+            SceneGraph::Editor(..) => {
+                // PASS
+            }
+            SceneGraph::Free(..) => {
+                // PASS
+            }
+            SceneGraph::LockedToPlayer(..) => {
+                // PASS
+            }
+        }
+    }
+
     pub fn is_satisfied(&self, id: &str) -> bool {
         self.keybinds.is_satisfied(&self.input, id)
     }

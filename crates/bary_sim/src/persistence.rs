@@ -24,55 +24,55 @@ pub fn save_world(
 
     info!("Saving world to {}", dir.display());
 
-    let s = bincode::serialize(&world.ticks)?;
+    let s = to_allocvec(&world.ticks)?;
     std::fs::write(dir.join("ticks.bin"), s)?;
 
     save(&world.spawner, &dir, "spawner.bin")?;
     save(&world.blueprints, &dir, "blueprints.bin")?;
 
-    let s = bincode::serialize(&world.prototypes)?;
+    let s = to_allocvec(&world.prototypes)?;
     std::fs::write(dir.join("prototypes.bin"), s)?;
 
     let s = to_allocvec(&world.grids)?;
     std::fs::write(dir.join("grids.bin"), s)?;
 
-    let s = bincode::serialize(&world.parts)?;
+    let s = to_allocvec(&world.parts)?;
     std::fs::write(dir.join("parts.bin"), s)?;
 
-    let s = bincode::serialize(&world.thrusters)?;
+    let s = to_allocvec(&world.thrusters)?;
     std::fs::write(dir.join("thrusters.bin"), s)?;
 
-    let s = bincode::serialize(&world.computers)?;
+    let s = to_allocvec(&world.computers)?;
     std::fs::write(dir.join("computers.bin"), s)?;
 
-    let s = bincode::serialize(&world.lights)?;
+    let s = to_allocvec(&world.lights)?;
     std::fs::write(dir.join("lights.bin"), s)?;
 
-    let s = bincode::serialize(&world.inventories)?;
+    let s = to_allocvec(&world.inventories)?;
     std::fs::write(dir.join("inventories.bin"), s)?;
 
-    let s = bincode::serialize(&world.machines)?;
+    let s = to_allocvec(&world.machines)?;
     std::fs::write(dir.join("machines.bin"), s)?;
 
-    let s = bincode::serialize(&world.debug_portals)?;
+    let s = to_allocvec(&world.debug_portals)?;
     std::fs::write(dir.join("debug_portals.bin"), s)?;
 
-    let s = bincode::serialize(&world.pipes)?;
+    let s = to_allocvec(&world.pipes)?;
     std::fs::write(dir.join("pipes.bin"), s)?;
 
-    let s = bincode::serialize(&world.excavators)?;
+    let s = to_allocvec(&world.excavators)?;
     std::fs::write(dir.join("excavators.bin"), s)?;
 
-    let s = bincode::serialize(&world.asteroids)?;
+    let s = to_allocvec(&world.asteroids)?;
     std::fs::write(dir.join("asteroids.bin"), s)?;
 
-    let s = bincode::serialize(&world.planets)?;
+    let s = to_allocvec(&world.planets)?;
     std::fs::write(dir.join("planets.bin"), s)?;
 
-    let s = comp(bincode::serialize(&world.terrain_chunks)?);
+    let s = comp(to_allocvec(&world.terrain_chunks)?);
     std::fs::write(dir.join("terrain_chunks.bin"), s)?;
 
-    let s = comp(bincode::serialize(&world.terrain_tiles)?);
+    let s = comp(to_allocvec(&world.terrain_tiles)?);
     std::fs::write(dir.join("terrain_tiles.bin"), s)?;
 
     save(&world.players, dir, "players.bin")?;
@@ -90,14 +90,17 @@ fn decomp(bytes: Vec<u8>) -> Vec<u8> {
     zstd::stream::decode_all(reader).unwrap()
 }
 
-fn load<T: for<'a> Deserialize<'a>>(dir: &Path, name: &str) -> BaryResult<T> {
+fn load<T: for<'a> Deserialize<'a>>(
+    dir: &Path,
+    name: &str,
+) -> Result<T, Box<dyn std::error::Error>> {
     let s = decomp(std::fs::read(dir.join(name))?);
-    let comp = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    let comp = postcard::from_bytes(&s)?;
     Ok(comp)
 }
 
-fn save<T: Serialize>(val: &T, dir: &Path, name: &str) -> BaryResult<()> {
-    let s = comp(bincode::serialize(val).map_err(|_| BaryError::BincodeError)?);
+fn save<T: Serialize>(val: &T, dir: &Path, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let s = comp(to_allocvec(val)?);
     std::fs::write(dir.join(name), s)?;
     Ok(())
 }
@@ -117,58 +120,58 @@ pub fn load_world(dir: impl AsRef<Path>) -> Result<World, Box<dyn std::error::Er
     let mut world = World::empty();
 
     let s = std::fs::read(dir.join("ticks.bin"))?;
-    world.ticks = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.ticks = postcard::from_bytes(&s)?;
 
     world.spawner = load(dir, "spawner.bin")?;
     world.blueprints = load(dir, "blueprints.bin")?;
 
     let s = std::fs::read(dir.join("prototypes.bin"))?;
-    world.prototypes = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.prototypes = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("inventories.bin"))?;
-    world.inventories = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.inventories = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("machines.bin"))?;
-    world.machines = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.machines = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("debug_portals.bin"))?;
-    world.debug_portals = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.debug_portals = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("pipes.bin"))?;
-    world.pipes = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.pipes = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("grids.bin"))?;
     world.grids = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("parts.bin"))?;
-    world.parts = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.parts = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("lights.bin"))?;
-    world.lights = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.lights = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("thrusters.bin"))?;
-    world.thrusters = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.thrusters = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("computers.bin"))?;
-    world.computers = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.computers = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("excavators.bin"))?;
-    world.excavators = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.excavators = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("asteroids.bin"))?;
-    world.asteroids = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.asteroids = postcard::from_bytes(&s)?;
 
     let s = std::fs::read(dir.join("planets.bin"))?;
-    world.planets = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.planets = postcard::from_bytes(&s)?;
 
     let s = decomp(std::fs::read(dir.join("terrain_chunks.bin"))?);
-    world.terrain_chunks = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.terrain_chunks = postcard::from_bytes(&s)?;
 
     let s = decomp(std::fs::read(dir.join("terrain_tiles.bin"))?);
-    world.terrain_tiles = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.terrain_tiles = postcard::from_bytes(&s)?;
 
     let s = decomp(std::fs::read(dir.join("terrain_tiles.bin"))?);
-    world.terrain_tiles = bincode::deserialize(&s).map_err(|_| BaryError::BincodeError)?;
+    world.terrain_tiles = postcard::from_bytes(&s)?;
 
     world.players = load(dir, "players.bin")?;
 

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use bary_core::prelude::{Components, Ent, TableIdent};
 use bary_sim::World;
-use serde::{Deserialize};
+use serde::Deserialize;
 
 #[derive(Clone)]
 pub struct Blob {
@@ -38,20 +38,4 @@ impl std::fmt::Display for Blob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Blob({:?}, {} entities)", self.ident, self.payload.len())
     }
-}
-
-fn unpack_blob<'a, T: Deserialize<'a>>(
-    entities: &mut Components<T>,
-    data: &'a BTreeMap<Ent, Vec<u8>>,
-) -> bool {
-    entities.clear();
-
-    for (id, data) in data {
-        if let Ok(e) = bincode::deserialize(data) {
-            entities.spawn(*id, e);
-        } else {
-            return false;
-        }
-    }
-    true
 }

@@ -9,7 +9,7 @@ fn unpack_data<'a, T: Deserialize<'a>>(
     id: Ent,
     data: &'a [u8],
 ) -> bool {
-    if let Ok(e) = bincode::deserialize(data) {
+    if let Ok(e) = postcard::from_bytes(data) {
         entities.spawn(id, e);
         true
     } else {

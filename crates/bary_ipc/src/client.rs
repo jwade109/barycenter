@@ -114,7 +114,7 @@ impl ClientNode {
         }
 
         for packet in self.framer.parse() {
-            if let Ok(response) = bincode::deserialize::<ServerResponse>(packet.payload()) {
+            if let Ok(response) = postcard::from_bytes::<ServerResponse>(packet.payload()) {
                 messages.push(response);
             } else {
                 warn!("Unable to parse packet as response");
@@ -131,7 +131,7 @@ impl ClientNode {
             return;
         };
 
-        let bytes = bincode::serialize(&msg).unwrap();
+        let bytes = postcard::to_allocvec(&msg).unwrap();
         let Some(packet) = self.framer.frame(bytes) else {
             error!("Packet too big!");
             return;

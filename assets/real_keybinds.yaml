@@ -23,6 +23,11 @@ global::save_world:
   secondary: [ControlLeft, ShiftLeft]
   trigger: OnClick
 
+global::download_world:
+  primary: KeyR
+  secondary: [ControlLeft, ShiftLeft]
+  trigger: OnClick
+
 global::toggle_alt_mode:
   primary: Alt
   secondary: []
@@ -130,5 +135,10 @@ player_controller::rotate_ccw:
 
 player_controller::rotate_cw:
   primary: RightBracket
+  secondary: []
+  trigger: IsPressed
+
+player_controller::relative_braking:
+  primary: Space
   secondary: []
   trigger: IsPressed

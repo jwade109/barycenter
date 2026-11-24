@@ -2,7 +2,7 @@ use bary_core::prelude::*;
 use early_returns::some_or_return;
 use serde::{Deserialize, Serialize};
 
-use crate::{NOMINAL_DT, Planet, World};
+use crate::{NOMINAL_DT, Planet, VehicleGrid, World};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Player {
@@ -90,13 +90,35 @@ impl Player {
         self.vel.translation += accel * NOMINAL_DT;
     }
 
-    fn update(&mut self, planets: &Components<Planet>) {
+    fn update(&mut self, planets: &Components<Planet>, grids: &Components<VehicleGrid>) {
         self.update_orbital_dynamics(planets);
 
         let ctrl = self.controls.unwrap_or_default();
         let body_fixed_dir = ctrl.to_dir();
         let world_dir = rotate_f64(body_fixed_dir, self.pos.rotation);
-        let acc = Isometry2d::new(world_dir * 20.0, ctrl.a.to_i8() as f64 * 6.0);
+        let mut acc = Isometry2d::new(world_dir * 20.0, ctrl.a.to_i8() as f64 * 6.0);
+
+        if ctrl.is_relative_braking {
+            // TODO(optimization)
+            let mut best: Option<(f64, DVec2)> = None;
+            for grid in grids.values() {
+                let dist = grid.centroid_isometry().tr().distance(self.pos.tr());
+                if dist < 1000.0 {
+                    if let Some(best) = &mut best {
+                        if dist < best.0 {
+                            *best = (dist, grid.velocity.tr());
+                        }
+                    } else {
+                        best = Some((dist, grid.velocity.tr()));
+                    }
+                }
+            }
+
+            if let Some((_, target_vel)) = best {
+                let error = target_vel - self.vel.tr();
+                acc.translation += error * 3.0
+            }
+        }
 
         self.vel += acc * NOMINAL_DT;
         self.pos += self.vel * NOMINAL_DT;
@@ -109,7 +131,7 @@ impl Player {
     /// Updates all players.
     pub(crate) fn update_all(world: &mut World) {
         for player in world.players.values_mut() {
-            player.update(&world.planets);
+            player.update(&world.planets, &world.grids);
         }
     }
 }
@@ -137,6 +159,7 @@ pub struct PlayerControls {
     pub x: JoystickPosition,
     pub y: JoystickPosition,
     pub a: JoystickPosition,
+    pub is_relative_braking: bool,
 }
 
 impl PlayerControls {

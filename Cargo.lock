@@ -785,6 +785,7 @@ dependencies = [
  "crossbeam-queue",
  "enum_discriminant",
  "log",
+ "postcard",
  "serde",
  "serde_json",
 ]
@@ -876,6 +877,7 @@ dependencies = [
  "clap 4.6.7",
  "log",
  "md5",
+ "postcard",
  "serde",
  "simple_logger",
 ]

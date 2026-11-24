@@ -34,6 +34,11 @@ fn joystick_pos_ui(ui: &mut egui::Ui, ctrl: &mut PlayerControls) -> bool {
             grid_row(ui, JoystickPosition::Zero, ctrl);
             grid_row(ui, JoystickPosition::Negative, ctrl);
         });
+
+    if ui.button("Match Velocity With Nearest").clicked() {
+        ctrl.is_relative_braking ^= true;
+    }
+
     old_ctrl != *ctrl
 }
 
