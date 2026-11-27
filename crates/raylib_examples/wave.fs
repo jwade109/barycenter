@@ -13,7 +13,7 @@ out vec4 finalColor;
 
 uniform float seconds;
 
-uniform vec2 size;
+uniform vec2 screen_size;
 
 uniform float freqX;
 uniform float freqY;
@@ -24,8 +24,8 @@ uniform float speedY;
 
 void main()
 {
-    float pixelWidth = 1.0/size.x;
-    float pixelHeight = 1.0/size.y;
+    float pixelWidth = 1.0/screen_size.x;
+    float pixelHeight = 1.0/screen_size.y;
     float aspect = pixelHeight/pixelWidth;
     float boxLeft = 0.0;
     float boxTop = 0.0;

@@ -22,6 +22,8 @@
  *
  ********************************************************************************************/
 
+use std::time::{Duration, Instant};
+
 use raylib::core::shaders::RaylibShader;
 use raylib::prelude::*;
 
@@ -33,7 +35,8 @@ fn main() {
 
     let texture_path = "crates/raylib_examples/space.png";
     // let texture_path = "assets/font_textures/calibri/font.png";
-    let shader_path = "crates/raylib_examples/wave.fs";
+    // let shader_path = "crates/raylib_examples/wave.fs";
+    let shader_path = "crates/raylib_examples/thruster.fs";
 
     // Load texture texture to apply shaders
     let texture = rl.load_texture(&thread, texture_path).unwrap();
@@ -41,7 +44,11 @@ fn main() {
     // Load shader and setup location points and values
     let mut shader = rl.load_shader(&thread, None, Some(shader_path));
 
-    let seconds_loc = shader.get_shader_location("seconds");
+    if !shader.is_shader_valid() {
+        println!("Invalid shader!");
+        return;
+    }
+
     let freq_x_loc = shader.get_shader_location("freqX");
     let freq_y_loc = shader.get_shader_location("freqY");
     let amp_x_loc = shader.get_shader_location("ampX");
@@ -56,9 +63,6 @@ fn main() {
     let speed_x = 8.0f32;
     let speed_y = 8.0f32;
 
-    let screen_size = [rl.get_screen_width() as f32, rl.get_screen_height() as f32];
-    let size_loc = shader.get_shader_location("size");
-    shader.set_shader_value(size_loc, screen_size);
     shader.set_shader_value(freq_x_loc, freq_x);
     shader.set_shader_value(freq_y_loc, freq_y);
     shader.set_shader_value(amp_x_loc, amp_x);
@@ -70,15 +74,34 @@ fn main() {
 
     rl.set_target_fps(60); // Set our game to run at 60 frames-per-second
 
+    let mut last_loaded = Instant::now();
+
     // Main game loop
     while !rl.window_should_close() {
+        let now = Instant::now();
+        let should_reload = now - last_loaded > Duration::from_millis(100);
+        if should_reload {
+            last_loaded = now;
+            println!("Trying to reload shader");
+            let new_shader = rl.load_shader(&thread, None, Some(shader_path));
+            if new_shader.is_shader_valid() {
+                println!("Shader is valid");
+                shader = new_shader;
+            } else {
+                println!("Shader error!");
+            }
+        }
+
         seconds += rl.get_frame_time();
 
-        shader.set_shader_value(seconds_loc, seconds);
+        let screen_size = [rl.get_screen_width() as f32, rl.get_screen_height() as f32];
+
+        shader.set_shader_value(shader.get_shader_location("seconds"), seconds);
+        shader.set_shader_value(shader.get_shader_location("screen_size"), screen_size);
 
         let mut d = rl.begin_drawing(&thread);
 
-        d.clear_background(Color::DARKOLIVEGREEN);
+        d.clear_background(Color::BLACK);
 
         {
             let mut s = d.begin_shader_mode(&mut shader);
