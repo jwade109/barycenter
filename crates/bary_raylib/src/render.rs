@@ -19,6 +19,7 @@ use bary_terminal::*;
 use bary_ui::*;
 use early_returns::*;
 use raylib::prelude::*;
+use rdev::Key::ShiftLeft;
 
 pub fn to_raylib_camera(camera: &Camera, screen_dims: Vec2) -> Camera2D {
     Camera2D {
@@ -370,7 +371,7 @@ fn draw_orbits(d: &mut RaylibDrawHandle, world: &World) {
     }
 }
 
-pub fn draw_world(world: &World, client: &FrontEnd, d: &mut RaylibDrawHandle) {
+pub fn draw_world(world: &World, client: &mut FrontEnd, d: &mut RaylibDrawHandle) {
     let camera = some_or_return!(client.scene_graph.camera(world));
 
     draw_stars(d, &world.stars, &camera, client.screen_dims);
@@ -406,7 +407,7 @@ pub fn draw_world(world: &World, client: &FrontEnd, d: &mut RaylibDrawHandle) {
 
     draw_lights(&mut c, world, &client);
 
-    draw_thruster_plumes(&mut c, world, &client);
+    draw_thruster_plumes(&mut c, world, client);
 
     draw_trackers(&mut c, &world.tracking, client.alt_mode);
 
@@ -470,6 +471,8 @@ pub fn draw_world(world: &World, client: &FrontEnd, d: &mut RaylibDrawHandle) {
     draw_editor_rename_field(d, client);
 
     draw_chat(d, &client.chat, client.screen_dims, &client.assets);
+
+    draw_thruster_shader(d, world, client);
 
     // draw_imgui(d, gui, assets);
 
@@ -1633,6 +1636,41 @@ fn draw_grid_lines(
         let end = iso.offset(Vec2::new(x.1 as f32, y as f32)).translation;
         draw_line(d, start, end, Color::GRAY.alpha(0.5));
     }
+}
+
+fn draw_thruster_shader(d: &mut RaylibDrawHandle, world: &World, client: &mut FrontEnd) {
+    let lb_loc = client
+        .assets
+        .thruster_shader
+        .get_shader_location("_lower_bound");
+
+    let time_loc = client
+        .assets
+        .thruster_shader
+        .get_shader_location("_current_time");
+
+    let res_loc = client
+        .assets
+        .thruster_shader
+        .get_shader_location("_resolution");
+
+    let current_time = apparent_elapsed_time(world.ticks).as_secs_f32();
+    client
+        .assets
+        .thruster_shader
+        .set_shader_value(time_loc, current_time);
+
+    let res = [d.get_render_width() as f32, d.get_render_height() as f32];
+    client.assets.thruster_shader.set_shader_value(res_loc, res);
+
+    let mut s = d.begin_shader_mode(&mut client.assets.thruster_shader);
+    s.draw_rectangle(
+        0,
+        0,
+        s.get_render_width(),
+        s.get_render_height(),
+        Color::WHITE,
+    );
 }
 
 fn draw_thruster_plumes(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {

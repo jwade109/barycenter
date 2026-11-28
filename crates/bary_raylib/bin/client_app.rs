@@ -97,8 +97,7 @@ impl GameApp {
 
         let mut raylib = Raylib::init();
 
-        let mut assets = Assets::default();
-        load_assets(&mut assets, &mut raylib);
+        let assets = Assets::load(&mut raylib);
 
         let ui_state = UiInteractionState::default();
 
@@ -633,7 +632,7 @@ fn draw_animations(d: &mut RaylibDrawHandle, animations: &Components<AppearingTe
     }
 }
 
-fn draw(d: &mut RaylibDrawHandle, app: &GameApp, ui: Tree<UiMessage>) {
+fn draw(d: &mut RaylibDrawHandle, app: &mut GameApp, ui: Tree<UiMessage>) {
     d.clear_background(Color::BLACK);
 
     if let Some(blob) = &app.frontend.assets.blob {
@@ -647,7 +646,7 @@ fn draw(d: &mut RaylibDrawHandle, app: &GameApp, ui: Tree<UiMessage>) {
     }
 
     if app.frontend.scene_graph.should_draw_world() {
-        draw_world(app.backend.world(), &app.frontend, d);
+        draw_world(app.backend.world(), &mut app.frontend, d);
     }
 
     draw_ui(d, &app.ui_state, &ui, &app.frontend.assets);
@@ -698,7 +697,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         raylib.draw(|mut d: RaylibDrawHandle<'_>| {
-            draw(&mut d, &app, ui.clone());
+            draw(&mut d, &mut app, ui.clone());
         });
 
         sounds.play_sounds(std::mem::take(&mut app.frontend.sounds));
@@ -729,6 +728,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if app.frontend.is_satisfied("global::toggle_camera_lock") {
             app.frontend.toggle_camera_lock(app.backend.world());
+        }
+
+        if app.frontend.is_satisfied("global::reload_shaders") {
+            app.frontend.assets = Assets::load(&mut raylib);
         }
     }
 

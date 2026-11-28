@@ -9,13 +9,13 @@ pub type MaybeTexture = Option<Texture2D>;
 
 pub type MaybeFont = Option<Font>;
 
-#[derive(Default)]
 pub struct Assets {
     lato_regular: Option<Rc<Font>>,
     fira_code: Option<Rc<Font>>,
     consolas: Option<Rc<Font>>,
+    pub thruster_shader: Shader,
     pub part_textures: BTreeMap<String, Texture2D>,
-    pub animation: MaybeTexture,
+    pub __animation: MaybeTexture,
     pub terrain_spritesheet: MaybeTexture,
     pub pipe_tilemap: MaybeTexture,
     pub blob: MaybeTexture,
@@ -24,6 +24,63 @@ pub struct Assets {
 }
 
 impl Assets {
+    pub fn load(raylib: &mut Raylib) -> Self {
+        debug!("Loading assets");
+
+        let lato_regular = load_font(raylib, "assets/fonts/Lato-Regular.ttf");
+        let fira_code = load_font(raylib, "assets/fonts/FiraCode-Bold.ttf");
+        let consolas = load_font(raylib, "assets/fonts/Consolas-Regular.ttf");
+
+        let ship_names = load_names_from_file("assets/ship_names.txt").unwrap_or(vec![]);
+
+        let keybinds = load_keybinds_from_file("assets/keybinds.yaml").unwrap();
+
+        let parts = load_parts_from_dir("assets/parts/").unwrap();
+
+        let mut part_textures = BTreeMap::new();
+
+        for (name, _part) in parts {
+            let skin_path = format!("assets/parts/{}/skin.png", name);
+            if let Ok(tex) = raylib.handle.load_texture(&raylib.thread, &skin_path) {
+                part_textures.insert(name, tex);
+            }
+        }
+
+        let thruster_shader =
+            raylib
+                .handle
+                .load_shader(&raylib.thread, None, Some("assets/shaders/thruster.fs"));
+
+        let terrain_spritesheet = raylib
+            .handle
+            .load_texture(&raylib.thread, "assets/terrain/terrain_sprites.png")
+            .ok();
+
+        let pipe_tilemap = raylib
+            .handle
+            .load_texture(&raylib.thread, "assets/pipe.png")
+            .ok();
+
+        let blob = raylib
+            .handle
+            .load_texture(&raylib.thread, "assets/lado.png")
+            .ok();
+
+        Self {
+            lato_regular,
+            fira_code,
+            consolas,
+            thruster_shader,
+            part_textures,
+            __animation: None,
+            terrain_spritesheet,
+            pipe_tilemap,
+            blob,
+            ship_names,
+            keybinds,
+        }
+    }
+
     pub fn ui_font(&self) -> Rc<Font> {
         self.consolas.clone().unwrap()
     }
@@ -71,40 +128,4 @@ impl Raylib {
     pub fn handle(&self) -> &RaylibHandle {
         &self.handle
     }
-}
-
-pub fn load_assets(assets: &mut Assets, raylib: &mut Raylib) {
-    debug!("Loading assets");
-
-    assets.lato_regular = load_font(raylib, "assets/fonts/Lato-Regular.ttf");
-    assets.fira_code = load_font(raylib, "assets/fonts/FiraCode-Bold.ttf");
-    assets.consolas = load_font(raylib, "assets/fonts/Consolas-Regular.ttf");
-
-    assets.ship_names = load_names_from_file("assets/ship_names.txt").unwrap_or(vec![]);
-
-    assets.keybinds = load_keybinds_from_file("assets/keybinds.yaml").unwrap();
-
-    let parts = load_parts_from_dir("assets/parts/").unwrap();
-
-    for (name, _part) in parts {
-        let skin_path = format!("assets/parts/{}/skin.png", name);
-        if let Ok(tex) = raylib.handle.load_texture(&raylib.thread, &skin_path) {
-            assets.part_textures.insert(name, tex);
-        }
-    }
-
-    assets.terrain_spritesheet = raylib
-        .handle
-        .load_texture(&raylib.thread, "assets/terrain/terrain_sprites.png")
-        .ok();
-
-    assets.pipe_tilemap = raylib
-        .handle
-        .load_texture(&raylib.thread, "assets/pipe.png")
-        .ok();
-
-    assets.blob = raylib
-        .handle
-        .load_texture(&raylib.thread, "assets/lado.png")
-        .ok();
 }

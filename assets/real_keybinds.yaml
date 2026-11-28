@@ -28,6 +28,11 @@ global::download_world:
   secondary: [ControlLeft, ShiftLeft]
   trigger: OnClick
 
+global::reload_shaders:
+  primary: KeyG
+  secondary: [ControlLeft, ShiftLeft]
+  trigger: OnClick
+
 global::toggle_alt_mode:
   primary: Alt
   secondary: []
