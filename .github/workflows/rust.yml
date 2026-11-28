@@ -12,19 +12,17 @@ env:
 jobs:
   build-linux:
     runs-on: ubuntu-latest
-    before_script:
-    - apt update
-    - DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends python3-pip python3-dev libjpeg-dev zlib1g-dev xorg
     steps:
+    - run: apt update
+    - run: DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends python3-pip python3-dev libjpeg-dev zlib1g-dev xorg
     - uses: actions/checkout@v4
     - run: cargo build --release
 
   build-windows:
     runs-on: ubuntu-latest
-    before_script:
-    - apt update
-    - DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends python3-pip python3-dev libjpeg-dev zlib1g-dev xorg
     steps:
+    - run: apt update
+    - run: DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends python3-pip python3-dev libjpeg-dev zlib1g-dev xorg
     - uses: actions/checkout@v4
     - run: |
         rustup target add x86_64-pc-windows-gnu
