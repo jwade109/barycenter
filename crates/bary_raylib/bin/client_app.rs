@@ -496,7 +496,7 @@ impl GameApp {
 #[derive(Parser, Debug, Default, Clone)]
 #[command(version, about, long_about = None)]
 struct Args {
-    #[arg(long)]
+    #[arg(long, default_value = "no_username")]
     username: String,
     #[arg(short = 'a', default_value = "127.0.0.1:5000")]
     server_addr: String,

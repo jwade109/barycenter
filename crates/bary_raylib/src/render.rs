@@ -472,7 +472,7 @@ pub fn draw_world(world: &World, client: &mut FrontEnd, d: &mut RaylibDrawHandle
 
     draw_chat(d, &client.chat, client.screen_dims, &client.assets);
 
-    draw_thruster_shader(d, world, client);
+    // draw_thruster_shader(d, world, client);
 
     // draw_imgui(d, gui, assets);
 
