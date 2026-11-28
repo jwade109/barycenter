@@ -126,3 +126,9 @@ impl<T> Sender<T> {
         self.messages
     }
 }
+
+impl<T> Default for Sender<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -77,15 +77,15 @@ impl Size {
     }
 }
 
-impl Into<Size> for f32 {
-    fn into(self) -> Size {
-        Size::Fixed(self)
+impl From<f32> for Size {
+    fn from(val: f32) -> Self {
+        Size::Fixed(val)
     }
 }
 
-impl Into<Size> for u32 {
-    fn into(self) -> Size {
-        Size::Fixed(self as f32)
+impl From<u32> for Size {
+    fn from(val: u32) -> Self {
+        Size::Fixed(val as f32)
     }
 }
 
@@ -291,7 +291,7 @@ impl<T: UiMsg> Node<T> {
     }
 
     pub fn sprite(&self) -> Option<&str> {
-        self.sprite.as_ref().map(|s| s.as_str())
+        self.sprite.as_deref()
     }
 
     pub fn with_justify(mut self, s: TextJustify) -> Self {
@@ -566,17 +566,11 @@ fn sum_fixed_dims<'a, T: 'a + UiMsg>(
     }
 
     if sx > 0.0 {
-        match bary_ui {
-            LayoutDir::LeftToRight => sx -= childgap,
-            _ => (),
-        }
+        if let LayoutDir::LeftToRight = bary_ui { sx -= childgap }
     }
 
     if sy > 0.0 {
-        match bary_ui {
-            LayoutDir::TopToBottom => sy -= childgap,
-            _ => (),
-        }
+        if let LayoutDir::TopToBottom = bary_ui { sy -= childgap }
     }
 
     sx += padding * 2.0;
@@ -634,7 +628,7 @@ fn populate_positions<'a, T: 'a + UiMsg>(mut root: &mut Node<T>, origin: impl In
 
 fn assign_layers_and_paths<T: UiMsg>(root: &mut Node<T>, path: IdSalt, layer: u32) {
     root.layer = Some(layer);
-    root.path = path.clone();
+    root.path = path;
 
     if let Some(c) = root.children_mut() {
         for c in c {
@@ -777,9 +771,15 @@ impl<T: UiMsg> Tree<T> {
                 continue;
             }
             candidates.sort_by_key(|n| n.layer());
-            return candidates.last().map(|v| *v);
+            return candidates.last().copied();
         }
         None
+    }
+}
+
+impl<T: UiMsg> Default for Tree<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -799,9 +799,9 @@ fn write_node<'a, T: UiMsg>(
         NodeType::Row(nodes) => "Row",
         NodeType::Column(nodes) => "Column",
     };
-    write!(
+    writeln!(
         f,
-        "{}[{:?} pos={:?} dims={}]\n",
+        "{}[{:?} pos={:?} dims={}]",
         spacer,
         repr,
         node.calculated_position,
@@ -835,8 +835,8 @@ pub fn write_layout_to_svg<T: UiMsg>(filepath: &str, tree: &Tree<T>) -> Result<(
     let aabbs: Vec<(AABB, [f32; 4])> = tree
         .layouts()
         .iter()
-        .flat_map(|r| r.iter().map(|n| n).collect::<Vec<_>>())
-        .filter_map(|n| n.is_visible().then(|| (n.aabb(), n.color())))
+        .flat_map(|r| r.iter().collect::<Vec<_>>())
+        .filter(|&n| n.is_visible()).map(|n| (n.aabb(), n.color()))
         .collect();
 
     write_svg(filepath, &aabbs)

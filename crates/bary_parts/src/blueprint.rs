@@ -46,10 +46,10 @@ impl Blueprint {
     }
 
     pub fn merge(&mut self, other: &Blueprint) {
-        for (_, part) in &other.parts {
+        for part in other.parts.values() {
             self.add_part(part.name.clone(), part.region, part.layer());
         }
-        for (_, pipe) in &other.pipes {
+        for pipe in other.pipes.values() {
             self.add_pipe(*pipe);
         }
     }
@@ -127,11 +127,10 @@ impl Blueprint {
 
         for part_layer in enum_iterator::reverse_all::<PartLayer>() {
             let found = self.parts.iter().find(|(_, instance)| {
-                if let Some(layer) = layer {
-                    if layer != instance.layer() {
+                if let Some(layer) = layer
+                    && layer != instance.layer() {
                         return false;
                     }
-                }
 
                 if instance.layer() != part_layer {
                     return false;
@@ -225,16 +224,16 @@ impl Blueprint {
     pub fn get_pipes_at(&self, p: PartCoord) -> Vec<PartId> {
         self.pipes
             .iter()
-            .filter_map(|(id, pipe)| pipe.contains(p).then(|| *id))
+            .filter_map(|(id, pipe)| pipe.contains(p).then_some(*id))
             .collect()
     }
 
     pub fn rotate_ccw(&mut self) {
-        for (_, part) in &mut self.parts {
+        for part in self.parts.values_mut() {
             part.rotate_ccw();
         }
 
-        for (_, pipe) in &mut self.pipes {
+        for pipe in self.pipes.values_mut() {
             pipe.rotate_ccw();
         }
     }
@@ -247,7 +246,7 @@ impl Blueprint {
         let mut lower: Option<IVec2> = None;
         let mut upper: Option<IVec2> = None;
 
-        for (_, part) in &self.parts {
+        for part in self.parts.values() {
             let l = part.region.bottom_left().inner();
             let u = l + part.dims_grid().as_ivec2();
 
@@ -317,6 +316,12 @@ impl Blueprint {
         self.parts
             .iter()
             .find_map(|(id, part)| (part.region.contains(p) && part.layer == layer).then_some(*id))
+    }
+}
+
+impl Default for Blueprint {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

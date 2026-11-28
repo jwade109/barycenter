@@ -3,8 +3,6 @@ use bary_ipc::{Framer, Packet};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::OpenOptions,
-    io::Write,
     net::UdpSocket,
     sync::mpsc::{Receiver, Sender, channel},
     time::Duration,

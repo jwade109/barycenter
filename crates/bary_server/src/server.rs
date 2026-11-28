@@ -2,7 +2,7 @@ use bary_core::prelude::*;
 use bary_ipc::*;
 use bary_sim::*;
 use log::*;
-use log::{debug, info, warn};
+use log::{debug, info};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 use std::net::SocketAddr;
@@ -145,7 +145,7 @@ impl BaryServer {
     }
 
     pub fn save_file(&self) -> Option<&Path> {
-        self.save_file.as_ref().map(|p| p.as_path())
+        self.save_file.as_deref()
     }
 
     pub fn world(&self) -> &World {
@@ -408,7 +408,7 @@ impl BaryServer {
         Some(())
     }
 
-    fn on_accept_set_sim_speed(&mut self, id: ClientId, speed: u32) -> Option<()> {
+    fn on_accept_set_sim_speed(&mut self, _id: ClientId, speed: u32) -> Option<()> {
         self.tick_rate = speed;
         self.node.broadcast(ServerResponse::NewSimSpeed(speed));
         Some(())

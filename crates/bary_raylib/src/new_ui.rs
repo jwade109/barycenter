@@ -157,7 +157,7 @@ impl UiInteractionState {
 
                 if contains {
                     self.hot = Some(UiRef {
-                        path: path.clone(),
+                        path: *path,
                         offset: relative,
                         onclick: node.on_click().cloned(),
                     });
@@ -171,16 +171,13 @@ impl UiInteractionState {
 
         let mut ret = None;
 
-        if input.is_key_pressed(rdev::Button::Left) {
-            if let Some((last, (cur, active))) =
+        if input.is_key_pressed(rdev::Button::Left)
+            && let Some((last, (cur, active))) =
                 last_pos.zip(self.screen_pos.zip(self.active.as_ref()))
-            {
-                if last != cur {
+                && last != cur {
                     let delta = cur - last;
                     ret = Some(UiEvent::drag(active.clone(), delta));
                 }
-            }
-        }
 
         // if input.just_pressed(rdev::Button::Left) {
         //     if let Some(active) = self.active {
@@ -189,11 +186,10 @@ impl UiInteractionState {
         // }
 
         if input.just_released(rdev::Button::Left) {
-            if let Some((active, hot)) = self.active.as_ref().zip(self.hot.as_ref()) {
-                if active.path == hot.path {
+            if let Some((active, hot)) = self.active.as_ref().zip(self.hot.as_ref())
+                && active.path == hot.path {
                     ret = Some(UiEvent::release(active.clone()));
                 }
-            }
             self.active = None;
         }
 

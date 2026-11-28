@@ -5,8 +5,6 @@ use clap::Parser;
 use raylib::color::Color;
 use raylib::drawing::{RaylibDraw, RaylibDrawHandle};
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Parser)]
@@ -77,7 +75,7 @@ fn run_simulation(
     for _ in 0..ticks {
         update_world(&mut world);
 
-        if ticks % ticks_per_epoch > 0 {
+        if !ticks.is_multiple_of(ticks_per_epoch) {
             continue;
         }
 

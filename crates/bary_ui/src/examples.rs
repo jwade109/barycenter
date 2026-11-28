@@ -31,7 +31,7 @@ fn text_dims(s: &str) -> (usize, usize) {
 fn text_node(s: &str, width: impl Into<Size>, height: impl Into<Size>) -> Node<String> {
     let chr_width = 15.0;
     let chr_height = 30.0;
-    let (lines, max_line) = text_dims(&s);
+    let (lines, max_line) = text_dims(s);
     let twidth = max_line as f32 * chr_width;
     let theight = lines as f32 * chr_height;
     Node::structural(width, height, "")
@@ -90,7 +90,7 @@ pub fn example_layout(width: f32, height: f32) -> Tree<String> {
 
     let topbar = Node::row(Size::Fit, "", vec![])
         .with_spacing(spacing)
-        .with_children((0..10).map(|i| Node::text(120, 40, &format!("thing {}", i))))
+        .with_children((0..10).map(|i| Node::text(120, 40, format!("thing {}", i))))
         .with_children((0..5).map(|_| Node::grow("").invisible()))
         .with_child(Node::column(70, "", vec![]));
 

@@ -188,20 +188,14 @@ pub fn process_event(world: &World, client: &mut ClientSpecificInfo, on_gui: boo
 
     for event in events {
         match event.event_type {
-            rdev::EventType::KeyPress(key) => match key {
-                Key::KeyC => {
-                    input_handlers::editor_copy_on_control_c(world, client);
-                }
-                _ => (),
+            rdev::EventType::KeyPress(key) => if key == Key::KeyC {
+                input_handlers::editor_copy_on_control_c(world, client);
             },
             rdev::EventType::KeyRelease(_key) => (),
             rdev::EventType::ButtonPress(button) => {
                 if !on_gui {
-                    match button {
-                        Button::Left => {
-                            select_hovered_grid_loc_on_click(client);
-                        }
-                        _ => (),
+                    if button == Button::Left {
+                        select_hovered_grid_loc_on_click(client);
                     }
                 }
             }
@@ -285,34 +279,28 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
 
     update_terrain_selection_info(client, &world.asteroids);
 
-    if client.input.just_pressed_debounced(Button::Right) {
-        if let Some(mouse_pos) = client.mouse_screen_position {
-            if let Some(camera) = client.scene_graph.camera(world) {
-                if let Some(free) = client.scene_graph.free_mut() {
+    if client.input.just_pressed_debounced(Button::Right)
+        && let Some(mouse_pos) = client.mouse_screen_position
+            && let Some(camera) = client.scene_graph.camera(world)
+                && let Some(free) = client.scene_graph.free_mut() {
                     let world_pos = screen_to_world(&camera, mouse_pos, client.screen_dims);
                     free.waypoint_widget = Some(world_pos);
                 }
-            }
-        }
-    }
 
-    if client.input.just_pressed(Button::Right) {
-        if let Some(d) = destroy_top_layer_part_at_mouseover(client) {
+    if client.input.just_pressed(Button::Right)
+        && let Some(d) = destroy_top_layer_part_at_mouseover(client) {
             deltas.send(d);
         }
-    }
 
     if client.input.just_released(Button::Right) {
-        if let Some(free) = client.scene_graph.free() {
-            if let Some(p) = free.waypoint_widget {
-                if let Some(mouse_pos) = client.mouse_screen_position {
+        if let Some(free) = client.scene_graph.free()
+            && let Some(p) = free.waypoint_widget
+                && let Some(mouse_pos) = client.mouse_screen_position {
                     let q = screen_to_world(&free.camera, mouse_pos, client.screen_dims);
                     deltas.extend(input_handlers::command_selected_ships_to_waypoint(
                         client, p, q,
                     ));
                 }
-            }
-        }
 
         if let Some(free) = client.scene_graph.free_mut() {
             free.waypoint_widget = None;
@@ -327,17 +315,15 @@ pub fn pre_simulation_update(world: &World, client: &mut ClientSpecificInfo) -> 
         toggle_tracking_for_selected_grid(client, &mut deltas);
     }
 
-    if client.is_satisfied("freecamera::explode_at_mouseover") {
-        if let Some(d) = explode_at_mouseover(client) {
+    if client.is_satisfied("freecamera::explode_at_mouseover")
+        && let Some(d) = explode_at_mouseover(client) {
             deltas.send(d);
         }
-    }
 
-    if client.is_satisfied("freecamera::spawn_radio_transmission") {
-        if let Some(d) = spawn_ping(client, world) {
+    if client.is_satisfied("freecamera::spawn_radio_transmission")
+        && let Some(d) = spawn_ping(client, world) {
             deltas.send(d);
         }
-    }
 
     deltas
 }

@@ -182,9 +182,9 @@ impl SparseOrbit {
         let r3 = pv.pos.extend(0.0);
         let v3 = pv.vel.extend(0.0);
         let h = r3.cross(v3);
-        let e = v3.cross(h) / body.mu() as f64 - r3 / r3.length();
+        let e = v3.cross(h) / body.mu() - r3 / r3.length();
         let arg_periapsis = f64::atan2(e.y, e.x);
-        let semi_major_axis = h.length_squared() / (body.mu() as f64 * (1.0 - e.length_squared()));
+        let semi_major_axis = h.length_squared() / (body.mu() * (1.0 - e.length_squared()));
 
         let mut true_anomaly = f64::acos(e.dot(r3) / (e.length() * r3.length()));
         if r3.dot(v3) < 0.0 {
@@ -204,7 +204,7 @@ impl SparseOrbit {
                 let eccentric_anomaly = true_to_eccentric(true_anomaly, e.length());
                 let mean_anomaly = eccentric_to_mean(eccentric_anomaly, e.length());
                 let mean_motion = (body.mu() / semi_major_axis.abs().powi(3)).sqrt();
-                Some(epoch - Nanotime::secs_f64(mean_anomaly.as_f64() / mean_motion as f64))
+                Some(epoch - Nanotime::secs_f64(mean_anomaly.as_f64() / mean_motion))
             }
         };
 
@@ -218,12 +218,11 @@ impl SparseOrbit {
             time_at_periapsis,
         };
 
-        if let Some(p) = o.period() {
-            if p == Nanotime::zero() {
+        if let Some(p) = o.period()
+            && p == Nanotime::zero() {
                 println!("SparseOrbit returned orbit with zero period: {pv:?}\n  {o:?}");
                 return None;
             }
-        }
 
         Some(o)
     }
@@ -239,7 +238,7 @@ impl SparseOrbit {
         let sma = (ra + rp) / 2.0;
         let sign = if retrograde { -1.0 } else { 1.0 };
         let p = DVec2::X * rp;
-        let v = sign * DVec2::Y * (body.mu() as f64 * ((2.0 / rp) - (1.0 / sma))).sqrt();
+        let v = sign * DVec2::Y * (body.mu() * ((2.0 / rp) - (1.0 / sma))).sqrt();
         let p = rotate_f64(p, argp);
         let v = rotate_f64(v, argp);
         let pv = PV::from_f64(p, v);
@@ -249,10 +248,10 @@ impl SparseOrbit {
     pub fn circular(radius: f64, body: Body, epoch: Nanotime, retrograde: bool) -> Self {
         let p = DVec2::new(radius, 0.0);
         let v = if retrograde { -1.0 } else { 1.0 }
-            * DVec2::new(0.0, (body.mu() as f64 / radius).sqrt());
+            * DVec2::new(0.0, (body.mu() / radius).sqrt());
         SparseOrbit {
             eccentricity: 0.0,
-            semi_major_axis: radius as f64,
+            semi_major_axis: radius,
             arg_periapsis: 0.0,
             body,
             initial: PV::from_f64(p, v),
@@ -282,13 +281,13 @@ impl SparseOrbit {
     }
 
     pub fn is_suborbital(&self) -> bool {
-        self.periapsis_r() < self.body.radius as f64
+        self.periapsis_r() < self.body.radius
     }
 
     pub fn will_escape(&self) -> bool {
         match self.class() {
             OrbitClass::Parabolic | OrbitClass::Hyperbolic => true,
-            _ => self.apoapsis_r() > self.body.soi as f64,
+            _ => self.apoapsis_r() > self.body.soi,
         }
     }
 
@@ -373,16 +372,16 @@ impl SparseOrbit {
     pub fn ta_at_time(&self, stamp: Nanotime) -> Option<f64> {
         let p = self.pv_universal(stamp).ok()?;
         let ta = if self.is_retrograde() {
-            -p.pos.to_angle() as f64 + self.arg_periapsis
+            -p.pos.to_angle() + self.arg_periapsis
         } else {
-            p.pos.to_angle() as f64 - self.arg_periapsis
+            p.pos.to_angle() - self.arg_periapsis
         };
         Some(wrap_pi_npi_f64(ta))
     }
 
     pub fn radius_at(&self, true_anomaly: f64) -> f64 {
         if self.eccentricity == 1.0 {
-            let mu = self.body.mu() as f64;
+            let mu = self.body.mu();
             return (self.h().powi(2) / mu) * 1.0 / (1.0 + true_anomaly.cos());
         }
         self.semi_major_axis * (1.0 - self.eccentricity.powi(2))
@@ -424,7 +423,7 @@ impl SparseOrbit {
         if sol.pv.pos.length() > 3.0 * self.body.soi {
             return Err(ul.0);
         }
-        Ok(sol.pv.filter_numerr().ok_or(ul.0)?)
+        sol.pv.filter_numerr().ok_or(ul.0)
     }
 
     pub fn pv_lut(&self, stamp: Nanotime) -> Option<PV> {
@@ -446,7 +445,7 @@ impl SparseOrbit {
 
     pub fn velocity_at(&self, true_anomaly: f64) -> DVec2 {
         let r = self.radius_at(true_anomaly);
-        let v = (self.body.mu() as f64 * (2.0 / r - 1.0 / self.semi_major_axis)).sqrt();
+        let v = (self.body.mu() * (2.0 / r - 1.0 / self.semi_major_axis)).sqrt();
         let h = self.h().abs();
         let cosfpa = h / (r * v);
         let sinfpa = cosfpa * self.eccentricity * true_anomaly.sin()
@@ -473,7 +472,7 @@ impl SparseOrbit {
     }
 
     pub fn mean_motion(&self) -> f64 {
-        (self.body.mu() as f64 / self.semi_major_axis.abs().powi(3)).sqrt()
+        (self.body.mu() / self.semi_major_axis.abs().powi(3)).sqrt()
     }
 
     pub fn mean_anomaly(&self, stamp: Nanotime) -> Option<f64> {
@@ -501,7 +500,7 @@ impl SparseOrbit {
     pub fn t_next_p(&self, current: Nanotime) -> Option<Nanotime> {
         let tp = self.time_at_periapsis?;
         if self.eccentricity >= 1.0 {
-            return (tp >= current).then(|| tp);
+            return (tp >= current).then_some(tp);
         }
         let p = self.period()?;
         let n = self.orbit_number(current)?;
@@ -548,7 +547,7 @@ impl SparseOrbit {
 
     pub fn nearest_along_track(&self, pos: DVec2) -> (PV, f64) {
         let angle = -pos.angle_to(DVec2::X);
-        let p = self.pv_at_angle(angle as f64);
+        let p = self.pv_at_angle(angle);
         let d = p.pos.distance(pos);
         if p.pos.length() > pos.length() {
             (p, -d)
@@ -779,7 +778,7 @@ impl ULData {
     }
 
     fn solve_fast(&self) -> Option<ULResults> {
-        ULResults::new(self.chi_0, &self)
+        ULResults::new(self.chi_0, self)
     }
 
     fn solve(&self) -> Option<ULResults> {
@@ -806,7 +805,7 @@ impl ULData {
             return None;
         }
 
-        ULResults::new(chi, &self)
+        ULResults::new(chi, self)
     }
 }
 

@@ -60,7 +60,7 @@ impl Isometry2d {
 
     pub fn in_frame(&self, p: DVec2) -> DVec2 {
         let offset = p - self.translation;
-        let yaw = self.rotation as f64;
+        let yaw = self.rotation;
         rotate_f64(offset, -yaw)
     }
 

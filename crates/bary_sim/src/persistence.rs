@@ -27,8 +27,8 @@ pub fn save_world(
     let s = to_allocvec(&world.ticks)?;
     std::fs::write(dir.join("ticks.bin"), s)?;
 
-    save(&world.spawner, &dir, "spawner.bin")?;
-    save(&world.blueprints, &dir, "blueprints.bin")?;
+    save(&world.spawner, dir, "spawner.bin")?;
+    save(&world.blueprints, dir, "blueprints.bin")?;
 
     let s = to_allocvec(&world.prototypes)?;
     std::fs::write(dir.join("prototypes.bin"), s)?;
@@ -181,10 +181,8 @@ pub fn load_world(dir: impl AsRef<Path>) -> Result<World, Box<dyn std::error::Er
 pub fn list_saves_in_dir(dir: impl AsRef<Path>) -> Vec<PathBuf> {
     let mut ret = Vec::new();
     if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries {
-            if let Ok(e) = entry {
-                ret.push(e.path());
-            }
+        for e in entries.flatten() {
+            ret.push(e.path());
         }
     }
     ret

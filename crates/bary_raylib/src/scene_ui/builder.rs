@@ -1,5 +1,5 @@
 use crate::{UI_FONT_SIZE, UiInteractionState, UiMessage, UiRef};
-use bary_core::prelude::{BColor, Vec2};
+use bary_core::prelude::Vec2;
 use bary_input::InputState;
 use bary_ui::*;
 use rand::random_range;
@@ -41,7 +41,7 @@ impl UiBuilder {
         let id_salt = id_salt.into();
         let x = random_range(100.0..700.0);
         let y = random_range(100.0..400.0);
-        let offset = self.window_pos(id_salt.clone(), (x, y).into());
+        let offset = self.window_pos(id_salt, (x, y).into());
         let node = Node::column(Size::Fit, id_salt, Vec::new());
         self.active_node = Some((node, offset));
         self.draghandle(id_salt);
@@ -86,7 +86,7 @@ impl UiBuilder {
 
     pub fn draghandle(&mut self, salt: impl Into<IdSalt>) {
         let s = salt.into();
-        let msg = UiMessage::Drag(s.clone());
+        let msg = UiMessage::Drag(s);
         let n = Node::handle(Size::Grow, 20, s, msg);
         self.add_to_active(n);
     }
@@ -147,7 +147,7 @@ impl UiBuilder {
         self.add_to_active(Node::progress_bar(Size::Grow, 11, val, "progress_bar"));
     }
 
-    pub fn window(&mut self, id_salt: impl Into<IdSalt>, func: impl FnOnce(&mut UiBuilder) -> ()) {
+    pub fn window(&mut self, id_salt: impl Into<IdSalt>, func: impl FnOnce(&mut UiBuilder)) {
         self.begin_window(id_salt);
         func(self);
         self.end_window();
@@ -157,7 +157,7 @@ impl UiBuilder {
         &mut self,
         id_salt: impl Into<IdSalt>,
         pos: Vec2,
-        func: impl FnOnce(&mut UiBuilder) -> (),
+        func: impl FnOnce(&mut UiBuilder),
     ) {
         self.begin_window_at(pos, id_salt);
         func(self);

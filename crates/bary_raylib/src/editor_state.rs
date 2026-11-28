@@ -82,16 +82,14 @@ impl EditorState {
     }
 
     pub fn update(&mut self, input: &InputState, world: &World, deltas: &mut Sender<WorldDelta>) {
-        if input.just_pressed(Button::Left) {
-            if let Some(delta) = self.editor_on_left_click(world) {
+        if input.just_pressed(Button::Left)
+            && let Some(delta) = self.editor_on_left_click(world) {
                 deltas.send(delta);
             }
-        }
-        if input.just_released(Button::Left) {
-            if let Some(d) = self.editor_on_release_left_click() {
+        if input.just_released(Button::Left)
+            && let Some(d) = self.editor_on_release_left_click() {
                 deltas.send(d);
             }
-        }
     }
 }
 
@@ -145,8 +143,8 @@ impl EditorState {
     pub fn handle_keys(&mut self, input: &InputState, world: &World) -> Option<WorldDelta> {
         let mut ret = None;
 
-        if input.just_pressed_debounced(rdev::Key::Return) && self.vehicle_name_field.is_some() {
-            if let Some((field, is_name)) = self.vehicle_name_field.take() {
+        if input.just_pressed_debounced(rdev::Key::Return) && self.vehicle_name_field.is_some()
+            && let Some((field, is_name)) = self.vehicle_name_field.take() {
                 let delta = if is_name {
                     WorldDelta::RenameGrid(self.vehicle, field.contents().to_string())
                 } else {
@@ -156,7 +154,6 @@ impl EditorState {
                 ret = Some(delta);
                 self.vehicle_name_field = None;
             }
-        }
 
         if let Some((field, _is_name)) = &mut self.vehicle_name_field {
             field.handle_keys(input);
@@ -269,11 +266,10 @@ impl EditableText {
                     rdev::Key::Backspace => self.on_backspace(),
                     rdev::Key::Return => self.clear(),
                     _ => {
-                        if let Some(s) = &event.name {
-                            if s.is_ascii() {
+                        if let Some(s) = &event.name
+                            && s.is_ascii() {
                                 self.inner += s;
                             }
-                        }
                     }
                 }
             }

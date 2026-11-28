@@ -214,7 +214,7 @@ impl Computer {
         let body = RigidBody {
             pv: actual_pv,
             angle: actual.as_rad() as f64,
-            angular_velocity: info.vel.rotation as f64,
+            angular_velocity: info.vel.rotation,
         };
 
         let (ctrl, _status) =
@@ -228,7 +228,7 @@ impl Computer {
         let body = RigidBody {
             pv: PV::ZERO,
             angle: actual.as_rad() as f64,
-            angular_velocity: info.vel.rotation as f64,
+            angular_velocity: info.vel.rotation,
         };
 
         let (ctrl, _status) =
@@ -243,8 +243,8 @@ impl Computer {
 
         let body = RigidBody {
             pv: actual_pv,
-            angle: info.pos.rotation as f64,
-            angular_velocity: info.vel.rotation as f64,
+            angle: info.pos.rotation,
+            angular_velocity: info.vel.rotation,
         };
 
         let (ctrl, _status) = position_hold_control_law(

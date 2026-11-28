@@ -3,7 +3,6 @@ use bary_core::prelude::*;
 use bary_parts::*;
 use log::*;
 
-#[must_use]
 pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
     debug!("Applying delta {:?} at tick {}", delta, world.ticks);
     match delta {
@@ -38,7 +37,7 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             let proto = world.prototypes.try_get(proto_id)?;
             let layer = proto.layer;
             let region = GridRegion::new(PartCoord::ZERO, Rotation::East, proto.dims);
-            let grid_id = spawn_empty_grid(world, &format!("part-{name}"));
+            let grid_id = spawn_empty_grid(world, format!("part-{name}"));
             let instance = &PartInstance {
                 name,
                 layer,

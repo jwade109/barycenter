@@ -3,7 +3,7 @@ use std::path::Path;
 
 use bary_core::prelude::*;
 use clap::Parser;
-use image::{ColorType, DynamicImage, Rgba};
+use image::{ColorType, DynamicImage};
 
 pub struct Particle {
     pos: Vec2,
@@ -21,7 +21,7 @@ fn random_color() -> BColor {
 }
 
 impl Particle {
-    fn new(pos: Vec2, angle: f32, vscale: f32) -> Self {
+    fn new(pos: Vec2, _angle: f32, vscale: f32) -> Self {
         let da = rand(-0.04, 0.04);
         let v = rand(130.0, 400.0) * da.cos() * vscale;
         let vel = rotate(Vec2::X * v, da);

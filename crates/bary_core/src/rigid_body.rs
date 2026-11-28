@@ -51,12 +51,12 @@ impl RigidBody {
     }
 
     pub fn clamp_with_elevation(&mut self, elevation: f64) -> bool {
-        let elev = self.pv.pos.length() as f64;
+        let elev = self.pv.pos.length();
 
         let clamped = elev <= elevation;
 
         if clamped {
-            self.pv.pos = self.pv.pos.normalize_or_zero() * elevation as f64;
+            self.pv.pos = self.pv.pos.normalize_or_zero() * elevation;
             self.pv.vel = DVec2::ZERO;
         }
 

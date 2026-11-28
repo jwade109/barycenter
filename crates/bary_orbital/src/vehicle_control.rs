@@ -646,11 +646,10 @@ impl VehicleController {
     }
 
     fn mark_target_achieved(&mut self) {
-        if let VehicleControlPolicy::PositionHold(queue) = &mut self.mode {
-            if queue.len() > 1 {
+        if let VehicleControlPolicy::PositionHold(queue) = &mut self.mode
+            && queue.len() > 1 {
                 queue.remove(0);
             }
-        }
     }
 
     pub fn check_target_achieved(&mut self, body: &RigidBody, ignore_angle: bool) {

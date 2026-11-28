@@ -30,3 +30,9 @@ impl InputHandler {
         self.input.clone()
     }
 }
+
+impl Default for InputHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}

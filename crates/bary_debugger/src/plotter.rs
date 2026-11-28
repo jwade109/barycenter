@@ -35,7 +35,7 @@ impl Plotter {
     pub fn draw(&self, ui: &mut egui::Ui) {
         let legend = Legend::default();
         let plot = Plot::new(&self.id);
-        let plot = if let Some(aspect) = self.aspect.into() {
+        let plot = if let Some(aspect) = self.aspect {
             plot.data_aspect(aspect)
         } else {
             plot

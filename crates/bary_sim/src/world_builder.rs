@@ -181,7 +181,7 @@ impl WorldBuilder {
 
             let parts = load_parts_from_dir(&parts_dir).expect("Parts dir");
 
-            for (_, part) in &parts {
+            for part in parts.values() {
                 let id = world.spawner.spawn();
                 world.prototypes.spawn(id, part.clone());
             }
@@ -202,7 +202,7 @@ impl WorldBuilder {
                 WorldBuilderCommand::LoadBlueprint(bpid) => {
                     if let Some(assets_dir) = self.assets_dir.as_ref() {
                         let id = world.spawner.spawn();
-                        if let Ok(bp) = load_blueprint(&bpid, &assets_dir, &parts) {
+                        if let Ok(bp) = load_blueprint(&bpid, assets_dir, &parts) {
                             let bp = NamedBlueprint {
                                 id: bpid,
                                 blueprint: bp,
@@ -323,5 +323,11 @@ impl WorldBuilder {
         }
 
         world
+    }
+}
+
+impl Default for WorldBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }

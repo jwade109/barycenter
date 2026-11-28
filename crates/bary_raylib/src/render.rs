@@ -38,7 +38,7 @@ fn draw_text(d: &mut RaylibDrawHandle, iso: Isometry2d, text: &str, font_size: f
     if !text.is_empty() {
         d.draw_text_pro(
             d.get_font_default(),
-            &text,
+            text,
             p,
             Vector2::zero(),
             -iso.rotation.to_degrees() as f32,
@@ -65,7 +65,7 @@ fn draw_text_centered_bg(d: &mut RaylibDrawHandle, iso: Isometry2d, text: &str, 
 
     d.draw_text_pro(
         d.get_font_default(),
-        &text,
+        text,
         p,
         Vector2::zero(),
         -iso.rotation.to_degrees() as f32,
@@ -387,7 +387,7 @@ pub fn draw_world(world: &World, client: &mut FrontEnd, d: &mut RaylibDrawHandle
 
     draw_origin_and_range_indicators(&mut c);
 
-    draw_asteroids(&mut c, world, &client);
+    draw_asteroids(&mut c, world, client);
 
     if client.scene_graph.is_real_view() {
         draw_computer_targets(&mut c, world);
@@ -403,9 +403,9 @@ pub fn draw_world(world: &World, client: &mut FrontEnd, d: &mut RaylibDrawHandle
         &client.assets,
     );
 
-    draw_selection_info(&mut c, &world.grids, &client);
+    draw_selection_info(&mut c, &world.grids, client);
 
-    draw_lights(&mut c, world, &client);
+    draw_lights(&mut c, world, client);
 
     draw_thruster_plumes(&mut c, world, client);
 
@@ -420,7 +420,7 @@ pub fn draw_world(world: &World, client: &mut FrontEnd, d: &mut RaylibDrawHandle
         draw_thruster_classification(&mut c, world);
     }
 
-    draw_outline_hovered_parts(&mut c, &world.grids, &world.parts, &client);
+    draw_outline_hovered_parts(&mut c, &world.grids, &world.parts, client);
 
     draw_mouse_world_position(
         &mut c,
@@ -464,9 +464,9 @@ pub fn draw_world(world: &World, client: &mut FrontEnd, d: &mut RaylibDrawHandle
 
     drop(c);
 
-    draw_grid_far_indicators(&world.grids, d, &client, &raylib_camera, &client.assets);
+    draw_grid_far_indicators(&world.grids, d, client, &raylib_camera, &client.assets);
 
-    draw_selected_grid_info(d, &client, &world, client.screen_dims, &client.assets);
+    draw_selected_grid_info(d, client, world, client.screen_dims, &client.assets);
 
     draw_editor_rename_field(d, client);
 
@@ -578,13 +578,13 @@ fn get_terrain_tile_rect(material: TerrainMaterial, variant: usize) -> Rectangle
 #[allow(unused)]
 fn draw_animation(d: &mut RaylibDrawHandle, assets: &Assets) {
     if let Some(anim) = &assets.terrain_spritesheet {
-        d.draw_texture(&anim, 100, 100, Color::WHITE);
+        d.draw_texture(anim, 100, 100, Color::WHITE);
 
         let i = d.get_time() * 10.0;
 
         let rec = Rectangle::new(i as f32, 0.0, 100.0, 100.0);
 
-        d.draw_texture_rec(&anim, rec, Vector2::new(100.0, 250.0), Color::WHITE);
+        d.draw_texture_rec(anim, rec, Vector2::new(100.0, 250.0), Color::WHITE);
     }
 }
 
@@ -693,7 +693,7 @@ fn draw_chat(d: &mut RaylibDrawHandle, chat: &Chat, screen_dims: Vec2, assets: &
 
     for log in chat.logs() {
         let t = format_log(log);
-        let pos = Vector2::new(x as f32, y as f32);
+        let pos = Vector2::new(x as f32, y);
         let font = assets.ui_font();
         d.draw_text_ex(font.as_ref(), &t, pos, font_size, 0.0, Color::WHITE);
         y -= font_size;
@@ -713,10 +713,10 @@ pub fn draw_text_centered(
     }
 
     let spacing = 0.0;
-    let dims = font.measure_text(&text, font_size, spacing);
+    let dims = font.measure_text(text, font_size, spacing);
     let text_origin = Vector2::new(pos.x - dims.x / 2.0, pos.y - dims.y / 2.0);
 
-    d.draw_text_ex(font, &text, text_origin, font_size, spacing as f32, color);
+    d.draw_text_ex(font, text, text_origin, font_size, spacing, color);
 }
 
 pub fn draw_text_centered_weak(
@@ -732,15 +732,15 @@ pub fn draw_text_centered_weak(
     }
 
     let spacing = 1.0;
-    let dims = font.measure_text(&text, font_size as f32, spacing);
+    let dims = font.measure_text(text, font_size as f32, spacing);
     let text_origin = Vector2::new(pos.x - dims.x / 2.0, pos.y - dims.y / 2.0);
 
     d.draw_text_ex(
         font,
-        &text,
+        text,
         text_origin,
         font_size as f32,
-        spacing as f32,
+        spacing,
         color,
     );
 }
@@ -1011,7 +1011,7 @@ pub fn draw_editor_rename_field(d: &mut RaylibDrawHandle, fe: &FrontEnd) {
         (field.contents().to_string(), Color::WHITE)
     };
 
-    let dims = font.measure_text(&text, font_size as f32, spacing)
+    let dims = font.measure_text(&text, font_size, spacing)
         + Vector2::new(padding as f32, padding as f32) * 2.0;
 
     let width = d.get_render_width() + padding * 2;
@@ -1177,7 +1177,7 @@ pub fn draw_computer_targets(d: &mut RaylibDrawHandle, world: &World) {
 
         draw_isometry_axes(d, pose, &grid.name, DVec2::new(1.0, 0.4));
 
-        for (occ, _) in &grid.occupancy {
+        for occ in grid.occupancy.keys() {
             let coord = PartCoord::new(*occ);
             let origin = pose.offset(-grid.centroid());
             draw_grid_coord(d, origin, coord, Color::TEAL);
@@ -1940,11 +1940,10 @@ fn draw_asteroid(d: &mut RaylibDrawHandle, rock: &BigRock, world: &World, client
             for x in min.0.x..=max.0.x {
                 for y in min.0.y..=max.0.y {
                     let c = ChunkIndex((x, y).into());
-                    if is_chunk_onscreen(camera, rock.iso, c, &client) {
-                        if let Some(id) = rock.chunks.get(&c) {
+                    if is_chunk_onscreen(camera, rock.iso, c, client)
+                        && let Some(id) = rock.chunks.get(&c) {
                             chunks_to_draw.push((c, *id));
                         }
-                    }
                 }
             }
         }
@@ -2049,7 +2048,7 @@ pub fn draw_terminal<T: std::fmt::Debug>(
         let origin = text_origin - IVec2::Y * (font_size + line_gap) * (i as i32 + 1);
         d.draw_text_ex(
             font.as_ref(),
-            &line,
+            line,
             Vector2::new(origin.x as f32, origin.y as f32),
             font_size as f32,
             1.0,
@@ -2163,7 +2162,7 @@ fn draw_node(
 
             let p = glam_to_raylib(aabb.center);
             let font_size = UI_FONT_SIZE as f32 * scale;
-            draw_text_centered(d, font, &text, p, font_size, Color::WHITE);
+            draw_text_centered(d, font, text, p, font_size, Color::WHITE);
         }
         NodeType::Text(text) => {
             let c = node.color();
@@ -2174,7 +2173,7 @@ fn draw_node(
                 (c[3] * 255.0) as u8,
             );
             let p = glam_to_raylib(aabb.center);
-            draw_text_centered(d, font, &text, p, font_size, color);
+            draw_text_centered(d, font, text, p, font_size, color);
         }
         NodeType::DragHandle(_) => {
             let color = if is_clicked {

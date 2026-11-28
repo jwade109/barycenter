@@ -1,11 +1,11 @@
 use crate::ClientId;
 use crate::*;
 use log::{error, info, trace, warn};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::net::*;
 use std::time::{Duration, SystemTime};
 
-const CLIENT_BIND_ADDRESS: &'static str = "0.0.0.0:0";
+const CLIENT_BIND_ADDRESS: &str = "0.0.0.0:0";
 
 #[derive(Clone, Copy, Debug)]
 pub struct ClientStatistics {
@@ -105,7 +105,7 @@ impl ClientNode {
                     Ok(n) => {
                         self.framer.push(&buf[..n]);
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         // I don't care
                         break;
                     }

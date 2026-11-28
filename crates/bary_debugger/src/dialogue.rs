@@ -3,7 +3,7 @@ use bary_ipc::ServerRequest;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
-    path::{Path, PathBuf},
+    path::Path,
     sync::mpsc::Sender,
 };
 
@@ -12,7 +12,7 @@ pub struct Dialogue {
     speech: BTreeMap<String, String>,
 }
 
-const PLACEHOLDER: &'static str = "<<< This is placeholder text! >>>";
+const PLACEHOLDER: &str = "<<< This is placeholder text! >>>";
 
 impl Dialogue {
     pub fn new() -> Self {
@@ -50,7 +50,7 @@ impl DialogueSender {
         let dialogue = Dialogue::from_path(&path).ok();
 
         Self {
-            path: path.into(),
+            path: path,
             dialogue,
         }
     }

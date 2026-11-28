@@ -10,7 +10,7 @@ fn run_program(cmd: &str, args: &[&str]) -> std::io::Result<(Vec<String>, Child)
     info!("Running program {cmd} with args {args:?}");
     let child = Command::new(cmd).args(args).spawn()?;
     let mut vec_args = vec![cmd.to_string()];
-    vec_args.extend(args.into_iter().map(|s| s.to_string()));
+    vec_args.extend(args.iter().map(|s| s.to_string()));
     Ok((vec_args, child))
 }
 

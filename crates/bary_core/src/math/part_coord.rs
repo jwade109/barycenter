@@ -111,7 +111,7 @@ impl PartCoord {
 
         (lower.x..=upper.x)
             .flat_map(move |x| (lower.y..=upper.y).map(move |y| IVec2::new(x, y)))
-            .map(|p| Self::new(p))
+            .map(Self::new)
     }
 
     /// Rotate this PartCoord counterclockwise.
@@ -197,21 +197,21 @@ impl std::ops::Sub for PartCoord {
     }
 }
 
-impl Into<PartCoord> for (i32, i32) {
-    fn into(self) -> PartCoord {
-        PartCoord(IVec2::new(self.0, self.1))
+impl From<(i32, i32)> for PartCoord {
+    fn from(val: (i32, i32)) -> Self {
+        PartCoord(IVec2::new(val.0, val.1))
     }
 }
 
-impl Into<PartCoord> for IVec2 {
-    fn into(self) -> PartCoord {
-        PartCoord(self)
+impl From<IVec2> for PartCoord {
+    fn from(val: IVec2) -> Self {
+        PartCoord(val)
     }
 }
 
-impl Into<PartCoord> for UVec2 {
-    fn into(self) -> PartCoord {
-        PartCoord(self.as_ivec2())
+impl From<UVec2> for PartCoord {
+    fn from(val: UVec2) -> Self {
+        PartCoord(val.as_ivec2())
     }
 }
 

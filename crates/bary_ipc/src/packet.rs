@@ -32,14 +32,14 @@ fn calculate_checksum(bytes: &[u8]) -> u16 {
 
 fn get_u16(bytes: &[u8], offset: usize) -> Result<u16, PacketParseError> {
     use PacketParseError::*;
-    let a = *bytes.get(offset + 0).ok_or(UnexpectedEof)?;
+    let a = *bytes.get(offset).ok_or(UnexpectedEof)?;
     let b = *bytes.get(offset + 1).ok_or(UnexpectedEof)?;
     Ok(u16::from_be_bytes([a, b]))
 }
 
 fn get_u32(bytes: &[u8], offset: usize) -> Result<u32, PacketParseError> {
     use PacketParseError::*;
-    let a = *bytes.get(offset + 0).ok_or(UnexpectedEof)?;
+    let a = *bytes.get(offset).ok_or(UnexpectedEof)?;
     let b = *bytes.get(offset + 1).ok_or(UnexpectedEof)?;
     let c = *bytes.get(offset + 2).ok_or(UnexpectedEof)?;
     let d = *bytes.get(offset + 3).ok_or(UnexpectedEof)?;

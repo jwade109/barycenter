@@ -204,7 +204,7 @@ impl Asteroid {
             return Some(deposit);
         }
 
-        self.contains(p).then(|| TerrainMaterial::Rock)
+        self.contains(p).then_some(TerrainMaterial::Rock)
     }
 
     /// Gets the material value of the deposit in this location,
@@ -215,7 +215,7 @@ impl Asteroid {
         }
         self.deposits.iter().find_map(|(c, r, value)| {
             let p = p - c;
-            (p.length() < *r).then(|| *value)
+            (p.length() < *r).then_some(*value)
         })
     }
 
@@ -281,7 +281,7 @@ impl Asteroid {
             .then(|| {
                 self.craters.iter().find_map(|(c, r)| {
                     let d = c.distance(p);
-                    ((d - r).abs() < 4.0).then(|| [10, 10, 10])
+                    ((d - r).abs() < 4.0).then_some([10, 10, 10])
                 })
             })
             .flatten();
@@ -311,7 +311,7 @@ impl Asteroid {
         let n = (max_r as f64 / size as f64).ceil() as i32;
         (-n..=n).flat_map(move |x| {
             (-n..=n).map(move |y| Zone {
-                size: size,
+                size,
                 index: IVec2 { x, y },
             })
         })
@@ -388,9 +388,9 @@ pub fn make_asteroid_image(
     };
 
     for w in 0..width {
-        let sx = (w as f32 + 0.5) as f32 / width as f32;
+        let sx = ((w as f32 + 0.5)) / width as f32;
         for h in 0..height {
-            let sy = (h as f32 + 0.5) as f32 / height as f32;
+            let sy = ((h as f32 + 0.5)) / height as f32;
             let p = viewport.from_normalized(Vec2::new(sx, sy));
             let color = match ast.sample_color(p, highlight_deposits) {
                 Some(c) => c,

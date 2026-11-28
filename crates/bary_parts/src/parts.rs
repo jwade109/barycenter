@@ -54,9 +54,9 @@ impl PartPrototype {
             PartClassification::Thruster
         } else if self.machine_data.is_some() {
             PartClassification::Machine
-        } else if let Some(_) = &self.inventory_data {
+        } else if self.inventory_data.is_some() {
             PartClassification::Cargo
-        } else if let Some(_) = &self.computer_data {
+        } else if self.computer_data.is_some() {
             PartClassification::Computer
         } else {
             match self.layer() {

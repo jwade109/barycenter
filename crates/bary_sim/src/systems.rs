@@ -210,8 +210,8 @@ pub fn set_all_thrusters(grid_id: Ent, throttle: f32, world: &mut World) -> Bary
     update_single_grid_acceleration(
         grid_id,
         &mut world.grids,
-        &mut world.thrusters,
-        &mut world.parts,
+        &world.thrusters,
+        &world.parts,
     )
 }
 

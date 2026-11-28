@@ -52,7 +52,7 @@ impl ManeuverPlan {
     }
 
     pub fn end(&self) -> Nanotime {
-        self.segments.iter().map(|e| e.end).last().unwrap()
+        self.segments.iter().map(|e| e.end).next_back().unwrap()
     }
 
     pub fn duration(&self) -> Nanotime {
@@ -82,15 +82,15 @@ impl ManeuverPlan {
 
         let dvs: Vec<_> = self.dvs().chain(other.dvs()).collect();
 
-        Ok(ManeuverPlan::new(self.start(), self.initial, &dvs).ok_or("Can't construct")?)
+        ManeuverPlan::new(self.start(), self.initial, &dvs).ok_or("Can't construct")
     }
 }
 
 impl std::fmt::Display for ManeuverPlan {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
+        writeln!(
             f,
-            "Maneuver Plan ({} segments) ({:0.1})\n",
+            "Maneuver Plan ({} segments) ({:0.1})",
             self.segments.len(),
             self.dv()
         )?;
@@ -98,9 +98,9 @@ impl std::fmt::Display for ManeuverPlan {
             return write!(f, " (empty)");
         }
         for (i, segment) in self.segments.iter().enumerate() {
-            write!(
+            writeln!(
                 f,
-                "{}. {:?} {:?} dV {:0.1} to {}\n",
+                "{}. {:?} {:?} dV {:0.1} to {}",
                 i + 1,
                 segment.start,
                 segment.end,
@@ -108,7 +108,7 @@ impl std::fmt::Display for ManeuverPlan {
                 segment.orbit,
             )?;
         }
-        write!(f, "Ending with {}\n", self.terminal)
+        writeln!(f, "Ending with {}", self.terminal)
     }
 }
 
@@ -170,7 +170,7 @@ fn hohmann_transfer(
         _ => (),
     }
 
-    let mu = current.body.mu() as f64;
+    let mu = current.body.mu();
     let r1 = current.periapsis_r();
     let r2 = destination.radius_at_angle(current.arg_periapsis + PI_64);
     let a_transfer = (r1 + r2) / 2.0;
@@ -220,7 +220,7 @@ fn bielliptic_transfer(
 
     let rb = current.apoapsis_r().max(destination.apoapsis_r()) * 2.0;
 
-    if rb > current.body.soi as f64 * 0.9 {
+    if rb > current.body.soi * 0.9 {
         return None;
     }
 
@@ -229,7 +229,7 @@ fn bielliptic_transfer(
 
     let p1 = hohmann_transfer(current, &intermediate, now)?;
 
-    let intermediate = p1.segments.iter().skip(1).next()?;
+    let intermediate = p1.segments.iter().nth(1)?;
 
     let p2 = hohmann_transfer(&intermediate.orbit, destination, p1.end())?;
 
@@ -268,7 +268,7 @@ pub fn get_next_intersection(
         }
     }
 
-    return Ok(None);
+    Ok(None)
 }
 
 fn direct_transfer(
@@ -279,11 +279,10 @@ fn direct_transfer(
     get_next_intersection(now, current, destination)
         .ok()
         .flatten()
-        .map(|(t, pvf)| {
+        .and_then(|(t, pvf)| {
             let pvi = current.pv(t).ok()?;
             ManeuverPlan::new(now, *current, &[(t, pvf.vel - pvi.vel)])
         })
-        .flatten()
 }
 
 fn generate_maneuver_plans(
@@ -295,8 +294,8 @@ fn generate_maneuver_plans(
     //     return vec![];
     // }
 
-    let direct = direct_transfer(current, &destination, now);
-    let hohmann = hohmann_transfer(current, &destination, now);
+    let direct = direct_transfer(current, destination, now);
+    let hohmann = hohmann_transfer(current, destination, now);
     // let bielliptic = bielliptic_transfer(current, &destination, now);
 
     [direct, hohmann].into_iter().flatten().collect()

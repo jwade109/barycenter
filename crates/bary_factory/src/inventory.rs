@@ -87,7 +87,7 @@ impl Inventory {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     /// Fills all slots with whatever item the slot is set to.
@@ -121,7 +121,7 @@ impl Inventory {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     /// Gets the number of slots in this inventory.
@@ -148,7 +148,7 @@ impl Inventory {
     pub fn mass_of(&self, item: Item) -> Mass {
         self.0
             .iter()
-            .filter_map(|s| (s.has(item)).then(|| s.mass()))
+            .filter(|&s| (s.has(item))).map(|s| s.mass())
             .sum()
     }
 
@@ -171,7 +171,7 @@ impl Inventory {
     pub fn occupied_volume_of(&self, item: Item) -> Volume {
         self.0
             .iter()
-            .filter_map(|s| (s.has(item)).then(|| s.occupied_volume()))
+            .filter(|&s| (s.has(item))).map(|s| s.occupied_volume())
             .sum()
     }
 
@@ -181,7 +181,7 @@ impl Inventory {
     pub fn available_volume_of(&self, item: Item) -> Volume {
         self.0
             .iter()
-            .filter_map(|s| (s.has(item)).then(|| s.available_volume()))
+            .filter(|&s| (s.has(item))).map(|s| s.available_volume())
             .sum()
     }
 }
@@ -458,9 +458,9 @@ impl std::fmt::Display for Inventory {
             return write!(f, "[empty inventory]");
         }
 
-        write!(
+        writeln!(
             f,
-            "{} slots, {} / {}\n",
+            "{} slots, {} / {}",
             self.0.len(),
             self.occupied_volume(),
             self.capacity()
@@ -476,9 +476,9 @@ impl std::fmt::Display for Inventory {
             } else {
                 " (not full)"
             };
-            write!(
+            writeln!(
                 f,
-                " - {}, {}, {}/{}{}\n",
+                " - {}, {}, {}/{}{}",
                 item,
                 slot.mass(),
                 slot.occupied_volume(),
@@ -501,11 +501,10 @@ pub fn atomic_transfer(src: &mut InvSlot, dst: &mut InvSlot, mass: Mass) -> Mach
         return MachineStatus::Starved;
     };
 
-    if let Some(dst_item) = dst.item() {
-        if dst_item != item {
+    if let Some(dst_item) = dst.item()
+        && dst_item != item {
             return MachineStatus::NoRoom;
         }
-    }
 
     let src_count = src.count();
 
@@ -529,7 +528,7 @@ pub fn atomic_transfer(src: &mut InvSlot, dst: &mut InvSlot, mass: Mass) -> Mach
     src.take(item, count);
     dst.store(item, count);
 
-    return MachineStatus::Running;
+    MachineStatus::Running
 }
 
 #[cfg(test)]

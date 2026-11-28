@@ -1,7 +1,6 @@
 use crate::ClientTelemetry;
-use bary_core::prelude::{Ent, Isometry2d, ParamValue, TableIdent};
-use bary_parts::PartPrototype;
-use bary_sim::{Computer, Part, Thruster, WorldDelta};
+use bary_core::prelude::{ParamValue, TableIdent};
+use bary_sim::WorldDelta;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf};
 

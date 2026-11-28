@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bary_core::prelude::{Vec2, randvec};
+use bary_core::prelude::randvec;
 use raylib::{
     color::Color,
     drawing::{RaylibDraw, RaylibDrawHandle},

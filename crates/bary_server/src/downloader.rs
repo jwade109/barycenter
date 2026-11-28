@@ -99,3 +99,9 @@ impl WorldDownloader {
         success
     }
 }
+
+impl Default for WorldDownloader {
+    fn default() -> Self {
+        Self::new()
+    }
+}

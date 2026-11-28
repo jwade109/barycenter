@@ -24,6 +24,12 @@ impl SoundHandler {
     }
 }
 
+impl Default for SoundHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn sound_thread(sounds: Receiver<SoundEffects>) -> Result<(), RaylibAudioInitError> {
     let audio = raylib::audio::RaylibAudio::init_audio_device()?;
     let mut active_sounds = Vec::new();

@@ -41,11 +41,10 @@ impl VehicleGrid {
 
     pub fn can_insert_part(&self, pl: GridRegion, layer: PartLayer) -> bool {
         for cell in pl.cells() {
-            if let Some(occ) = self.get_parts_at(cell) {
-                if occ.at_layer(layer).is_some() {
+            if let Some(occ) = self.get_parts_at(cell)
+                && occ.at_layer(layer).is_some() {
                     return false;
                 }
-            }
         }
         true
     }

@@ -30,7 +30,7 @@ impl PartOccupancy {
     // TODO(testing) especially with to_array
     pub fn top(&self) -> Option<Ent> {
         let arr: Vec<_> = self.to_array().iter().filter_map(|e| *e).collect();
-        arr.last().map(|e| *e)
+        arr.last().copied()
     }
 
     pub fn has_any(&self) -> bool {
@@ -41,7 +41,7 @@ impl PartOccupancy {
     }
 
     pub fn contains(&self, part_id: Ent) -> bool {
-        self.to_array().iter().any(|e| *e == Some(part_id))
+        self.to_array().contains(&Some(part_id))
     }
 
     pub fn to_array(&self) -> [Option<Ent>; 4] {
@@ -56,7 +56,7 @@ impl PartOccupancy {
             self.plumbing.map(|e| (PartLayer::Plumbing, e)),
         ]
         .into_iter()
-        .filter_map(|e| e)
+        .flatten()
     }
 
     pub fn mark_internal(&mut self, id: impl Into<Option<Ent>>) {

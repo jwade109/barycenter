@@ -27,7 +27,7 @@ impl Camera {
 
     pub fn world_to_screen(&self, p: DVec2, screen_width: DVec2) -> DVec2 {
         let delta = p - self.isometry.translation;
-        let delta = rotate_f64(delta, -self.isometry.rotation as f64);
+        let delta = rotate_f64(delta, (-self.isometry.rotation));
         let scaled = delta * self.zoom as f64;
         scaled + screen_width / 2.0
     }
@@ -35,7 +35,7 @@ impl Camera {
     pub fn screen_to_world(&self, p: DVec2, screen_width: DVec2) -> DVec2 {
         let p = p - screen_width / 2.0;
         let delta = p / self.zoom as f64;
-        let delta = rotate_f64(delta, self.isometry.rotation as f64);
+        let delta = rotate_f64(delta, self.isometry.rotation);
         delta + self.isometry.translation
     }
 }

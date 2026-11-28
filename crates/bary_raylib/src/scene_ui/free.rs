@@ -1,5 +1,5 @@
 use crate::*;
-use bary_core::prelude::{Rotation, Vec2, distance_str, velocity_str};
+use bary_core::prelude::{Vec2, distance_str, velocity_str};
 use bary_sim::*;
 use early_returns::*;
 
@@ -35,8 +35,8 @@ pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World,
     ui.button(UiMessage::SimSpeed(100), "Sim 100x");
     ui.button(UiMessage::SimSpeed(1000), "Sim 1000x");
 
-    if let Some(loc) = free.selected_vehicles.first() {
-        if let Some(grid) = world.grids.get(loc.grid_id) {
+    if let Some(loc) = free.selected_vehicles.first()
+        && let Some(grid) = world.grids.get(loc.grid_id) {
             let msg = UiMessage::Navigate(Scene::Editor(loc.grid_id));
             ui.sep();
             ui.text(grid.name.clone());
@@ -52,7 +52,6 @@ pub fn make_free_flying_ui(ui: &mut UiBuilder, free: &FreeFlying, world: &World,
                 get_part_info_modal(ui, *cpu_id, world, assets, None);
             }
         }
-    }
 
     ui.end_window();
 

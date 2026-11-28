@@ -89,11 +89,10 @@ impl TimedInstruction {
     }
 
     pub fn tick(&mut self) {
-        if let Some(dur) = &mut self.duration {
-            if *dur > 0 {
+        if let Some(dur) = &mut self.duration
+            && *dur > 0 {
                 *dur -= 1;
             }
-        }
     }
 
     pub fn is_complete(&self) -> bool {

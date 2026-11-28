@@ -1,5 +1,4 @@
 use EventTrigger::*;
-use bary_factory::Item;
 use bary_input::InputState;
 use log::warn;
 use rdev::Key;

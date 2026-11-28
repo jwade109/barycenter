@@ -42,7 +42,7 @@ struct Args {
 }
 
 fn sort_by_cost(points: &mut Vec<(IVec2, f32)>) {
-    points.sort_by(|(_, k), (_, l)| l.total_cmp(&k));
+    points.sort_by(|(_, k), (_, l)| l.total_cmp(k));
 }
 
 fn visit_pixels(
@@ -76,7 +76,7 @@ fn visit_pixels(
             p.0 = q.0;
             for u in -1i32..=1 {
                 for v in -1i32..=1 {
-                    let mut new_c = c as f32 + rand(0.0, 1.0);
+                    let mut new_c = c + rand(0.0, 1.0);
 
                     match dir {
                         Direction::X => {

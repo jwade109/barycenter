@@ -2,7 +2,6 @@ use crate::{EditorState, FreeFlying};
 use bary_core::prelude::*;
 use bary_input::InputState;
 use bary_sim::{Camera, World};
-use rdev::Key;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Scene {
@@ -99,7 +98,7 @@ impl SceneGraph {
                 Self::Free(FreeFlying::new(state.camera, Some(state.vehicle)))
             }
             (_, Scene::Pilot(id)) => Self::LockedToPlayer(LockedState::new(id)),
-            (SceneGraph::LockedToPlayer(pilot), Scene::Free) => {
+            (SceneGraph::LockedToPlayer(_pilot), Scene::Free) => {
                 Self::Free(FreeFlying::new(Camera::default(), None))
             }
             (_, Scene::Free) => Self::Free(FreeFlying::at_zero()),

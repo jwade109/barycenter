@@ -100,7 +100,7 @@ impl TabViewer for App {
         }
 
         for delta in deltas.take() {
-            _ = self.sender.send(delta.into());
+            _ = self.sender.send(delta);
         }
     }
 }
@@ -277,7 +277,7 @@ impl App {
         }
     }
 
-    fn on_client_telemetry(&mut self, id: ClientId, tlm: ClientTelemetry) {
+    fn on_client_telemetry(&mut self, _id: ClientId, _tlm: ClientTelemetry) {
         // warn!("Got TLM: {} {:?}", id, tlm);
     }
 
@@ -287,7 +287,7 @@ impl App {
         match tlm {
             ServerTelemetry::Clients(tlm) => {
                 self.n_clients = tlm.clients.len();
-                for client in tlm.clients {
+                for _client in tlm.clients {
                     // TODO
                     // info!("{:?}", client);
                 }
@@ -399,7 +399,7 @@ impl App {
             ServerResponse::ServerSays(message) => {
                 info!("Server says: {message:?}");
             }
-            ServerResponse::SyncFrame(sync_frame) => {
+            ServerResponse::SyncFrame(_sync_frame) => {
                 // PASS
             }
             ServerResponse::Kicked => {

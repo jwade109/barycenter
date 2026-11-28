@@ -125,11 +125,10 @@ fn single_line_string_edit(s: &mut String, input: &InputState) -> Option<String>
                 rdev::Key::UpArrow => (),
                 rdev::Key::DownArrow => (),
                 _ => {
-                    if let Some(n) = &event.name {
-                        if n.is_ascii() {
-                            s.extend(n.chars());
+                    if let Some(n) = &event.name
+                        && n.is_ascii() {
+                            s.push_str(&n);
                         }
-                    }
                 }
             }
         }

@@ -1,7 +1,7 @@
 use crate::*;
 use bary_core::prelude::*;
 use bary_factory::*;
-use bary_orbital::{TerrainMaterial, VehicleControl};
+use bary_orbital::TerrainMaterial;
 use bary_parts::*;
 use early_returns::*;
 use log::*;
@@ -24,7 +24,7 @@ pub fn load_names_from_file(
 ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     Ok(std::fs::read_to_string(filename)?
         .lines()
-        .filter_map(|s| (!s.is_empty()).then(|| s.to_string()))
+        .filter(|&s| (!s.is_empty())).map(|s| s.to_string())
         .collect())
 }
 
@@ -80,8 +80,7 @@ pub fn set_thruster_state(thruster_id: Ent, world: &mut World, throttle: f32) ->
 pub fn get_top_part_at(world: &World, loc: GridLocation) -> BaryResult<Ent> {
     let grid = world.grids.try_get(loc.grid_id)?;
     grid.get_parts_at(loc.coord)
-        .map(|occ| occ.top())
-        .flatten()
+        .and_then(|occ| occ.top())
         .ok_or(BaryError::NoPartsAt(loc.coord))
 }
 
@@ -309,14 +308,13 @@ pub fn insert_part(
         world.computers.spawn(part_id, cpu);
         grid.computers.insert(part_id);
     }
-    if let Some(data) = &proto.thruster_data {
-        if data.is_rcs {
+    if let Some(data) = &proto.thruster_data
+        && data.is_rcs {
             let light_idx = world.lights.len();
             let light = Light::new(light_idx as u32);
             world.lights.spawn(part_id, light);
             grid.lights.insert(part_id);
         }
-    }
     if let Some(debug) = &proto.debug_portal_data {
         let portal = DebugPortal::from_proto(*debug);
         world.debug_portals.spawn(part_id, portal);
@@ -495,7 +493,7 @@ pub fn rebuild_index_from_island(
     let mut dst = VehicleGrid::with_name(name, None);
     dst.particle_location = src.particle_location;
     dst.velocity = src.velocity;
-    for part_id in island.iter().map(|i| *i) {
+    for part_id in island.iter().copied() {
         let part = parts.try_get(part_id)?;
         dst.parts_mass += part.mass;
         dst.parts.insert(part_id);
@@ -709,8 +707,7 @@ pub fn detach_top_part_at(world: &mut World, grid_id: Ent, coord: PartCoord) -> 
     let grid = world.grids.try_get(grid_id)?;
     let top_part = grid
         .get_parts_at(coord)
-        .map(|occ| occ.top())
-        .flatten()
+        .and_then(|occ| occ.top())
         .ok_or(BaryError::NoPartsAt(coord))?;
 
     debug!("Top part is {}", top_part);
@@ -1205,7 +1202,7 @@ pub fn inventory_at_c(
 pub fn get_grid_by_name(grids: &Components<VehicleGrid>, name: &str) -> Option<Ent> {
     grids
         .iter()
-        .find_map(|(id, grid)| (grid.name == name).then(|| *id))
+        .find_map(|(id, grid)| (grid.name == name).then_some(*id))
 }
 
 /// Spawns a new grid according to a named blueprint.
@@ -1246,8 +1243,8 @@ pub fn spawn_grid_from_blueprint(
             pipe.end,
             &mut world.spawner,
             &mut world.grids,
-            &mut world.parts,
-            &mut world.inventories,
+            &world.parts,
+            &world.inventories,
             &mut world.pipes,
         ) {
             error!("Failed to insert pipe: {:?}", e);
@@ -1386,10 +1383,10 @@ pub fn merge_grids(
         part.region.shift(offset);
     }
 
-    parent.computers.extend(child.computers.into_iter());
-    parent.thrusters.extend(child.thrusters.into_iter());
-    parent.lights.extend(child.lights.into_iter());
-    parent.pipes.extend(child.pipes.into_iter());
+    parent.computers.extend(child.computers);
+    parent.thrusters.extend(child.thrusters);
+    parent.lights.extend(child.lights);
+    parent.pipes.extend(child.pipes);
 
     update_grid_physical_props(parent, &mut world.parts)?;
 
@@ -1439,8 +1436,8 @@ fn sys_update_transmissions(world: &mut World, events: &mut Sender<SimulationEve
 
             let p = grid.particle_location.tr();
             let d = tr.origin().distance(p);
-            if inner <= d && d < outer {
-                if !tr.is_response() {
+            if inner <= d && d < outer
+                && !tr.is_response() {
                     let rt = ReceivedTransmission {
                         original: tr.clone(),
                         received_location: p,
@@ -1456,7 +1453,6 @@ fn sys_update_transmissions(world: &mut World, events: &mut Sender<SimulationEve
                         .with_contents(TransmissionContents::Response);
                     new_transmissions.send(new_tr);
                 }
-            }
         }
 
         true

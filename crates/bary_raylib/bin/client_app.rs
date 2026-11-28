@@ -1,6 +1,6 @@
 use bary_core::prelude::*;
 use bary_input::{InputHandler, InputState};
-use bary_ipc::{ServerEvent::Message, *};
+use bary_ipc::*;
 use bary_orbital::VehicleControl;
 use bary_raylib::*;
 use bary_server::*;
@@ -151,12 +151,11 @@ impl GameApp {
         if !self.terminal.is_active() {
             process_event(self.backend.world(), &mut self.frontend, on_gui);
 
-            if let Some(editor) = self.frontend.scene_graph.editor_mut() {
-                if let Some(delta) = editor.handle_keys(&self.frontend.input, self.backend.world())
+            if let Some(editor) = self.frontend.scene_graph.editor_mut()
+                && let Some(delta) = editor.handle_keys(&self.frontend.input, self.backend.world())
                 {
                     self.backend.request_delta(delta);
                 }
-            }
         }
     }
 
@@ -204,9 +203,7 @@ impl GameApp {
             .input_handler
             .update(raylib.handle().is_window_focused());
 
-        match &self.frontend.scene_graph {
-            _ => self.update_in_world(),
-        }
+        self.update_in_world();
 
         self.frontend.update();
 

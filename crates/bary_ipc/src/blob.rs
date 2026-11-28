@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
-use bary_core::prelude::{Components, Ent, TableIdent};
-use bary_sim::World;
-use serde::Deserialize;
+use bary_core::prelude::{Ent, TableIdent};
 
 #[derive(Clone)]
 pub struct Blob {
