@@ -1,3 +1,4 @@
+
 use crate::*;
 use bary_core::prelude::*;
 use bary_factory::*;
@@ -27,16 +28,19 @@ pub struct World {
     pub machines: Components<Machine>,
     pub excavators: Components<Excavator>,
     pub stars: Components<Star>,
+    pub planets: Components<Planet>,
     pub pipes: Components<Pipe>,
     pub debug_portals: Components<DebugPortal>,
     pub asteroids: Components<BigRock>,
-    pub construction: Components<Construction>,
+    pub transmissions: Components<RadioTransmission>,
 
     pub terrain_chunks: Components<TerrainChunk>,
     pub terrain_tiles: Components<TerrainTile>,
 
     // TODO might move this to assets.
     pub ship_names: Vec<String>,
+
+    pub parameters: DynamicParams,
 }
 
 impl std::fmt::Debug for World {
@@ -65,9 +69,16 @@ impl World {
             ..Default::default()
         }
     }
+
+    pub fn empty_at_ticks(ticks: u64, next_entity_id: Ent) -> Self {
+        let mut s = Self::empty();
+        s.spawner.set_next(next_entity_id);
+        s.ticks = ticks;
+        s
+    }
 }
 
 pub fn size_in_bytes(world: &World) -> usize {
-    let bytes = bincode::serialize(world).unwrap();
+    let bytes = postcard::to_allocvec(world).unwrap();
     bytes.len()
 }

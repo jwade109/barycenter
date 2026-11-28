@@ -242,11 +242,9 @@ impl Propagator {
     ) -> Result<(), PredictError<Nanotime>> {
         while !self.calculated_to(stamp) {
             let e = self.next(bodies);
-            if e.is_err() {
-                return e;
-            }
+            e?;
         }
-        return Ok(());
+        Ok(())
     }
 
     pub(crate) fn next_prop(
@@ -332,8 +330,8 @@ impl Propagator {
         }
 
         let will_never_encounter = bodies.iter().all(|(_, orbit, soi)| {
-            let rmin = orbit.periapsis_r() - *soi as f64;
-            let rmax = orbit.apoapsis_r() + *soi as f64;
+            let rmin = orbit.periapsis_r() - *soi;
+            let rmax = orbit.apoapsis_r() + *soi;
             self.orbit.1.apoapsis_r() < rmin || self.orbit.1.periapsis_r() > rmax
         });
 
@@ -367,7 +365,7 @@ impl Propagator {
         let going_down = pv.pos.normalize_or_zero().dot(pv.vel) < 0.0;
 
         let below_all_bodies = bodies.iter().all(|(_, orbit, soi)| {
-            let rmin = orbit.periapsis_r() - *soi as f64;
+            let rmin = orbit.periapsis_r() - *soi;
             pv.pos.length() < rmin
         });
 
@@ -386,9 +384,9 @@ impl Propagator {
             return Ok(());
         }
 
-        if self.orbit.1.is_suborbital() && going_down && below_all_bodies {
-            if let Some(tp) = self.orbit.1.t_next_p(end) {
-                if let Some(t) = search_condition(
+        if self.orbit.1.is_suborbital() && going_down && below_all_bodies
+            && let Some(tp) = self.orbit.1.t_next_p(end)
+                && let Some(t) = search_condition(
                     tp - Nanotime::secs(2),
                     tp,
                     Nanotime::millis(5),
@@ -400,8 +398,6 @@ impl Propagator {
                     self.horizon = HorizonState::Terminating(t, EventType::Collide(self.orbit.0));
                     return Ok(());
                 }
-            }
-        }
 
         let might_hit_planet =
             self.orbit.1.is_suborbital() && alt < self.orbit.1.body.radius * 20.0;
@@ -423,12 +419,9 @@ impl Propagator {
         let t1 = end;
         let t2 = end + self.dt;
 
-        match self.orbit.1.pv(t1).ok().zip(self.orbit.1.pv(t2).ok()) {
-            None => {
-                self.horizon = HorizonState::Terminating(t1, EventType::NumericalError);
-                return Ok(());
-            }
-            _ => (),
+        if self.orbit.1.pv(t1).ok().zip(self.orbit.1.pv(t2).ok()) == None {
+            self.horizon = HorizonState::Terminating(t1, EventType::NumericalError);
+            return Ok(());
         };
 
         let escape_soi = |t: Nanotime| {
@@ -443,7 +436,7 @@ impl Propagator {
             }
 
             if let Some(t) = search_condition::<Nanotime>(t1, t2, tol, &above_planet)
-                .map_err(|e| PredictError::Collision(e))?
+                .map_err(PredictError::Collision)?
             {
                 if t - self.start < Nanotime::millis(10) {
                     self.horizon = HorizonState::Continuing(t2);
@@ -454,9 +447,9 @@ impl Propagator {
             }
         }
 
-        if can_escape {
-            if let Some(t) = search_condition::<Nanotime>(t1, t2, tol, &escape_soi)
-                .map_err(|e| PredictError::Escape(e))?
+        if can_escape
+            && let Some(t) = search_condition::<Nanotime>(t1, t2, tol, &escape_soi)
+                .map_err(PredictError::Escape)?
             {
                 if t - self.start < Nanotime::millis(10) {
                     self.horizon = HorizonState::Continuing(t2);
@@ -465,7 +458,6 @@ impl Propagator {
                 self.horizon = HorizonState::Transition(t, EventType::Escape(self.orbit.0));
                 return Ok(());
             }
-        }
 
         if near_body {
             for i in 0..bodies.len() {
@@ -479,7 +471,7 @@ impl Propagator {
                 }
 
                 if let Some(t) = search_condition::<Nanotime>(t1, t2, tol, &cond)
-                    .map_err(|e| PredictError::Encounter(e))?
+                    .map_err(PredictError::Encounter)?
                 {
                     self.horizon = HorizonState::Transition(t, EventType::Encounter(id));
                     return Ok(());

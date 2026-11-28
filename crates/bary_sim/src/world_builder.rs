@@ -3,20 +3,37 @@ use bary_core::prelude::*;
 use bary_factory::*;
 use bary_parts::*;
 use log::*;
-use std::{collections::BTreeMap, path::PathBuf};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 enum WorldBuilderCommand {
     LoadBlueprint(BlueprintId),
-    SpawnShip(BlueprintId, Option<String>, Isometry2d),
+    SpawnShip(BlueprintId, String, Isometry2d),
+    SpawnPart(String),
+    SetVelocity(Isometry2d),
     ModifyWorld(WorldDelta),
     InsertDebugSource(PartCoord, Item),
     InsertPipe(PartCoord, PartCoord),
     SetRecipe(PartCoord, RecipeListing),
     SpawnAsteroid(Isometry2d, f32, u32),
-    SetAnchored(bool),
-    SpawnPlayer(String, Isometry2d),
-    EnterPiloting,
+    SpawnPlanet {
+        name: String,
+        pos: Isometry2d,
+        vel: Isometry2d,
+        radius: f64,
+        mass: f64,
+    },
+    SpawnPlayer {
+        username: String,
+        pos: Isometry2d,
+        vel: Isometry2d,
+    },
+    LoadInstruction(TimedInstruction),
+    SetAttitudePD(f64, f64),
 }
 
 pub struct WorldBuilder {
@@ -24,6 +41,7 @@ pub struct WorldBuilder {
     commands: Vec<WorldBuilderCommand>,
     cursor_grid: Option<Ent>,
     cursor_player: Option<Ent>,
+    cursor_planet: Option<Ent>,
 }
 
 impl WorldBuilder {
@@ -33,7 +51,15 @@ impl WorldBuilder {
             commands: Vec::new(),
             cursor_grid: None,
             cursor_player: None,
+            cursor_planet: None,
         }
+    }
+
+    pub fn parse_file(mut self, path: impl AsRef<Path>) -> BaryResult<Self> {
+        let s = std::fs::read_to_string(path)?;
+        let commands: Vec<WorldBuilderCommand> = serde_yaml::from_str(&s)?;
+        self.commands.extend(commands);
+        Ok(self)
     }
 
     pub fn assets(mut self) -> Self {
@@ -59,8 +85,13 @@ impl WorldBuilder {
         iso: impl Into<Isometry2d>,
     ) -> Self {
         let name = name.into();
-        let name = if name.is_empty() { None } else { Some(name) };
         let cmd = WorldBuilderCommand::SpawnShip(bp_id.into(), name, iso.into());
+        self.commands.push(cmd);
+        self
+    }
+
+    pub fn set_velocity(mut self, vel: impl Into<Isometry2d>) -> Self {
+        let cmd = WorldBuilderCommand::SetVelocity(vel.into());
         self.commands.push(cmd);
         self
     }
@@ -99,27 +130,43 @@ impl WorldBuilder {
         self
     }
 
+    pub fn planet(
+        mut self,
+        name: impl Into<String>,
+        p: impl Into<Isometry2d>,
+        v: impl Into<Isometry2d>,
+        mass: f64,
+        r: f64,
+    ) -> Self {
+        let cmd = WorldBuilderCommand::SpawnPlanet {
+            name: name.into(),
+            pos: p.into(),
+            vel: v.into(),
+            radius: r,
+            mass,
+        };
+        self.commands.push(cmd);
+        self
+    }
+
     pub fn asteroid(mut self, p: impl Into<Isometry2d>, r: f32, seed: u32) -> Self {
         let cmd = WorldBuilderCommand::SpawnAsteroid(p.into(), r, seed);
         self.commands.push(cmd);
         self
     }
 
-    pub fn anchored(mut self, anchored: bool) -> Self {
-        let cmd = WorldBuilderCommand::SetAnchored(anchored);
+    pub fn player(
+        mut self,
+        name: &str,
+        pos: impl Into<Isometry2d>,
+        vel: impl Into<Isometry2d>,
+    ) -> Self {
+        let cmd = WorldBuilderCommand::SpawnPlayer {
+            username: name.to_string(),
+            pos: pos.into(),
+            vel: vel.into(),
+        };
         self.commands.push(cmd);
-        self
-    }
-
-    pub fn player(mut self, name: &str, pos: impl Into<Vec2>) -> Self {
-        let iso = Isometry2d::from_pos(pos.into());
-        let cmd = WorldBuilderCommand::SpawnPlayer(name.to_string(), iso);
-        self.commands.push(cmd);
-        self
-    }
-
-    pub fn piloting(mut self) -> Self {
-        self.commands.push(WorldBuilderCommand::EnterPiloting);
         self
     }
 
@@ -134,7 +181,7 @@ impl WorldBuilder {
 
             let parts = load_parts_from_dir(&parts_dir).expect("Parts dir");
 
-            for (_, part) in &parts {
+            for part in parts.values() {
                 let id = world.spawner.spawn();
                 world.prototypes.spawn(id, part.clone());
             }
@@ -146,12 +193,16 @@ impl WorldBuilder {
 
         let commands = self.commands.clone();
 
+        for cmd in &commands {
+            println!("{:?}", cmd);
+        }
+
         for cmd in commands {
             match cmd {
                 WorldBuilderCommand::LoadBlueprint(bpid) => {
                     if let Some(assets_dir) = self.assets_dir.as_ref() {
                         let id = world.spawner.spawn();
-                        if let Ok(bp) = load_blueprint(&bpid, &assets_dir, &parts) {
+                        if let Ok(bp) = load_blueprint(&bpid, assets_dir, &parts) {
                             let bp = NamedBlueprint {
                                 id: bpid,
                                 blueprint: bp,
@@ -167,19 +218,32 @@ impl WorldBuilder {
                     }
                 }
                 WorldBuilderCommand::SpawnShip(bp_id, name, iso) => {
-                    let id = match name {
-                        Some(name) => spawn_grid_with_bp_id(&mut world, &bp_id, &name),
-                        None => spawn_grid_with_random_name(&mut world, bp_id),
+                    let id = if name.is_empty() {
+                        spawn_grid_with_random_name(&mut world, bp_id)
+                    } else {
+                        spawn_grid_with_bp_id(&mut world, &bp_id, &name)
                     };
 
                     match id {
                         Ok(id) => {
                             self.cursor_grid = Some(id);
                             _ = set_grid_pose(&mut world, id, iso);
+                            if let Some(planet_id) = self.cursor_planet {
+                                _ = set_as_orbital_parent(&mut world, id, planet_id);
+                            }
                         }
                         Err(e) => {
                             error!("Failed to spawn grid: {e:?}");
                         }
+                    }
+                }
+                WorldBuilderCommand::SpawnPart(name) => {
+                    let delta = WorldDelta::SpawnPartInNewGrid(name);
+                    _ = apply_delta(&mut world, delta);
+                }
+                WorldBuilderCommand::SetVelocity(vel) => {
+                    if let Some(id) = self.cursor_grid {
+                        _ = set_grid_vel(&mut world, id, vel);
                     }
                 }
                 WorldBuilderCommand::ModifyWorld(delta) => {
@@ -227,26 +291,31 @@ impl WorldBuilder {
                     };
                     _ = apply_delta(&mut world, delta);
                 }
-                WorldBuilderCommand::SetAnchored(anchored) => {
-                    if let Some(grid_id) = self.cursor_grid {
-                        let delta = WorldDelta::SetAnchored(grid_id, anchored);
-                        _ = apply_delta(&mut world, delta);
+                WorldBuilderCommand::SpawnPlayer { username, pos, vel } => {
+                    let player_id = Player::spawn(&mut world, username, pos, vel);
+                    if let Some(id) = self.cursor_planet {
+                        _ = Player::set_orbital_parent(&mut world, player_id, Some(id));
                     }
                 }
-                WorldBuilderCommand::SpawnPlayer(name, iso) => {
-                    let player = Player {
-                        name,
-                        cursor_world_position: None,
-                        state: PlayerState::Flying(iso),
-                    };
-                    let id = world.spawner.spawn();
-                    world.players.spawn(id, player);
-                    self.cursor_player = Some(id);
+                WorldBuilderCommand::SpawnPlanet {
+                    name,
+                    pos,
+                    vel,
+                    mass,
+                    radius,
+                } => {
+                    let id =
+                        spawn_planet(&mut world, name, pos, vel, mass, radius, self.cursor_planet);
+                    self.cursor_planet = Some(id);
                 }
-                WorldBuilderCommand::EnterPiloting => {
-                    info!("{:?} {:?}", self.cursor_grid, self.cursor_player);
-                    if let Some((player_id, grid_id)) = self.cursor_player.zip(self.cursor_grid) {
-                        let delta = WorldDelta::PlayerPilotingEnterGrid { player_id, grid_id };
+                WorldBuilderCommand::LoadInstruction(ti) => {
+                    if let Some(grid_id) = self.cursor_grid {
+                        _ = enqueue_grid_instruction(&mut world, grid_id, ti);
+                    }
+                }
+                WorldBuilderCommand::SetAttitudePD(kp, kd) => {
+                    if let Some(grid_id) = self.cursor_grid {
+                        let delta = WorldDelta::SetGridAttitudePD(grid_id, kp, kd);
                         _ = apply_delta(&mut world, delta);
                     }
                 }
@@ -254,5 +323,11 @@ impl WorldBuilder {
         }
 
         world
+    }
+}
+
+impl Default for WorldBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }

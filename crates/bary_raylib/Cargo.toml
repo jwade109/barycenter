@@ -7,7 +7,7 @@ default-run = "client_app"
 [dependencies]
 rand = "0.10.0"
 raylib = "5.5.1"
-bary_core = { path = "../bary_core" }
+bary_core.workspace = true
 bary_factory = { path = "../bary_factory" }
 bary_parts = { path = "../bary_parts" }
 bary_ui = { path = "../bary_ui" }
@@ -45,8 +45,12 @@ name = "steam"
 path = "bin/steam.rs"
 
 [[bin]]
-name = "spider_player"
-path = "bin/spider_player.rs"
+name = "traj"
+path = "bin/traj.rs"
+
+[[bin]]
+name = "keybinds_test"
+path = "bin/keybinds_test.rs"
 
 [dev-dependencies]
 criterion = "0.5.1"

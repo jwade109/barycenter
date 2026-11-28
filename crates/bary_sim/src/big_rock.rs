@@ -15,31 +15,31 @@ pub struct LocalTileIndex(pub I8Vec2);
 
 impl LocalTileIndex {
     pub fn origin_isometry(&self) -> Isometry2d {
-        let bottom_left = self.0.as_dvec2() * TERRAIN_TILE_WIDTH_METERS as f64;
+        let bottom_left = self.0.as_dvec2() * TERRAIN_TILE_WIDTH_METERS;
         Isometry2d::from_pos(bottom_left)
     }
 
     pub fn center_isometry(&self) -> Isometry2d {
         let bottom_left =
-            (self.0.as_dvec2() + DVec2::splat(0.5)) * TERRAIN_TILE_WIDTH_METERS as f64;
+            (self.0.as_dvec2() + DVec2::splat(0.5)) * TERRAIN_TILE_WIDTH_METERS;
         Isometry2d::from_pos(bottom_left)
     }
 
     pub fn top_left_isometry(&self) -> Isometry2d {
         let idx = self.0 + I8Vec2::Y;
-        let top_left = idx.as_dvec2() * TERRAIN_TILE_WIDTH_METERS as f64;
+        let top_left = idx.as_dvec2() * TERRAIN_TILE_WIDTH_METERS;
         Isometry2d::from_pos(top_left)
     }
 
     pub fn center(&self) -> DVec2 {
         let bl = self.origin_isometry().translation;
-        bl + DVec2::splat(TERRAIN_TILE_WIDTH_METERS as f64 / 2.0)
+        bl + DVec2::splat(TERRAIN_TILE_WIDTH_METERS / 2.0)
     }
 
     pub fn bb(&self) -> AABB {
         AABB::new(
             self.center(),
-            DVec2::splat(TERRAIN_TILE_WIDTH_METERS as f64),
+            DVec2::splat(TERRAIN_TILE_WIDTH_METERS),
         )
     }
 }
@@ -117,19 +117,19 @@ impl Ord for ChunkIndex {
 
 impl ChunkIndex {
     pub fn origin_isometry(&self) -> Isometry2d {
-        let bottom_left = self.0.as_dvec2() * TERRAIN_CHUNK_WIDTH_METERS as f64;
+        let bottom_left = self.0.as_dvec2() * TERRAIN_CHUNK_WIDTH_METERS;
         Isometry2d::from_pos(bottom_left)
     }
 
     pub fn top_left_isometry(&self) -> Isometry2d {
         let idx = self.0 + IVec2::Y;
-        let top_left = idx.as_dvec2() * TERRAIN_CHUNK_WIDTH_METERS as f64;
+        let top_left = idx.as_dvec2() * TERRAIN_CHUNK_WIDTH_METERS;
         Isometry2d::from_pos(top_left)
     }
 
     pub fn center(&self) -> DVec2 {
         let bl = self.origin_isometry().translation;
-        bl + DVec2::splat(TERRAIN_CHUNK_WIDTH_METERS as f64 / 2.0)
+        bl + DVec2::splat(TERRAIN_CHUNK_WIDTH_METERS / 2.0)
     }
 
     pub fn center_isometry(&self) -> Isometry2d {
@@ -139,7 +139,7 @@ impl ChunkIndex {
     pub fn bb(&self) -> AABB {
         AABB::new(
             self.center(),
-            DVec2::splat(TERRAIN_CHUNK_WIDTH_METERS as f64),
+            DVec2::splat(TERRAIN_CHUNK_WIDTH_METERS),
         )
     }
 }

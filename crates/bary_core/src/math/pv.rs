@@ -159,16 +159,16 @@ impl std::ops::AddAssign for PV {
     }
 }
 
-impl Into<PV> for ((f64, f64), (f64, f64)) {
-    fn into(self) -> PV {
-        let r: DVec2 = self.0.into();
-        let v: DVec2 = self.1.into();
+impl From<((f64, f64), (f64, f64))> for PV {
+    fn from(val: ((f64, f64), (f64, f64))) -> Self {
+        let r: DVec2 = val.0.into();
+        let v: DVec2 = val.1.into();
         PV::from_f64(r, v)
     }
 }
 
-impl Into<PV> for (DVec2, DVec2) {
-    fn into(self) -> PV {
-        PV::from_f64(self.0, self.1)
+impl From<(DVec2, DVec2)> for PV {
+    fn from(val: (DVec2, DVec2)) -> Self {
+        PV::from_f64(val.0, val.1)
     }
 }

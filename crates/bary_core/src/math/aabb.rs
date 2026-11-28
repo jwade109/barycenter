@@ -46,7 +46,7 @@ impl AABB {
     }
 
     pub fn from_list(plist: &[Vec2]) -> Option<Self> {
-        let p0 = plist.get(0)?;
+        let p0 = plist.first()?;
         let mut ret = AABB::new(*p0, Vec2::ZERO);
         for p in plist {
             ret.include(p)
@@ -265,7 +265,7 @@ impl OBB {
         [a1.0, a1.1, a2.0, a2.1].into_iter().all(|axis| {
             let range_a = self.project_onto(axis);
             let range_b = other.project_onto(axis);
-            return range_intersects(range_a, range_b);
+            range_intersects(range_a, range_b)
         })
     }
 
@@ -275,12 +275,7 @@ impl OBB {
                 return Some(c);
             }
         }
-        for c in other.corners() {
-            if self.contains(c) {
-                return Some(c);
-            }
-        }
-        None
+        other.corners().into_iter().find(|&c| self.contains(c))
     }
 
     pub fn contains(&self, p: Vec2) -> bool {
@@ -317,7 +312,7 @@ impl Polygon {
     }
 
     pub fn iter_closed(&self) -> impl Iterator<Item = &Vec2> + use<'_> {
-        self.0.iter().chain(self.0.get(0))
+        self.0.iter().chain(self.0.first())
     }
 
     pub fn open(&self) -> &Vec<Vec2> {

@@ -79,12 +79,23 @@ pub fn help_command() -> Command<TermCmd> {
     Command::new("help", vec![], |_| Ok(TermCmd::Help))
 }
 
+pub fn pwd_command() -> Command<TermCmd> {
+    Command::new("pwd", vec![], |_| Ok(TermCmd::Pwd))
+}
+
+pub fn cd_command() -> Command<TermCmd> {
+    Command::new("cd", vec!["dirname"], |args| {
+        let dirname = parse_arg(args, "dirname")?;
+        Ok(TermCmd::Cd(dirname))
+    })
+}
+
 pub fn loglevel_command() -> Command<TermCmd> {
     Command::new("term.debug", vec![], |_| Ok(TermCmd::ToggleDebugMode))
 }
 
 pub fn terminal_commands() -> Vec<Command<TermCmd>> {
-    vec![help_command(), loglevel_command()]
+    vec![help_command(), loglevel_command(), cd_command()]
 }
 
 pub fn server_console_commands() -> Vec<Command<TermCmd>> {
@@ -209,22 +220,6 @@ pub fn world_delta_commands() -> Vec<Command<TermCmd>> {
             let grid_id = Ent(parse_arg(args, "grid_id")?);
             let ast_id = Ent(parse_arg(args, "ast_id")?);
             Ok(TermCmd::World(WorldDelta::GoToAsteroid { grid_id, ast_id }))
-        }),
-        Command::new("sim.anchor", vec!["grid_id", "is_anchored"], |args| {
-            let grid_id = Ent(parse_arg(args, "grid_id")?);
-            let is_anchored = parse_arg(args, "is_anchored")?;
-            Ok(TermCmd::World(WorldDelta::SetAnchored(
-                grid_id,
-                is_anchored,
-            )))
-        }),
-        Command::new("sim.pilot.enter", vec!["grid_id"], |args| {
-            let player_id = Ent(parse_arg(args, "player_id")?);
-            let grid_id = Ent(parse_arg(args, "grid_id")?);
-            Ok(TermCmd::World(WorldDelta::PlayerPilotingEnterGrid {
-                player_id,
-                grid_id,
-            }))
         }),
     ]
 }

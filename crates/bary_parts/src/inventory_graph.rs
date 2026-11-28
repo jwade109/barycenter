@@ -67,7 +67,7 @@ impl InventoryGraph {
     }
 
     pub fn randomize_positions(&mut self) {
-        for (_, node) in &mut self.nodes {
+        for node in self.nodes.values_mut() {
             node.pos = randvec(10.0, 200.0);
         }
     }

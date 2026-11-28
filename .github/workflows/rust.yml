@@ -10,16 +10,35 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
-
+  build-linux:
+    runs-on: ubuntu-24.04
     steps:
+    - run: sudo apt-get update
+    - run: sudo apt-get install -y libxtst-dev
+        pkg-config libxi-dev libx11-dev python3-pip
+        python3-dev libjpeg-dev zlib1g-dev xorg
+        libglu1-mesa-dev libxrandr-dev libxinerama-dev
+        libxcursor-dev libdbus-1-dev libasound2-dev
     - uses: actions/checkout@v4
-    - name: Install packages
-      run: |
-        sudo apt install -y g++ pkg-config libx11-dev libasound2-dev libxkbcommon-x11-0
-    - name: Build
-      run: cargo build
-    - name: Run tests
-      run: cargo test
+    - run: cargo build --release
+    - uses: actions/upload-artifact@v7
+      with:
+        name: barycenter
+        path: target/release/client_app
+        archive: false
+
+  build-windows:
+    runs-on: ubuntu-latest
+    steps:
+    - run: sudo apt-get update
+    - run: sudo apt-get install -y mingw-w64
+        libxi-dev libx11-dev python3-pip python3-dev
+        libjpeg-dev zlib1g-dev xorg
+    - uses: actions/checkout@v4
+    - run: rustup target add x86_64-pc-windows-gnu
+    - run: cargo build --release --target x86_64-pc-windows-gnu
+    - uses: actions/upload-artifact@v7
+      with:
+        name: barycenter.exe
+        path: target/x86_64-pc-windows-gnu/release/client_app.exe
+        archive: false

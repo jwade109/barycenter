@@ -87,7 +87,7 @@ pub fn generate_image(vehicle: &Blueprint, parts: &PartDatabase) -> Option<Dynam
             }
 
             let color = if let Some(proto) = parts.get(&instance.name) {
-                diagram_color(proto).into()
+                diagram_color(proto)
             } else {
                 BColor::GRAY
             };

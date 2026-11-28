@@ -76,12 +76,10 @@ fn part_from_path(path: &Path) -> BaryResult<PartPrototype> {
 pub fn load_parts_from_dir(path: impl AsRef<Path>) -> BaryResult<PartDatabase> {
     let mut ret = BTreeMap::new();
     if let Ok(paths) = std::fs::read_dir(path) {
-        for path in paths {
-            if let Ok(path) = path {
-                let path = path.path();
-                let part = part_from_path(&path)?;
-                ret.insert(part.part_name().to_string(), part);
-            }
+        for path in paths.flatten() {
+            let path = path.path();
+            let part = part_from_path(&path)?;
+            ret.insert(part.part_name().to_string(), part);
         }
     }
     Ok(ret)

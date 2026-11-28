@@ -2,9 +2,10 @@ use bary_core::prelude::*;
 use bary_factory::*;
 use bary_sim::*;
 
-fn scenario_a() -> BaryResult<()> {
+fn scenario_a() -> Result<(), Box<dyn std::error::Error>> {
     let world = WorldBuilder::new()
         .assets()
+        .planet("Lado", Isometry2d::ZERO, Isometry2d::ZERO, 3E15, 100.0)
         .blueprint(("pollux", 0))
         .blueprint(("pollux", 2))
         .blueprint("bellerophon")
@@ -13,8 +14,10 @@ fn scenario_a() -> BaryResult<()> {
         .blueprint("foundation")
         .blueprint("miner")
         .blueprint("icecream")
-        .spawn(("pollux", 0), "", (30.0, 0.0, 0.0))
-        .spawn(("pollux", 2), "", (0.0, 0.0, 0.0))
+        .spawn(("pollux", 0), "", (1030.0, 0.0, 0.0))
+        .set_velocity((0.0, 13.0))
+        .spawn(("pollux", 2), "", (1100.0, 0.0, 0.0))
+        .set_velocity((0.0, 13.0))
         .insert_source((19, 7), Item::Magnesium)
         .insert_source((20, 7), Item::Iron)
         .insert_source((21, 7), Item::Titanium)
@@ -25,10 +28,14 @@ fn scenario_a() -> BaryResult<()> {
         .insert_pipe((17, 10), (15, 10))
         .insert_pipe((27, 7), (34, 7))
         .insert_pipe((26, 7), (25, 6))
-        .spawn("remora", "", (10.0, 30.0, 0.1))
-        .spawn("miner", "", (-9.0, 12.0, -0.3))
-        .spawn("remora", "", (-7.0, 23.0, 0.7))
-        .spawn("bellerophon", "", (130.0, 50.0, 0.1))
+        .spawn("remora", "", (1010.0, 30.0, 0.1))
+        .set_velocity((0.0, 12.0))
+        .spawn("miner", "", (1109.0, 12.0, -0.3))
+        .set_velocity((0.0, 12.0))
+        .spawn("remora", "", (1300.0, 23.0, 0.7))
+        .set_velocity((0.0, 12.0))
+        .spawn("bellerophon", "", (1309.0, 50.0, 0.1))
+        .set_velocity((0.0, 12.0))
         .command(WorldDelta::Ping(DVec2::ZERO))
         .command(WorldDelta::Ping(DVec2::splat(10.0)))
         .asteroid((-80.0, 30.0, 0.1), 20.0, 632)
@@ -39,7 +46,7 @@ fn scenario_a() -> BaryResult<()> {
     save_world("saves/scenario_a", &world, true)
 }
 
-fn scenario_b() -> BaryResult<()> {
+fn scenario_b() -> Result<(), Box<dyn std::error::Error>> {
     let world = WorldBuilder::new()
         .assets()
         .blueprint(("pollux", 0))
@@ -53,7 +60,6 @@ fn scenario_b() -> BaryResult<()> {
         .blueprint("miner")
         .spawn(("pollux", 2), "", (0.0, 0.0, 0.0))
         .spawn("remora", "", (50.0, 50.0, 0.0))
-        .anchored(true)
         .spawn("miner", "", (-20.0, 20.0, 4.0))
         .asteroid((-80.0, 30.0, 0.1), 50.0, 391)
         .build();
@@ -61,10 +67,20 @@ fn scenario_b() -> BaryResult<()> {
     save_world("saves/scenario_b", &world, true)
 }
 
-fn main() -> BaryResult<()> {
+fn scenario_c() -> Result<(), Box<dyn std::error::Error>> {
+    let world = WorldBuilder::new()
+        .assets()
+        .parse_file("scenario_c.yaml")?
+        .build();
+
+    save_world("saves/scenario_c", &world, true)
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     simple_logger::init_with_level(log::Level::Trace).unwrap();
 
     scenario_a()?;
     scenario_b()?;
+    scenario_c()?;
     Ok(())
 }

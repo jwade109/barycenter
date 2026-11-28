@@ -51,7 +51,7 @@ pub fn grid_parts_do_not_intersect(world: &World) -> Result<(), anyhow::Error> {
         }
 
         let mut actual_cells = 0;
-        for (_idx, occ) in &grid.occupancy {
+        for occ in grid.occupancy.values() {
             actual_cells += occ.iter().count() as u32;
         }
 

@@ -60,7 +60,7 @@ impl Isometry2d {
 
     pub fn in_frame(&self, p: DVec2) -> DVec2 {
         let offset = p - self.translation;
-        let yaw = self.rotation as f64;
+        let yaw = self.rotation;
         rotate_f64(offset, -yaw)
     }
 
@@ -100,6 +100,12 @@ impl std::ops::Add for Isometry2d {
 impl std::ops::AddAssign for Isometry2d {
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs;
+    }
+}
+
+impl std::ops::MulAssign<f64> for Isometry2d {
+    fn mul_assign(&mut self, rhs: f64) {
+        *self = *self * rhs;
     }
 }
 

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use crate::UiInteractionState;
 use crate::UiMessage;
 use crate::assets::*;
@@ -8,7 +10,7 @@ use crate::utils::*;
 use bary_core::prelude::PI;
 use bary_core::prelude::*;
 use bary_factory::*;
-use bary_ipc::ClientNode;
+use bary_orbital::SparseOrbit;
 use bary_orbital::TerrainMaterial;
 use bary_parts::*;
 use bary_sim::Camera;
@@ -17,6 +19,7 @@ use bary_terminal::*;
 use bary_ui::*;
 use early_returns::*;
 use raylib::prelude::*;
+use rdev::Key::ShiftLeft;
 
 pub fn to_raylib_camera(camera: &Camera, screen_dims: Vec2) -> Camera2D {
     Camera2D {
@@ -35,7 +38,7 @@ fn draw_text(d: &mut RaylibDrawHandle, iso: Isometry2d, text: &str, font_size: f
     if !text.is_empty() {
         d.draw_text_pro(
             d.get_font_default(),
-            &text,
+            text,
             p,
             Vector2::zero(),
             -iso.rotation.to_degrees() as f32,
@@ -62,7 +65,7 @@ fn draw_text_centered_bg(d: &mut RaylibDrawHandle, iso: Isometry2d, text: &str, 
 
     d.draw_text_pro(
         d.get_font_default(),
-        &text,
+        text,
         p,
         Vector2::zero(),
         -iso.rotation.to_degrees() as f32,
@@ -123,8 +126,8 @@ fn draw_trackers(d: &mut RaylibDrawHandle, trackers: &Components<Tracker>, detai
     }
 }
 
-fn draw_hovered_inventory(d: &mut RaylibDrawHandle, world: &World, client: &ClientSpecificInfo) {
-    let _free = some_or_return!(client.viewport.free());
+fn draw_hovered_inventory(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
+    let _free = some_or_return!(client.scene_graph.free());
     let loc = some_or_return!(client.hovered_grid_loc());
     let grid = ok_or_return!(world.grids.try_get(loc.grid_id));
     let occ = some_or_return!(grid.get_parts_at(loc.coord));
@@ -210,12 +213,10 @@ fn draw_docking_interface(
 fn draw_grid_far_indicators(
     grids: &Components<VehicleGrid>,
     d: &mut RaylibDrawHandle,
-    client: &ClientSpecificInfo,
+    client: &FrontEnd,
     camera: &Camera2D,
     assets: &Assets,
 ) {
-    let free = some_or_return!(client.viewport.free());
-
     if camera.zoom > ZOOM_NEAR_FAR_THRESHOLD {
         return;
     }
@@ -224,6 +225,15 @@ fn draw_grid_far_indicators(
 
     let mut markers = Vec::new();
 
+    struct Marker<'a> {
+        id: Ent,
+        screen_pos: Vector2,
+        moved_screen_pos: Vector2,
+        angle: f32,
+        name: &'a str,
+        is_controllable: bool,
+    };
+
     for (id, grid) in grids.iter() {
         let loc = grid.centroid_isometry();
         let p = glam_to_raylib_swap_y(loc.translation);
@@ -231,28 +241,38 @@ fn draw_grid_far_indicators(
         let angle = loc.rotation as f32 - camera.rotation.to_radians();
         let empty = !grid.computers.is_empty();
 
-        markers.push((*id, q, q, angle, grid.name.clone(), empty));
+        let marker = Marker {
+            id: *id,
+            screen_pos: q,
+            moved_screen_pos: q,
+            angle,
+            name: grid.name.as_str(),
+            is_controllable: !grid.computers.is_empty(),
+        };
+
+        markers.push(marker);
     }
 
-    // move the markers apart
-    for _ in 0..10 {
+    for _ in 0..4 {
         for i in 0..markers.len() {
-            for j in 0..markers.len() {
-                if i <= j {
+            let mut push = Vector2::zero();
+
+            for other in &markers {
+                let current_marker = &markers[i];
+
+                if current_marker.id == other.id {
                     continue;
                 }
 
-                let p1 = markers[i].1;
-                let p2 = markers[j].1;
-                let delta = p2 - p1;
-                let dist = delta.length();
-                if dist < marker_radius * 2.0 {
-                    let u = delta.normalized();
-                    let delta = marker_radius * 2.0 - dist;
-                    markers[j].1 += u * delta / 2.0;
-                    markers[i].1 -= u * delta / 2.0;
-                }
+                let ds = current_marker.moved_screen_pos - other.moved_screen_pos;
+
+                let ds = ds.normalized() * 30.0 / (0.3 + ds.length());
+
+                push += ds;
             }
+
+            let marker = markers.get_mut(i).unwrap();
+            marker.moved_screen_pos += push;
         }
     }
 
@@ -273,98 +293,139 @@ fn draw_grid_far_indicators(
     let font = assets.ui_font();
 
     // draw the markers
-    for (id, p, q, angle, name, is_controllable) in markers {
-        let color = if is_controllable {
+    for marker in markers {
+        let color = if marker.is_controllable {
             Color::ORANGE
         } else {
             Color::GRAY
         };
-        d.draw_line_v(p, q, color);
-        if is_controllable {
-            let (v1, v2, v3) = get_triangle(q, angle);
+        d.draw_line_v(marker.screen_pos, marker.moved_screen_pos, color);
+        if marker.is_controllable {
+            let (v1, v2, v3) = get_triangle(marker.moved_screen_pos, marker.angle);
             d.draw_triangle(v1, v2, v3, color);
+        } else {
+            d.draw_circle_lines_v(marker.moved_screen_pos, 6.0, Color::ORANGE);
         }
 
-        let is_hovered = Some(id) == free.selection_info.hovered.map(|g| g.grid_id);
+        if let Some(free) = client.scene_graph.free() {
+            let is_hovered = Some(marker.id) == free.hovered_vehicle.map(|g| g.grid_id);
 
-        if !name.is_empty() {
-            let color = if is_hovered {
-                Color::WHITE
-            } else if is_controllable && client.input.is_key_pressed(rdev::Key::ShiftLeft) {
-                Color::WHITE.alpha(0.4)
-            } else {
-                Color::WHEAT.alpha(0.0)
-            };
-            let q = q - Vector2::new(0.0, 35.0);
-            draw_text_centered(d, &font, &name, q, 30, color);
+            if !marker.name.is_empty() {
+                let color = if is_hovered {
+                    Color::WHITE
+                } else if client.input.is_key_pressed(rdev::Key::ShiftLeft) {
+                    Color::WHITE.alpha(0.4)
+                } else {
+                    Color::WHEAT.alpha(0.0)
+                };
+                let q = marker.moved_screen_pos - Vector2::new(0.0, 35.0);
+                draw_text_centered(d, &font, marker.name, q, 30.0, color);
+            }
         }
     }
 }
 
-pub fn draw_world(
-    world: &World,
-    client: &ClientSpecificInfo,
-    assets: &Assets,
-    d: &mut RaylibDrawHandle,
-) {
-    draw_stars(d, &world.stars, &client.camera, client.screen_dims);
+fn draw_planets(d: &mut RaylibDrawHandle, world: &World) {
+    for planet in world.planets.values() {
+        fill_circle(d, planet.pos.tr(), planet.body.radius, Color::LIGHTBLUE);
+        fill_circle(d, planet.pos.tr(), planet.body.radius * 0.95, Color::BLUE);
+        fill_circle(
+            d,
+            planet.pos.tr(),
+            planet.body.radius * 0.9,
+            Color::DARKBLUE,
+        );
+        draw_circle(d, planet.pos.tr(), planet.body.radius, Color::WHITE);
+    }
+}
 
-    let raylib_camera = to_raylib_camera(&client.camera, client.screen_dims);
+fn draw_orbit(d: &mut RaylibDrawHandle, planet_pos: DVec2, orbit: &SparseOrbit, color: Color) {
+    if orbit.is_hyperbolic() {
+        return;
+    }
+    let mut iso = Isometry2d::new(planet_pos, 0.0).offset(orbit.center());
+    iso.rotation = orbit.arg_periapsis;
+    let dims = DVec2::new(orbit.semi_major_axis, orbit.semi_minor_axis()) * 2.0;
+    draw_ellipse(d, iso, dims, color);
+}
 
-    draw_players(d, &world, &raylib_camera);
+fn draw_orbits(d: &mut RaylibDrawHandle, world: &World) {
+    for grid in world.grids.values() {
+        let parent_id = some_or_continue!(grid.orbital_parent);
+        let planet = some_or_continue!(world.planets.get(parent_id));
+        let pos = grid.particle_location.tr() - planet.pos.tr();
+        let vel = grid.velocity.tr() - planet.vel.tr();
+        if let Some(orbit) = SparseOrbit::from_pv((pos, vel), planet.body, Nanotime::zero()) {
+            draw_orbit(d, planet.pos.tr(), &orbit, Color::ORANGE);
+        }
+    }
+
+    for player in world.players.values() {
+        let parent_id = some_or_continue!(player.orbital_parent);
+        let planet = some_or_continue!(world.planets.get(parent_id));
+        let pos = player.pos.tr() - planet.pos.tr();
+        let vel = player.vel.tr() - planet.vel.tr();
+        if let Some(orbit) = SparseOrbit::from_pv((pos, vel), planet.body, Nanotime::zero()) {
+            draw_orbit(d, planet.pos.tr(), &orbit, Color::TEAL);
+        }
+    }
+}
+
+pub fn draw_world(world: &World, client: &mut FrontEnd, d: &mut RaylibDrawHandle) {
+    let camera = some_or_return!(client.scene_graph.camera(world));
+
+    draw_stars(d, &world.stars, &camera, client.screen_dims);
+
+    let raylib_camera = to_raylib_camera(&camera, client.screen_dims);
 
     // this apparently is incredibly slow; curious
     let mut c = d.begin_mode2D(raylib_camera);
 
+    draw_planets(&mut c, world);
+
+    draw_orbits(&mut c, world);
+
     draw_origin_and_range_indicators(&mut c);
 
-    draw_asteroids(&mut c, world, assets, &client);
+    draw_asteroids(&mut c, world, client);
 
-    if client.viewport.is_real_view() {
-        draw_computer_target_isometry(&mut c, &world.computers, &world.parts, &world.grids);
+    if client.scene_graph.is_real_view() {
+        draw_computer_targets(&mut c, world);
     }
 
     draw_excavators(&mut c, world);
 
-    draw_parts(&mut c, world, &raylib_camera, &client.viewport, assets);
+    draw_parts(
+        &mut c,
+        world,
+        &raylib_camera,
+        &client.scene_graph,
+        &client.assets,
+    );
 
-    if client.viewport.is_real_view() {
-        draw_selection_info(&mut c, &world.grids, &client);
+    draw_selection_info(&mut c, &world.grids, client);
 
-        draw_lights(
-            &mut c,
-            &world.grids,
-            &world.parts,
-            &world.computers,
-            &world.lights,
-            world.ticks as u32,
-            &client.camera,
-        );
+    draw_lights(&mut c, world, client);
 
-        draw_thruster_plumes(
-            &mut c,
-            &world.grids,
-            &world.parts,
-            &world.thrusters,
-            &client.camera,
-        );
+    draw_thruster_plumes(&mut c, world, client);
 
-        draw_trackers(&mut c, &world.tracking, client.alt_mode);
-    } else if let Viewport::Editor(e) = &client.viewport {
+    draw_trackers(&mut c, &world.tracking, client.alt_mode);
+
+    if let SceneGraph::Editor(e) = &client.scene_graph {
         draw_grid_lines(&mut c, &world.grids, e);
     }
 
     if client.alt_mode {
         draw_grid_outlines(&mut c, &world.grids);
-        draw_thruster_classification(&mut c, &world.grids, &world.parts, &world.thrusters);
+        draw_thruster_classification(&mut c, world);
     }
 
-    draw_outline_hovered_parts(&mut c, &world.grids, &world.parts, &client);
+    draw_outline_hovered_parts(&mut c, &world.grids, &world.parts, client);
 
     draw_mouse_world_position(
         &mut c,
         client.mouse_screen_position,
-        &client.camera,
+        &camera,
         client.screen_dims,
     );
 
@@ -372,8 +433,9 @@ pub fn draw_world(
 
     draw_ping_particles(&mut c, &world.particles, world.ticks);
 
-    // draw_isometry_axes(&mut c, world.camera.isometry, "CAM", Vec2::splat(5.0));
-    // draw_isometry_axes(&mut c, world.target_camera.isometry, "", Vec2::splat(5.0));
+    draw_radio_transmissions(&mut c, &world.transmissions);
+
+    draw_transmission_rx_locations(&mut c, &client.transmissions);
 
     draw_editor_part(&mut c, world, client);
 
@@ -390,23 +452,27 @@ pub fn draw_world(
         draw_hovered_inventory(&mut c, world, client);
     }
 
-    if let Some(docking) = client.docking_interface() {
+    if let Some(free) = client.scene_graph.free()
+        && let Some(docking) = free.docking_interface()
+    {
         _ = draw_docking_interface(&mut c, world, &docking);
     }
 
-    // draw_parts_zoo(&world.prototypes, &mut c);
+    draw_parts_under_players(&mut c, world);
+
+    draw_players(&mut c, &world.players, client.alt_mode);
 
     drop(c);
 
-    draw_grid_far_indicators(&world.grids, d, &client, &raylib_camera, assets);
+    draw_grid_far_indicators(&world.grids, d, client, &raylib_camera, &client.assets);
 
-    draw_waypoint_far_indicators(&world.computers, d, &raylib_camera);
+    draw_selected_grid_info(d, client, world, client.screen_dims, &client.assets);
 
-    draw_selected_grid_info(d, &client, &world.grids, client.screen_dims, assets);
+    draw_editor_rename_field(d, client);
 
-    draw_editor_rename_field(d, client, assets);
+    draw_chat(d, &client.chat, client.screen_dims, &client.assets);
 
-    draw_chat(d, &client.chat, client.screen_dims, assets);
+    // draw_thruster_shader(d, world, client);
 
     // draw_imgui(d, gui, assets);
 
@@ -417,60 +483,49 @@ pub fn draw_world(
     // draw_test_isos(&mut d)
 }
 
-fn draw_player_piloting(
-    d: &mut RaylibDrawHandle,
-    world: &World,
-    camera: &Camera2D,
-    name: &str,
-    grid_id: Ent,
-) -> BaryResult<()> {
-    let grid = world.grids.try_get(grid_id)?;
-    let radius = grid.bounding_radius() * camera.zoom * 1.3;
-    let p = glam_to_raylib_swap_y(grid.particle_location.translation);
-    let q = d.get_world_to_screen2D(p, camera);
-
-    let font_size = 18;
-
-    let x = q.x as i32;
-    let y = q.y as i32;
-
-    let radius = radius as i32;
-    let w = radius;
-    let h = radius;
-
-    d.draw_circle_lines(x, y, radius as f32, Color::RED);
-
-    let rec = Rectangle::new((x - w / 2) as f32, (y - h / 2) as f32, w as f32, h as f32);
-    d.draw_rectangle_lines_ex(rec, 4.0, Color::RED);
-
-    let x = x + w / 2 + 6;
-    let y = y + h / 2;
-
-    d.draw_text(&name, x, y, font_size, Color::RED);
-
-    Ok(())
-}
-
-fn draw_players(d: &mut RaylibDrawHandle, world: &World, camera: &Camera2D) {
+fn draw_parts_under_players(d: &mut RaylibDrawHandle, world: &World) {
     for player in world.players.values() {
-        match &player.state {
-            PlayerState::Flying(iso) => {
-                let p = glam_to_raylib_swap_y(iso.translation);
-                let q = d.get_world_to_screen2D(p, camera);
-                let x = q.x as i32;
-                let y = q.y as i32;
-                d.draw_circle(x, y, 3.0, Color::TEAL);
-                d.draw_text(&player.name, x + 2, y + 6, 18, Color::TEAL);
-            }
-            PlayerState::PilotingGrid(grid_id, _ctrl) => {
-                _ = draw_player_piloting(d, world, camera, &player.name, *grid_id);
+        // TODO(optimization) spatial data structure for grids!
+        for grid in world.grids.values() {
+            let player_in_grid_local = grid.origin().in_frame(player.pos.tr());
+            let p = PartCoord::from_meters_floored(player_in_grid_local);
+            let parts = grid.get_parts_at(p);
+            if let Some(parts) = parts {
+                draw_grid_coord(d, grid.origin(), p, Color::RED);
+                for (layer, part_id) in parts.iter() {
+                    let part = world.parts.get(part_id).expect("Expected a part");
+                    draw_grid_region(
+                        d,
+                        grid.origin(),
+                        part.region,
+                        Color::WHITE.alpha(0.1),
+                        Color::PURPLE,
+                        1.0,
+                    );
+                }
             }
         }
+    }
+}
 
-        if let Some(pos) = player.cursor_world_position {
-            let p = glam_to_raylib_swap_y(pos);
-            let q = d.get_world_to_screen2D(p, camera);
-            d.draw_circle_lines_v(q, 8.0, Color::TEAL);
+fn draw_players(d: &mut RaylibDrawHandle, players: &Components<Player>, alt_mode: bool) {
+    for (id, player) in players.iter() {
+        if player.is_connected {
+            fill_circle(d, player.pos.tr(), 0.2, Color::GRAY);
+            draw_isometry_axes(d, player.pos, "", DVec2::splat(0.6));
+        } else {
+            draw_circle(d, player.pos.tr(), 0.2, Color::TEAL);
+            draw_circle(d, player.pos.tr(), 0.5, Color::BLUE);
+        }
+        if alt_mode {
+            let text = format!(
+                "{} {} {} {:?}",
+                id,
+                player.username,
+                velocity_str_v(player.vel.tr()),
+                player.controls
+            );
+            draw_text(d, player.pos, &text, 0.2);
         }
     }
 }
@@ -523,23 +578,19 @@ fn get_terrain_tile_rect(material: TerrainMaterial, variant: usize) -> Rectangle
 #[allow(unused)]
 fn draw_animation(d: &mut RaylibDrawHandle, assets: &Assets) {
     if let Some(anim) = &assets.terrain_spritesheet {
-        d.draw_texture(&anim, 100, 100, Color::WHITE);
+        d.draw_texture(anim, 100, 100, Color::WHITE);
 
         let i = d.get_time() * 10.0;
 
         let rec = Rectangle::new(i as f32, 0.0, 100.0, 100.0);
 
-        d.draw_texture_rec(&anim, rec, Vector2::new(100.0, 250.0), Color::WHITE);
+        d.draw_texture_rec(anim, rec, Vector2::new(100.0, 250.0), Color::WHITE);
     }
 }
 
-pub fn draw_selected_part_cursors(
-    d: &mut RaylibDrawHandle,
-    world: &World,
-    client: &ClientSpecificInfo,
-) {
-    let free = some_or_return!(client.viewport.free());
-    for loc in &free.selection_info.selected {
+pub fn draw_selected_part_cursors(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
+    let free = some_or_return!(client.scene_graph.free());
+    for loc in &free.selected_vehicles {
         let grid = ok_or_continue!(world.grids.try_get(loc.grid_id));
         let occ = some_or_continue!(grid.get_parts_at(loc.coord));
         for (_layer, id) in occ.iter() {
@@ -567,12 +618,8 @@ pub fn draw_selected_part_cursors(
     }
 }
 
-pub fn draw_editor_selection_region(
-    d: &mut RaylibDrawHandle,
-    client: &ClientSpecificInfo,
-    world: &World,
-) {
-    let editor = some_or_return!(client.viewport.editor());
+pub fn draw_editor_selection_region(d: &mut RaylibDrawHandle, client: &FrontEnd, world: &World) {
+    let editor = some_or_return!(client.scene_graph.editor());
     let grid = ok_or_return!(world.grids.try_get(editor.vehicle));
     let hovered = some_or_return!(editor.hovered);
     let select_start = some_or_return!(editor.select_start);
@@ -597,11 +644,11 @@ pub fn draw_editor_selection_region(
 
 pub fn draw_grid_coord(
     d: &mut RaylibDrawHandle,
-    grid: &VehicleGrid,
+    origin: Isometry2d,
     coord: PartCoord,
     color: Color,
 ) {
-    let iso = grid.origin().offset(coord.to_meters());
+    let iso = origin.offset(coord.to_meters());
     draw_rectangle(d, iso, Vec2::splat(PartCoord::CELL_WIDTH), color, 0.03);
 }
 
@@ -616,11 +663,7 @@ pub fn draw_grid_lattice_point(
     draw_rectangle(d, iso, dims, color, 0.03);
 }
 
-pub fn draw_hovered_part_cursor(
-    d: &mut RaylibDrawHandle,
-    world: &World,
-    client: &ClientSpecificInfo,
-) {
+pub fn draw_hovered_part_cursor(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
     let gridloc = some_or_return!(client.hovered_grid_loc());
     let grid = ok_or_return!(world.grids.try_get(gridloc.grid_id));
 
@@ -634,7 +677,7 @@ pub fn draw_hovered_part_cursor(
         Color::GRAY
     };
 
-    draw_grid_coord(d, grid, gridloc.coord, color);
+    draw_grid_coord(d, grid.origin(), gridloc.coord, color);
 }
 
 pub fn draw_mouse_screen_position(d: &mut RaylibDrawHandle, mouse_screen_position: Option<Vec2>) {
@@ -650,9 +693,9 @@ fn draw_chat(d: &mut RaylibDrawHandle, chat: &Chat, screen_dims: Vec2, assets: &
 
     for log in chat.logs() {
         let t = format_log(log);
-        let pos = Vector2::new(x as f32, y as f32);
+        let pos = Vector2::new(x as f32, y);
         let font = assets.ui_font();
-        d.draw_text_ex(font, &t, pos, font_size, 0.0, Color::WHITE);
+        d.draw_text_ex(font.as_ref(), &t, pos, font_size, 0.0, Color::WHITE);
         y -= font_size;
     }
 }
@@ -662,7 +705,7 @@ pub fn draw_text_centered(
     font: &Font,
     text: &str,
     pos: Vector2,
-    font_size: i32,
+    font_size: f32,
     color: Color,
 ) {
     if text.is_empty() {
@@ -670,17 +713,10 @@ pub fn draw_text_centered(
     }
 
     let spacing = 0.0;
-    let dims = font.measure_text(&text, font_size as f32, spacing);
+    let dims = font.measure_text(text, font_size, spacing);
     let text_origin = Vector2::new(pos.x - dims.x / 2.0, pos.y - dims.y / 2.0);
 
-    d.draw_text_ex(
-        font,
-        &text,
-        text_origin,
-        font_size as f32,
-        spacing as f32,
-        color,
-    );
+    d.draw_text_ex(font, text, text_origin, font_size, spacing, color);
 }
 
 pub fn draw_text_centered_weak(
@@ -696,15 +732,15 @@ pub fn draw_text_centered_weak(
     }
 
     let spacing = 1.0;
-    let dims = font.measure_text(&text, font_size as f32, spacing);
+    let dims = font.measure_text(text, font_size as f32, spacing);
     let text_origin = Vector2::new(pos.x - dims.x / 2.0, pos.y - dims.y / 2.0);
 
     d.draw_text_ex(
         font,
-        &text,
+        text,
         text_origin,
         font_size as f32,
-        spacing as f32,
+        spacing,
         color,
     );
 }
@@ -733,7 +769,7 @@ fn draw_outline_hovered_parts(
     d: &mut RaylibDrawHandle,
     grids: &Components<VehicleGrid>,
     parts: &Components<Part>,
-    client: &ClientSpecificInfo,
+    client: &FrontEnd,
 ) {
     let loc = some_or_return!(client.hovered_grid_loc());
     let grid = ok_or_return!(grids.try_get(loc.grid_id));
@@ -781,17 +817,22 @@ fn draw_stars(
     }
 }
 
+fn get_orbital_parent_name(world: &World, parent: Ent) -> Option<&str> {
+    let planet = world.planets.get(parent)?;
+    Some(&planet.name)
+}
+
 fn draw_selected_grid_info(
     d: &mut RaylibDrawHandle,
-    client: &ClientSpecificInfo,
-    grids: &Components<VehicleGrid>,
+    client: &FrontEnd,
+    world: &World,
     screen_dims: Vec2,
     assets: &Assets,
 ) {
     let grid_id = some_or_return!(client.focused_grid_id());
-    let grid = ok_or_return!(grids.try_get(grid_id));
+    let grid = ok_or_return!(world.grids.try_get(grid_id));
 
-    let font_size = 26;
+    let font_size = 26.0;
 
     let parts_label = format!("{} parts - {}", grid.parts.len(), grid.parts_mass);
     let title_label = if let Some(bp) = &grid.blueprint {
@@ -803,20 +844,37 @@ fn draw_selected_grid_info(
     let vel_label = format!("{:0.2} m/s", grid.velocity.translation);
     let acc_label = format!("{:0.2} m/s^2", grid.linear_acceleration());
 
+    let orbital_label = grid
+        .orbital_parent
+        .and_then(|id| get_orbital_parent_name(world, id))
+        .map(|s| format!("Orbiting {s}"))
+        .unwrap_or_default();
+
+    let username_label = grid
+        .controlled_by
+        .as_ref()
+        .map(|s| format!("Controlled by {s}"))
+        .unwrap_or_default();
+
+    let rpm_label = format!("{:0.1} deg/s", grid.velocity.rotation * 2.0 * PI_64);
+
     let hx = screen_dims.x / 2.0;
 
     let labels = [
-        (title_label, hx, 120.0),
-        (parts_label, hx, 160.0),
+        (title_label, hx, 50.0),
+        (parts_label, hx, 80.0),
+        (orbital_label, hx, 110.0),
+        (username_label, hx, 140.0),
         (pos_label, hx, screen_dims.y - 50.0),
         (vel_label, hx + 300.0, screen_dims.y - 50.0),
         (acc_label, hx - 300.0, screen_dims.y - 50.0),
+        (rpm_label, hx, screen_dims.y - 80.0),
     ];
 
     let font = assets.ui_font();
     for (label, x, y) in labels {
         let pos = Vector2::new(x, y);
-        draw_text_centered(d, font, &label, pos, font_size, Color::WHITE);
+        draw_text_centered(d, font.as_ref(), &label, pos, font_size, Color::WHITE);
     }
 }
 
@@ -845,26 +903,21 @@ pub fn is_zoomed_out(camera: &Camera2D) -> bool {
     camera.zoom > 0.1
 }
 
-pub fn draw_thruster_classification(
-    d: &mut RaylibDrawHandle,
-    grids: &Components<VehicleGrid>,
-    parts: &Components<Part>,
-    thrusters: &Components<Thruster>,
-) {
-    for grid in grids.values() {
+pub fn draw_thruster_classification(d: &mut RaylibDrawHandle, world: &World) {
+    for grid in world.grids.values() {
         let root = grid.origin();
         for thruster_id in &grid.thrusters {
-            let part = ok_or_continue!(parts.try_get(*thruster_id));
-            let thruster = ok_or_continue!(thrusters.try_get(*thruster_id));
+            let part = ok_or_continue!(world.parts.try_get(*thruster_id));
+            let thruster = ok_or_continue!(world.thrusters.try_get(*thruster_id));
             let part_iso = part.region.center_isometry();
             let wrench = body_frame_wrench(
-                thruster.thrust,
+                thruster.max_thrust(),
                 part_iso.translation,
                 part.region.rot(),
                 grid.center_of_mass,
             );
 
-            let color = if !thruster.is_rcs {
+            let color = if !thruster.is_rcs() {
                 Color::TEAL
             } else {
                 if wrench.rotation > 0.0 {
@@ -915,11 +968,18 @@ pub fn draw_grid_outlines(d: &mut RaylibDrawHandle, grids: &Components<VehicleGr
         draw_line(d, origin.translation, x_axis, Color::RED);
         draw_line(d, origin.translation, y_axis, Color::GREEN);
         draw_circle(d, origin.translation, 0.15, Color::BLUE);
+
+        draw_circle(
+            d,
+            grid.centroid_isometry().tr(),
+            grid.bounding_radius(),
+            Color::PURPLE,
+        );
     }
 }
 
-pub fn draw_editor_part(d: &mut RaylibDrawHandle, world: &World, client: &ClientSpecificInfo) {
-    let editor = some_or_return!(client.viewport.editor());
+pub fn draw_editor_part(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
+    let editor = some_or_return!(client.scene_graph.editor());
     let proto_id = some_or_return!(editor.prototype_id);
     let coord = some_or_return!(editor.hovered);
     let proto = ok_or_return!(world.prototypes.try_get(proto_id));
@@ -930,18 +990,14 @@ pub fn draw_editor_part(d: &mut RaylibDrawHandle, world: &World, client: &Client
     draw_part_arrow(d, pl, grid_pose);
 }
 
-pub fn draw_editor_rename_field(
-    d: &mut RaylibDrawHandle,
-    client: &ClientSpecificInfo,
-    assets: &Assets,
-) {
-    let font = assets.ui_font();
-    let editor = some_or_return!(client.viewport.editor());
+pub fn draw_editor_rename_field(d: &mut RaylibDrawHandle, fe: &FrontEnd) {
+    let font = fe.assets.ui_font();
+    let editor = some_or_return!(fe.scene_graph.editor());
     let (field, is_name) = some_or_return!(&editor.vehicle_name_field);
 
-    let pos = glam_to_raylib(client.screen_dims / 2.0);
+    let pos = glam_to_raylib(fe.screen_dims / 2.0);
 
-    let font_size = 48;
+    let font_size = 48.0;
     let spacing = 0.0;
     let padding = 20;
 
@@ -955,7 +1011,7 @@ pub fn draw_editor_rename_field(
         (field.contents().to_string(), Color::WHITE)
     };
 
-    let dims = font.measure_text(&text, font_size as f32, spacing)
+    let dims = font.measure_text(&text, font_size, spacing)
         + Vector2::new(padding as f32, padding as f32) * 2.0;
 
     let width = d.get_render_width() + padding * 2;
@@ -966,11 +1022,11 @@ pub fn draw_editor_rename_field(
 
     d.draw_rectangle(x, y, width, height, Color::BLACK.alpha(0.8));
     d.draw_rectangle_lines(x, y, width, height, Color::WHITE);
-    draw_text_centered(d, font, &text, pos, font_size, text_color);
+    draw_text_centered(d, font.as_ref(), &text, pos, font_size, text_color);
 }
 
-pub fn get_hovered_prototype(client: &ClientSpecificInfo, world: &World) -> Option<Ent> {
-    let editor = client.viewport.editor()?;
+pub fn get_hovered_prototype(client: &FrontEnd, world: &World) -> Option<Ent> {
+    let editor = client.scene_graph.editor()?;
     let layer = editor.layer?;
     let coord = editor.hovered?;
     let grid = world.grids.try_get(editor.vehicle).ok()?;
@@ -1031,14 +1087,14 @@ pub fn draw_parts(
     d: &mut RaylibDrawHandle,
     world: &World,
     camera: &Camera2D,
-    viewport: &Viewport,
+    scene_graph: &SceneGraph,
     assets: &Assets,
 ) {
     if camera.zoom < 2.0 {
         return;
     }
 
-    let (focus_vehicle, focus_layer) = if let Viewport::Editor(e) = viewport {
+    let (focus_vehicle, focus_layer) = if let SceneGraph::Editor(e) = scene_graph {
         (Some(e.vehicle), e.layer)
     } else {
         (None, None)
@@ -1099,24 +1155,19 @@ pub fn draw_parts(
             if draw_layer == PartLayer::Plumbing {
                 let is_shown = focus_layer == Some(PartLayer::Plumbing) || focus_layer.is_none();
                 let alpha = if is_shown { 1.0 } else { 0.2 };
-                _ = draw_pipes_for_grid(d, &world, *grid_id, assets, alpha);
+                // _ = draw_pipes_for_grid(d, &world, *grid_id, assets, alpha);
             }
         }
     }
 }
 
-pub fn draw_computer_target_isometry(
-    d: &mut RaylibDrawHandle,
-    computers: &Components<Computer>,
-    parts: &Components<Part>,
-    grids: &Components<VehicleGrid>,
-) {
-    for (cpu_id, cpu) in computers.iter() {
-        let Ok(part) = parts.try_get(*cpu_id) else {
+pub fn draw_computer_targets(d: &mut RaylibDrawHandle, world: &World) {
+    for (cpu_id, cpu) in world.computers.iter() {
+        let Ok(part) = world.parts.try_get(*cpu_id) else {
             continue;
         };
 
-        let Ok(grid) = grids.try_get(part.grid_id) else {
+        let Ok(grid) = world.grids.try_get(part.grid_id) else {
             continue;
         };
 
@@ -1125,6 +1176,12 @@ pub fn draw_computer_target_isometry(
         };
 
         draw_isometry_axes(d, pose, &grid.name, DVec2::new(1.0, 0.4));
+
+        for occ in grid.occupancy.keys() {
+            let coord = PartCoord::new(*occ);
+            let origin = pose.offset(-grid.centroid());
+            draw_grid_coord(d, origin, coord, Color::TEAL);
+        }
     }
 }
 
@@ -1198,43 +1255,45 @@ fn draw_ping_particles(d: &mut RaylibDrawHandle, particles: &Vec<Particle>, curr
     }
 }
 
-fn draw_waypoint_far_indicators(
-    computers: &Components<Computer>,
+fn draw_radio_transmissions(
     d: &mut RaylibDrawHandle,
-    camera: &Camera2D,
+    transmissions: &Components<RadioTransmission>,
 ) {
-    if camera.zoom > ZOOM_NEAR_FAR_THRESHOLD {
-        return;
-    }
-
-    let marker_radius = 11.0f32;
-
-    for cpu in computers.values() {
-        if !cpu.on {
-            continue;
-        }
-
-        let Some(wp) = cpu.current_waypoint() else {
-            continue;
+    for tr in transmissions.values() {
+        let color = if tr.is_response() {
+            Color::TEAL
+        } else {
+            Color::RED
         };
 
-        let pos = glam_to_raylib_swap_y(wp.translation);
-        let pos = d.get_world_to_screen2D(pos, camera);
-        d.draw_circle_lines_v(pos, marker_radius, Color::GRAY);
+        let alpha = (tr.remaining_range() / 2000.0).clamp(0.0, 0.8);
+
+        draw_circle(d, tr.origin(), tr.radius(), color.alpha(alpha as f32));
     }
 }
 
-fn draw_waypoint_widget(d: &mut RaylibDrawHandle, client: &ClientSpecificInfo) {
-    let free = some_or_return!(client.viewport.free());
-    if free.selection_info.selected.is_empty() {
+fn draw_transmission_rx_locations(
+    d: &mut RaylibDrawHandle,
+    rts: &Components<ReceivedTransmission>,
+) {
+    for rt in rts.values() {
+        draw_circle(d, rt.received_location, 50.0, Color::RED);
+        draw_circle(d, rt.original.origin(), 50.0, Color::GREEN);
+        draw_line(d, rt.received_location, rt.original.origin(), Color::TEAL);
+    }
+}
+
+fn draw_waypoint_widget(d: &mut RaylibDrawHandle, client: &FrontEnd) {
+    let free = some_or_return!(client.scene_graph.free());
+    if free.selected_vehicles.is_empty() {
         return;
     }
     let start = some_or_return!(free.waypoint_widget);
     let screen_pos = some_or_return!(client.mouse_screen_position);
-    let end = screen_to_world(&client.camera, screen_pos, client.screen_dims);
+    let end = screen_to_world(&free.camera, screen_pos, client.screen_dims);
     draw_line(d, start, end, Color::GRAY);
 
-    let n_ships = free.selection_info.selected.len();
+    let n_ships = free.selected_vehicles.len();
 
     for i in 0..n_ships {
         let s = if n_ships == 1 {
@@ -1245,7 +1304,7 @@ fn draw_waypoint_widget(d: &mut RaylibDrawHandle, client: &ClientSpecificInfo) {
 
         let p = start.lerp(end, s);
 
-        draw_circle(d, p, 10.0 / client.camera.zoom, Color::GRAY)
+        draw_circle(d, p, 10.0 / free.camera.zoom, Color::GRAY)
     }
 }
 
@@ -1358,19 +1417,32 @@ pub fn draw_circle(d: &mut RaylibDrawHandle, p: impl Into<DVec2>, r: impl Into<f
     d.draw_circle_lines_v(center, r.into() as f32, color);
 }
 
+pub fn draw_ellipse(d: &mut RaylibDrawHandle, iso: Isometry2d, dims: DVec2, color: Color) {
+    let points = linspace_f64(0.0, 2.0 * PI_64, 100)
+        .into_iter()
+        .map(|a| {
+            let x = a.cos() * dims.x / 2.0;
+            let y = a.sin() * dims.y / 2.0;
+            glam_to_raylib_swap_y(iso.offset((x, y)).tr())
+        })
+        .collect::<Vec<_>>();
+
+    d.draw_line_strip(&points, color);
+}
+
 fn draw_selection_info(
     d: &mut RaylibDrawHandle,
     grids: &Components<VehicleGrid>,
-    client: &ClientSpecificInfo,
+    client: &FrontEnd,
 ) {
-    let free = some_or_return!(client.viewport.free());
-    if let Some(gridloc) = free.selection_info.hovered {
+    let free = some_or_return!(client.scene_graph.free());
+    if let Some(gridloc) = free.hovered_vehicle {
         let grid = ok_or_return!(grids.try_get(gridloc.grid_id));
         let loc = grid.centroid_isometry();
         let r = grid.bounding_radius() * 1.4;
         draw_circle(d, loc.translation, r, Color::GREEN);
     }
-    for loc in &free.selection_info.selected {
+    for loc in &free.selected_vehicles {
         let grid = ok_or_return!(grids.try_get(loc.grid_id));
         let loc = grid.centroid_isometry();
         let r = grid.bounding_radius() * 1.4 + 0.5;
@@ -1566,83 +1638,131 @@ fn draw_grid_lines(
     }
 }
 
-fn draw_thruster_plumes(
-    d: &mut RaylibDrawHandle,
-    grids: &Components<VehicleGrid>,
-    parts: &Components<Part>,
-    thrusters: &Components<Thruster>,
-    camera: &Camera,
-) {
+fn draw_thruster_shader(d: &mut RaylibDrawHandle, world: &World, client: &mut FrontEnd) {
+    let lb_loc = client
+        .assets
+        .thruster_shader
+        .get_shader_location("_lower_bound");
+
+    let time_loc = client
+        .assets
+        .thruster_shader
+        .get_shader_location("_current_time");
+
+    let res_loc = client
+        .assets
+        .thruster_shader
+        .get_shader_location("_resolution");
+
+    let current_time = apparent_elapsed_time(world.ticks).as_secs_f32();
+    client
+        .assets
+        .thruster_shader
+        .set_shader_value(time_loc, current_time);
+
+    let res = [d.get_render_width() as f32, d.get_render_height() as f32];
+    client.assets.thruster_shader.set_shader_value(res_loc, res);
+
+    let mut s = d.begin_shader_mode(&mut client.assets.thruster_shader);
+    s.draw_rectangle(
+        0,
+        0,
+        s.get_render_width(),
+        s.get_render_height(),
+        Color::WHITE,
+    );
+}
+
+fn draw_thruster_plumes(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
+    let camera = some_or_return!(client.scene_graph.camera(world));
+
     if camera.zoom < 2.0 {
         return;
     }
 
-    for (e, t) in thrusters.iter() {
-        if !t.is_on {
+    let time_offset = apparent_elapsed_time(world.ticks).subsec_millis() as f64 / 1000.0;
+
+    for (e, t) in world.thrusters.iter() {
+        if t.clamped_throttle() < 0.001 {
             continue;
         }
 
-        let Ok(part) = parts.try_get(*e) else {
+        let Ok(part) = world.parts.try_get(*e) else {
             continue;
         };
 
-        let Ok(grid) = grids.try_get(part.grid_id) else {
+        let Ok(grid) = world.grids.try_get(part.grid_id) else {
             continue;
         };
 
         let origin = grid.origin();
 
-        let mut iso = part_isometry(origin, part.region);
+        let mut part_iso = part_isometry(origin, part.region);
         let mut dims = part.region.part_aligned_dims().to_meters().as_dvec2();
-        let p = iso.translation + iso.local_y() * dims.y / 2.0;
-        dims.x *= 2.0;
-        let offset = iso.local_x() * dims.x;
+        let p = part_iso.translation + part_iso.local_y() * dims.y / 2.0;
+        dims.x *= 2.0 * t.clamped_throttle() as f64;
+        let offset = part_iso.local_x() * dims.x;
+        let mut iso = part_iso;
         iso.translation -= offset;
 
-        fill_rectangle(d, iso, dims, Color::RED);
+        let center_isometry = origin * part.region.center_isometry();
+
+        let max_length = t.clamped_throttle() as f64 * 6.0 + 5.0;
+        let base_width = 0.02;
+        let max_width = 4.0;
+
+        for (rs, c) in [(1.0, Color::RED), (0.8, Color::ORANGE), (0.5, Color::WHITE)] {
+            for s in linspace(0.0, 1.0, 12) {
+                let x = s as f64 * max_length;
+                let l = (time_offset * 50.0 + x) % max_length;
+                let p = center_isometry.tr() - center_isometry.local_x() * l;
+                let s = l / max_length;
+                let mut r = base_width + max_width * s;
+                let alpha = 0.2 * ((1.0 - s) * t.clamped_throttle() as f64).clamp(0.0, 0.6);
+                let rand = rand(0.9, 1.1) as f64;
+                if r > 0.01 {
+                    fill_circle(d, p, r * rs * rand, c.alpha(alpha as f32));
+                }
+            }
+        }
+
         draw_light_source(d, p, dims.x, Color::RED);
     }
 }
 
-fn draw_lights(
-    d: &mut RaylibDrawHandle,
-    grids: &Components<VehicleGrid>,
-    parts: &Components<Part>,
-    computers: &Components<Computer>,
-    lights: &Components<Light>,
-    ticks: u32,
-    camera: &Camera,
-) {
+fn draw_lights(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
+    let camera = some_or_return!(client.scene_graph.camera(world));
+
     if camera.zoom < 2.0 {
         return;
     }
 
-    for grid in grids.values() {
+    for grid in world.grids.values() {
         let Some(cpu_id) = grid.computers.first() else {
             continue;
         };
 
-        let Ok(cpu) = computers.try_get(*cpu_id) else {
+        let Ok(cpu) = world.computers.try_get(*cpu_id) else {
             continue;
         };
 
-        if !cpu.on {
+        if !cpu.is_on() {
             continue;
         }
 
         let origin = grid.origin();
 
         for light_id in &grid.lights {
-            let Ok(light) = lights.try_get(*light_id) else {
+            let Ok(light) = world.lights.try_get(*light_id) else {
                 continue;
             };
-            let Ok(part) = parts.try_get(*light_id) else {
+            let Ok(part) = world.parts.try_get(*light_id) else {
                 continue;
             };
 
             let rate = 3;
 
-            if !light.is_on(ticks * rate) {
+            if !light.is_on(world.ticks as u32 * rate) {
                 continue;
             }
 
@@ -1657,7 +1777,7 @@ fn draw_light_source(d: &mut RaylibDrawHandle, p: impl Into<DVec2>, r_scale: f64
     let p = p.into();
     for r in [1.0f32, 1.5, 3.0] {
         let r = r_scale as f32 * r.powi(2);
-        let a = 0.2 * 1.0 / r;
+        let a = 0.06;
         let color = color.alpha(a);
         fill_circle(d, p, r, color);
     }
@@ -1749,12 +1869,17 @@ fn draw_terrain_chunk(
     drew_tiles
 }
 
-fn is_chunk_onscreen(rock_iso: Isometry2d, chunk: ChunkIndex, client: &ClientSpecificInfo) -> bool {
+fn is_chunk_onscreen(
+    camera: Camera,
+    rock_iso: Isometry2d,
+    chunk: ChunkIndex,
+    client: &FrontEnd,
+) -> bool {
     let dims = client.screen_dims;
     let bb = chunk.bb();
     for corner in bb.corners().iter().chain(&[bb.center]) {
         let w = rock_iso * Isometry2d::from_pos(*corner);
-        let s = get_world_to_screen(&client.camera, w.translation, dims);
+        let s = get_world_to_screen(&camera, w.translation, dims);
         if s.min_element() > 0.0 && s.y < dims.y && s.x < dims.x {
             return true;
         }
@@ -1763,7 +1888,7 @@ fn is_chunk_onscreen(rock_iso: Isometry2d, chunk: ChunkIndex, client: &ClientSpe
     for corner in bb.corners().iter().chain(&[bb.center]) {
         let corner = (corner - bb.center) * 0.5 + bb.center;
         let w = rock_iso * Isometry2d::from_pos(corner);
-        let s = get_world_to_screen(&client.camera, w.translation, dims);
+        let s = get_world_to_screen(&camera, w.translation, dims);
         if s.min_element() > 0.0 && s.y < dims.y && s.x < dims.x {
             return true;
         }
@@ -1771,14 +1896,11 @@ fn is_chunk_onscreen(rock_iso: Isometry2d, chunk: ChunkIndex, client: &ClientSpe
     false
 }
 
-fn draw_asteroid(
-    d: &mut RaylibDrawHandle,
-    rock: &BigRock,
-    assets: &Assets,
-    world: &World,
-    client: &ClientSpecificInfo,
-) {
-    let spritesheet = assets
+fn draw_asteroid(d: &mut RaylibDrawHandle, rock: &BigRock, world: &World, client: &FrontEnd) {
+    let camera = some_or_return!(client.scene_graph.camera(world));
+
+    let spritesheet = client
+        .assets
         .terrain_spritesheet
         .as_ref()
         .expect("No terrain spritesheet");
@@ -1795,12 +1917,12 @@ fn draw_asteroid(
 
     let mut chunks_to_draw = Vec::new();
 
-    if client.camera.zoom > 1.4 {
+    if camera.zoom > 1.4 {
         let camera_bb = AABB::from_arbitrary(Vec2::ZERO, client.screen_dims);
         let mut bounds: Option<(ChunkIndex, ChunkIndex)> = None;
 
         for corner in camera_bb.corners() {
-            let w = screen_to_world(&client.camera, corner, client.screen_dims);
+            let w = screen_to_world(&camera, corner, client.screen_dims);
             let wrt_asteroid = in_frame(rock.iso, w);
             let chunk_index = ChunkIndex(vfloor_f64(wrt_asteroid / TERRAIN_CHUNK_WIDTH_METERS));
 
@@ -1818,11 +1940,10 @@ fn draw_asteroid(
             for x in min.0.x..=max.0.x {
                 for y in min.0.y..=max.0.y {
                     let c = ChunkIndex((x, y).into());
-                    if is_chunk_onscreen(rock.iso, c, &client) {
-                        if let Some(id) = rock.chunks.get(&c) {
+                    if is_chunk_onscreen(camera, rock.iso, c, client)
+                        && let Some(id) = rock.chunks.get(&c) {
                             chunks_to_draw.push((c, *id));
                         }
-                    }
                 }
             }
         }
@@ -1851,7 +1972,7 @@ fn draw_asteroid(
         draw_line(d, o, x, Color::RED);
         draw_line(d, o, y, Color::GREEN);
 
-        let t = 0.4 / client.camera.zoom;
+        let t = 0.4 / camera.zoom;
 
         for (chunk_index, id) in chunks_to_draw {
             let chunk = ok_or_continue!(world.terrain_chunks.try_get(id));
@@ -1867,14 +1988,9 @@ fn draw_asteroid(
     }
 }
 
-fn draw_asteroids(
-    d: &mut RaylibDrawHandle,
-    world: &World,
-    assets: &Assets,
-    client: &ClientSpecificInfo,
-) {
+fn draw_asteroids(d: &mut RaylibDrawHandle, world: &World, client: &FrontEnd) {
     for (_id, rock) in world.asteroids.iter() {
-        draw_asteroid(d, rock, assets, world, client);
+        draw_asteroid(d, rock, world, client);
     }
 }
 
@@ -1895,6 +2011,8 @@ pub fn draw_terminal<T: std::fmt::Debug>(
     assets: &Assets,
     bg_color: Color,
 ) {
+    let cwd = "/b_/modules/";
+
     if !cmd.is_active() {
         return;
     };
@@ -1915,8 +2033,8 @@ pub fn draw_terminal<T: std::fmt::Debug>(
         .map(|(c, b)| if !*b { *c } else { ' ' })
         .collect();
 
-    let display = format!("bsh > {}", fg);
-    let display_bg = format!("bsh > {}", bg);
+    let display = format!("({}) bsh > {}", cwd, fg);
+    let display_bg = format!("({}) bsh > {}", cwd, bg);
     // let width = d.get_render_width();
     let height = d.get_render_height();
 
@@ -1929,8 +2047,8 @@ pub fn draw_terminal<T: std::fmt::Debug>(
     for (i, (line, severity)) in cmd.lines().enumerate() {
         let origin = text_origin - IVec2::Y * (font_size + line_gap) * (i as i32 + 1);
         d.draw_text_ex(
-            font,
-            &line,
+            font.as_ref(),
+            line,
             Vector2::new(origin.x as f32, origin.y as f32),
             font_size as f32,
             1.0,
@@ -1940,7 +2058,7 @@ pub fn draw_terminal<T: std::fmt::Debug>(
 
     {
         d.draw_text_ex(
-            font,
+            font.as_ref(),
             &display_bg,
             Vector2::new(text_origin.x as f32, text_origin.y as f32),
             font_size as f32,
@@ -1949,7 +2067,7 @@ pub fn draw_terminal<T: std::fmt::Debug>(
         );
 
         d.draw_text_ex(
-            font,
+            font.as_ref(),
             &display,
             Vector2::new(text_origin.x as f32, text_origin.y as f32),
             font_size as f32,
@@ -1959,7 +2077,7 @@ pub fn draw_terminal<T: std::fmt::Debug>(
     }
 }
 
-pub fn draw_gui(
+pub fn draw_ui(
     d: &mut RaylibDrawHandle,
     state: &UiInteractionState,
     gui: &Tree<UiMessage>,
@@ -1968,7 +2086,7 @@ pub fn draw_gui(
     let font = assets.ui_font();
 
     for node in gui.iter() {
-        draw_node(state, d, node, font, assets);
+        draw_node(state, d, node, font.as_ref(), assets);
     }
 }
 
@@ -2024,31 +2142,38 @@ fn draw_node(
     let color = node_color(node);
     let aabb = node.aabb();
 
-    let is_clicked = state.active() == node.on_click();
-    let is_hovered = state.hot() == node.on_click();
+    let is_clicked = state.active_path() == Some(node.path());
+    let is_hovered = state.hot_path() == Some(node.path());
+
+    let font_size = node.font_size();
 
     match node.kind() {
         NodeType::Button(text, _msg) => {
-            let scale = if is_clicked { 0.95 } else { 1.0 };
-            let color = if is_clicked {
-                color.lerp(Color::BLACK, 0.2)
+            let (color, scale) = if is_clicked {
+                (color.lerp(Color::BLACK, 0.2), 0.92)
             } else if is_hovered {
-                color.lerp(Color::WHITE, 0.3)
+                (color.lerp(Color::WHITE, 0.3), 1.06)
             } else {
-                color
+                (color, 1.0)
             };
             let aabb = aabb.scale_about_center(scale);
-            draw_ui_aabb(d, aabb, Color::new(40, 40, 40, 255), false);
-            draw_ui_aabb(d, aabb, color, false);
+            draw_ui_aabb(d, aabb, color.lerp(Color::BLACK, 0.2).alpha(0.4), true);
+            // draw_ui_aabb(d, aabb, color, false);
 
             let p = glam_to_raylib(aabb.center);
-            let font_size = (UI_FONT_SIZE as f32 * scale) as i32;
-            draw_text_centered(d, font, &text, p, font_size, color);
+            let font_size = UI_FONT_SIZE as f32 * scale;
+            draw_text_centered(d, font, text, p, font_size, Color::WHITE);
         }
         NodeType::Text(text) => {
-            draw_ui_aabb(d, aabb, Color::new(30, 30, 30, 200), true);
+            let c = node.color();
+            let color = Color::new(
+                (c[0] * 255.0) as u8,
+                (c[1] * 255.0) as u8,
+                (c[2] * 255.0) as u8,
+                (c[3] * 255.0) as u8,
+            );
             let p = glam_to_raylib(aabb.center);
-            draw_text_centered(d, font, &text, p, UI_FONT_SIZE, Color::WHITE);
+            draw_text_centered(d, font, text, p, font_size, color);
         }
         NodeType::DragHandle(_) => {
             let color = if is_clicked {
@@ -2090,133 +2215,59 @@ fn draw_node(
     };
 }
 
-pub fn draw_debug_info(
-    world: &World,
-    client: &ClientSpecificInfo,
-    assets: &Assets,
-    timers: &DebugTimers,
-    node: &ClientNode,
-    update_timer: &WallTimer,
-    ping_timer: &WallTimer,
-    tlm_timer: &WallTimer,
-    username: &str,
-    user_id: Option<Ent>,
-    d: &mut RaylibDrawHandle,
-) {
-    let size = size_in_bytes(world);
-    let mut s = "Barycenter Client".to_string();
+// pub fn draw_debug_info(
+//     world: &World,
+//     client: &FrontEnd,
+//     assets: &Assets,
+//     timers: &DebugTimers,
+//     node: &ClientNode,
+//     update_timer: &WallTimer,
+//     ping_timer: &WallTimer,
+//     tlm_timer: &WallTimer,
+//     username: &str,
+//     user_id: Option<Ent>,
+//     d: &mut RaylibDrawHandle,
+// ) {
+//     let lines = debug_lines(
+//         world,
+//         client,
+//         timers,
+//         node,
+//         update_timer,
+//         ping_timer,
+//         tlm_timer,
+//         username,
+//         user_id,
+//         d.get_fps(),
+//     );
 
-    let consist = is_world_consistent(world);
-    s += &format!("\nOK: {:?}", consist);
+//     let font_size = 16.0;
 
-    let fmt_time = |d: std::time::Duration, t: std::time::Duration| {
-        let p = d.as_secs_f64() / t.as_secs_f64();
-        format!(
-            "    {:09} ns\n    {:05.04} ms\n    {:3.1}%",
-            d.as_nanos(),
-            d.as_nanos() as f64 / 1000000.0,
-            p * 100.0
-        )
-    };
+//     let s = lines.concat();
 
-    s += &format!(
-        "\nW {}/{} {} {:0.1} {}",
-        timers.ticks,
-        client.tick_rate,
-        world.ticks,
-        apparent_elapsed_time(world.ticks).as_secs_f64(),
-        apparent_datetime(world.ticks).format("%b %d %Y %I:%M:%S %p"),
-    );
+//     let font = assets.ui_font();
+//     let dims = font.measure_text(&s, font_size, 0.0);
+//     let padding = 10;
+//     let pos = Vector2::new(10.0, 60.0);
 
-    s += &format!("\nUsername:  {}", username);
-    if let Some(uid) = user_id {
-        s += &format!("\nUser ID:   {}", uid);
-    }
+//     d.draw_rectangle(
+//         pos.x as i32,
+//         pos.y as i32,
+//         dims.x as i32 + padding * 2,
+//         dims.y as i32 + padding * 2,
+//         Color::new(20, 20, 20, 255).alpha(0.9),
+//     );
 
-    s += &format!("\nFPS:       {}", d.get_fps());
-    s += &format!("\nMemory:    {:0.3} KB", size as f64 / 1000.0);
-    s += &format!("\nZoom:      {:0.3}", client.camera.zoom);
+//     let rec = Rectangle::new(
+//         pos.x,
+//         pos.y,
+//         dims.x + padding as f32 * 2.0,
+//         dims.y + padding as f32 * 2.0,
+//     );
 
-    s += &format!(
-        "\nUpdate:    {:0.2} Hz / {:0.2} Hz ",
-        update_timer.actual_rate(),
-        update_timer.nominal_rate()
-    );
-    s += &format!(
-        "\nPing:      {:0.2} Hz / {:0.2} Hz ",
-        ping_timer.actual_rate(),
-        ping_timer.nominal_rate()
-    );
-    s += &format!(
-        "\nTLM:       {:0.2} Hz / {:0.2} Hz ",
-        tlm_timer.actual_rate(),
-        tlm_timer.nominal_rate()
-    );
+//     d.draw_rectangle_lines_ex(rec, 3.0, Color::new(60, 60, 60, 255).alpha(0.9));
 
-    s += "\n";
+//     let pos = Vector2::new(pos.x + padding as f32, pos.y + padding as f32);
 
-    s += &format!("\nConnected: {}", node.is_connected());
-    s += &format!("\nAddress:   {}", node.server_addr());
-    s += &format!("\nRX:        {}", node.rx_count());
-    s += &format!("\nTX:        {}", node.tx_count());
-    s += &format!("\nErrors:    {}", node.errors());
-
-    s += "\n";
-
-    s += &format!("\nTicks:     {}", world.ticks);
-    s += &format!("\nGrids:     {}", world.grids.len());
-    s += &format!("\nParts:     {}", world.parts.len());
-    s += &format!("\nProtos:    {}", world.prototypes.len());
-    s += &format!("\nBPs:       {}", world.blueprints.len());
-    s += &format!("\nThrusters: {}", world.thrusters.len());
-    s += &format!("\nInvs:      {}", world.inventories.len());
-    s += &format!("\nMachines:  {}", world.machines.len());
-    s += &format!("\nAsteroids: {}", world.asteroids.len());
-    s += &format!("\nChunks:    {}", world.terrain_chunks.len());
-    s += &format!("\nTiles:     {}", world.terrain_tiles.len());
-    s += &format!("\nGAUs:      {}", world.grid_acceleration_updates);
-    s += &format!("\nPlayers:   {}", world.players.len());
-
-    for player in world.players.values() {
-        s += &format!("\n  {} {}", player.name, player.state);
-    }
-
-    s += "\n";
-
-    let total = timers.total();
-
-    s += &format!("\ntotal\n{}", fmt_time(total, total));
-
-    for timer in timers.timers.iter() {
-        let time = fmt_time(*timer.1, total);
-        s += &format!("\n{}\n{}", timer.0, time);
-    }
-
-    let font_size = 16.0;
-
-    let font = assets.ui_font();
-    let dims = font.measure_text(&s, font_size, 0.0);
-    let padding = 10;
-    let pos = Vector2::new(10.0, 60.0);
-
-    d.draw_rectangle(
-        pos.x as i32,
-        pos.y as i32,
-        dims.x as i32 + padding * 2,
-        dims.y as i32 + padding * 2,
-        Color::new(20, 20, 20, 255).alpha(0.9),
-    );
-
-    let rec = Rectangle::new(
-        pos.x,
-        pos.y,
-        dims.x + padding as f32 * 2.0,
-        dims.y + padding as f32 * 2.0,
-    );
-
-    d.draw_rectangle_lines_ex(rec, 3.0, Color::new(60, 60, 60, 255).alpha(0.9));
-
-    let pos = Vector2::new(pos.x + padding as f32, pos.y + padding as f32);
-
-    d.draw_text_ex(font, &s, pos, 16.0, 0.0, Color::ORANGE);
-}
+//     d.draw_text_ex(font.as_ref(), &s, pos, 16.0, 0.0, Color::ORANGE);
+// }

@@ -1,10 +1,11 @@
 use crate::*;
 use bary_core::prelude::*;
 use bary_factory::*;
-use bary_orbital::{TerrainMaterial, VehicleControl};
+use bary_orbital::TerrainMaterial;
 use bary_parts::*;
 use early_returns::*;
 use log::*;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
@@ -23,7 +24,7 @@ pub fn load_names_from_file(
 ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     Ok(std::fs::read_to_string(filename)?
         .lines()
-        .filter_map(|s| (!s.is_empty()).then(|| s.to_string()))
+        .filter(|&s| (!s.is_empty())).map(|s| s.to_string())
         .collect())
 }
 
@@ -69,18 +70,17 @@ pub fn get_grid_physical_props(
 /// Sets the state of a given thruster.
 /// Does not modify the corresponding grid's acceleration,
 /// but returns the ID of the grid that the thruster belongs to.
-pub fn set_thruster_state(thruster_id: Ent, world: &mut World, new_state: bool) -> BaryResult<Ent> {
+pub fn set_thruster_state(thruster_id: Ent, world: &mut World, throttle: f32) -> BaryResult<Ent> {
     let part = world.parts.try_get(thruster_id)?;
     let thruster = world.thrusters.try_get_mut(thruster_id)?;
-    thruster.is_on = new_state;
+    thruster.set_state(throttle, 0.0, None);
     Ok(part.grid_id)
 }
 
 pub fn get_top_part_at(world: &World, loc: GridLocation) -> BaryResult<Ent> {
     let grid = world.grids.try_get(loc.grid_id)?;
     grid.get_parts_at(loc.coord)
-        .map(|occ| occ.top())
-        .flatten()
+        .and_then(|occ| occ.top())
         .ok_or(BaryError::NoPartsAt(loc.coord))
 }
 
@@ -137,7 +137,7 @@ pub fn get_thruster_levels(
     let mut results = Vec::new();
     for thruster_id in &grid.thrusters {
         let thruster = thrusters.try_get(*thruster_id)?;
-        results.push((*thruster_id, thruster.is_on));
+        results.push((*thruster_id, thruster.is_on()));
     }
     Ok(results)
 }
@@ -153,14 +153,10 @@ pub fn update_single_grid_acceleration(
     let grid = grids.try_get_mut(grid_id)?;
     grid.body_frame_forces = Isometry2d::ZERO;
 
-    if grid.is_anchored {
-        return Ok(());
-    }
-
     for thruster_id in &grid.thrusters {
         let thruster = thrusters.try_get(*thruster_id)?;
 
-        if !thruster.is_on {
+        if !thruster.is_on() {
             continue;
         }
 
@@ -169,7 +165,7 @@ pub fn update_single_grid_acceleration(
         let center_of_thrust = part.region.center_isometry().translation;
         let rotation = part.region.rot();
         let wrench = body_frame_wrench(
-            thruster.thrust,
+            thruster.current_thrust(),
             center_of_thrust,
             rotation,
             grid.center_of_mass,
@@ -191,6 +187,16 @@ pub fn sys_update_grid_acceleration_c(
         if let Err(e) = update_single_grid_acceleration(grid_id, grids, thrusters, parts) {
             error!("Failed to update grid accel: {e:?}");
         }
+    }
+}
+
+pub fn sys_report_acceleration_to_cpus(world: &mut World) {
+    for grid in world.grids.values() {
+        let cpu_id = some_or_continue!(grid.computers.first());
+        let cpu = ok_or_continue!(world.computers.try_get_mut(*cpu_id));
+        let dv_body = NOMINAL_DT * grid.body_frame_forces.tr() / grid.parts_mass().to_kg_f64();
+        let dv_world = rotate_f64(dv_body, grid.particle_location.rotation);
+        cpu.report_dv(dv_world);
     }
 }
 
@@ -223,6 +229,17 @@ pub fn set_grid_vel(world: &mut World, grid_id: Ent, vel: Isometry2d) -> BaryRes
     info!("Setting velocity of grid {} to {:?}", grid_id, vel);
     let grid = world.grids.try_get_mut(grid_id)?;
     grid.velocity = vel;
+    Ok(())
+}
+
+pub fn set_as_orbital_parent(world: &mut World, grid_id: Ent, planet_id: Ent) -> BaryResult<()> {
+    info!(
+        "Setting {} as the orbital parent of grid {}",
+        planet_id, grid_id
+    );
+
+    let grid = world.grids.try_get_mut(grid_id)?;
+    grid.orbital_parent = Some(planet_id);
     Ok(())
 }
 
@@ -281,14 +298,8 @@ pub fn insert_part(
         let machine = data.clone().into_machine();
         world.machines.spawn(part_id, machine);
     }
-    if let Some(data) = &proto.thruster_data {
-        let thruster = Thruster {
-            is_on: false,
-            is_rcs: data.is_rcs,
-            // TODO(gross)
-            thrust: data.thrust as f32,
-            last_controlled_by: None,
-        };
+    if let Some(proto) = &proto.thruster_data {
+        let thruster = Thruster::from_proto(proto);
         world.thrusters.spawn(part_id, thruster);
         grid.thrusters.insert(part_id);
     }
@@ -297,14 +308,13 @@ pub fn insert_part(
         world.computers.spawn(part_id, cpu);
         grid.computers.insert(part_id);
     }
-    if let Some(data) = &proto.thruster_data {
-        if data.is_rcs {
+    if let Some(data) = &proto.thruster_data
+        && data.is_rcs {
             let light_idx = world.lights.len();
             let light = Light::new(light_idx as u32);
             world.lights.spawn(part_id, light);
             grid.lights.insert(part_id);
         }
-    }
     if let Some(debug) = &proto.debug_portal_data {
         let portal = DebugPortal::from_proto(*debug);
         world.debug_portals.spawn(part_id, portal);
@@ -483,7 +493,7 @@ pub fn rebuild_index_from_island(
     let mut dst = VehicleGrid::with_name(name, None);
     dst.particle_location = src.particle_location;
     dst.velocity = src.velocity;
-    for part_id in island.iter().map(|i| *i) {
+    for part_id in island.iter().copied() {
         let part = parts.try_get(part_id)?;
         dst.parts_mass += part.mass;
         dst.parts.insert(part_id);
@@ -513,12 +523,6 @@ pub fn rebuild_index_from_islands(
         .collect()
 }
 
-pub fn set_player_piloting_grid(world: &mut World, player_id: Ent, grid_id: Ent) -> BaryResult<()> {
-    let player = world.players.try_get_mut(player_id)?;
-    player.state = PlayerState::PilotingGrid(grid_id, VehicleControl::NULLOPT);
-    Ok(())
-}
-
 pub fn explode_grid_at(loc: GridLocation, world: &mut World) {
     let p = loc.coord.inner();
     let r = 2;
@@ -542,21 +546,6 @@ pub fn toggle_tracking(world: &mut World, grid_id: Ent) -> BaryResult<bool> {
         true
     };
     Ok(tracking)
-}
-
-pub fn set_grid_anchored(world: &mut World, grid_id: Ent, anchored: bool) -> BaryResult<()> {
-    let grid = world.grids.try_get_mut(grid_id)?;
-    grid.is_anchored = anchored;
-    grid.velocity = Isometry2d::ZERO;
-
-    if anchored {
-        set_all_thrusters(grid_id, false, world)?;
-        set_primary_computer_state(grid_id, false, world)?;
-    } else {
-        set_primary_computer_state(grid_id, true, world)?;
-    }
-
-    Ok(())
 }
 
 pub fn grid_set_waypoint_to_asteroid_center(
@@ -595,8 +584,66 @@ pub fn set_primary_computer_waypoint_c(
     let primary_cpu_id = get_primary_cpu_id(grid_id, grids)?;
     let computer = computers.try_get_mut(primary_cpu_id)?;
     let command = TimedInstruction::perp(Instruction::HoldPosition(waypoint.into()));
-    computer.command_queue = vec![command];
+    computer.enqueue_instruction(command);
     Ok(primary_cpu_id)
+}
+
+pub fn set_cpu_state(
+    computers: &mut Components<Computer>,
+    cpu_id: Ent,
+    new_state: bool,
+) -> BaryResult<()> {
+    let computer = computers.try_get_mut(cpu_id)?;
+    computer.set_state(new_state);
+    Ok(())
+}
+
+pub fn set_grid_as_drifting(world: &mut World, cpu_id: Ent) -> BaryResult<()> {
+    let part = world.parts.try_get(cpu_id)?;
+    set_cpu_state(&mut world.computers, cpu_id, false)?;
+    set_all_thrusters(part.grid_id, 0.0, world)?;
+    Ok(())
+}
+
+pub fn set_cpu_instruction(world: &mut World, cpu_id: Ent, ti: TimedInstruction) -> BaryResult<()> {
+    let cpu = world.computers.try_get_mut(cpu_id)?;
+    cpu.enqueue_instruction(ti);
+    Ok(())
+}
+
+pub fn enqueue_cpu_instruction(
+    world: &mut World,
+    cpu_id: Ent,
+    ti: TimedInstruction,
+) -> BaryResult<()> {
+    let cpu = world.computers.try_get_mut(cpu_id)?;
+    cpu.enqueue_instruction(ti);
+    Ok(())
+}
+
+pub fn set_grid_instruction(
+    world: &mut World,
+    grid_id: Ent,
+    ti: TimedInstruction,
+) -> BaryResult<()> {
+    let cpu_id = get_primary_cpu_id(grid_id, &world.grids)?;
+    set_cpu_instruction(world, cpu_id, ti)
+}
+
+pub fn set_grid_attitude_pd(world: &mut World, grid_id: Ent, kp: f64, kd: f64) -> BaryResult<()> {
+    let cpu_id = get_primary_cpu_id(grid_id, &world.grids)?;
+    let cpu = world.computers.try_get_mut(cpu_id)?;
+    cpu.set_attitude_pd_coeffs(kp, kd);
+    Ok(())
+}
+
+pub fn enqueue_grid_instruction(
+    world: &mut World,
+    grid_id: Ent,
+    ti: TimedInstruction,
+) -> BaryResult<()> {
+    let cpu_id = get_primary_cpu_id(grid_id, &world.grids)?;
+    enqueue_cpu_instruction(world, cpu_id, ti)
 }
 
 /// Turns the primary computer of the given grid on or off,
@@ -609,8 +656,7 @@ pub fn set_primary_computer_state_c(
     computers: &mut Components<Computer>,
 ) -> BaryResult<Ent> {
     let primary_cpu_id = get_primary_cpu_id(grid_id, grids)?;
-    let computer = computers.try_get_mut(primary_cpu_id)?;
-    computer.on = new_state;
+    set_cpu_state(computers, primary_cpu_id, new_state)?;
     Ok(primary_cpu_id)
 }
 
@@ -661,8 +707,7 @@ pub fn detach_top_part_at(world: &mut World, grid_id: Ent, coord: PartCoord) -> 
     let grid = world.grids.try_get(grid_id)?;
     let top_part = grid
         .get_parts_at(coord)
-        .map(|occ| occ.top())
-        .flatten()
+        .and_then(|occ| occ.top())
         .ok_or(BaryError::NoPartsAt(coord))?;
 
     debug!("Top part is {}", top_part);
@@ -761,49 +806,6 @@ pub fn get_blueprint_by_id<'a>(
     result.map(|e| &e.blueprint)
 }
 
-pub fn spawn_player(world: &mut World, username: String, iso: Isometry2d) -> BaryResult<Ent> {
-    let already_exists = world.players.values().any(|player| player.name == username);
-
-    if already_exists {
-        return Err(BaryError::PlayerAlreadyExists(username));
-    }
-
-    let player = Player {
-        name: username,
-        cursor_world_position: None,
-        state: PlayerState::Flying(iso),
-    };
-    let id = world.spawner.spawn();
-    world.players.spawn(id, player);
-    Ok(id)
-}
-
-pub fn set_player_position(world: &mut World, player_id: Ent, iso: Isometry2d) -> BaryResult<()> {
-    let player = world.players.try_get_mut(player_id)?;
-    player.set_position(iso);
-    Ok(())
-}
-
-pub fn set_player_cursor_position(
-    world: &mut World,
-    player_id: Ent,
-    pos: Option<Vec2>,
-) -> BaryResult<()> {
-    let player = world.players.try_get_mut(player_id)?;
-    player.cursor_world_position = pos;
-    Ok(())
-}
-
-pub fn player_exit_grid(world: &mut World, player_id: Ent) -> BaryResult<()> {
-    let player = world.players.try_get_mut(player_id)?;
-    let grid_id = player
-        .driving_grid()
-        .ok_or(BaryError::PlayerNotDriving(player_id))?;
-    let grid = world.grids.try_get(grid_id)?;
-    player.set_position(grid.particle_location);
-    Ok(())
-}
-
 pub fn get_part_at_layer(
     grid: &VehicleGrid,
     coord: PartCoord,
@@ -897,7 +899,20 @@ pub fn insert_pipe(
     )
 }
 
-pub fn update_world(world: &mut World) -> DebugTimers {
+pub struct WorldUpdate {
+    pub timers: DebugTimers,
+    pub events: Sender<SimulationEvent>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum SimulationEvent {
+    Transmission(ReceivedTransmission),
+    Piloting(String, Ent),
+}
+
+pub fn update_world(world: &mut World) -> WorldUpdate {
+    let mut events = Sender::new();
+
     world.ticks += 1;
 
     let mut timers = DebugTimers::default();
@@ -907,23 +922,27 @@ pub fn update_world(world: &mut World) -> DebugTimers {
         let _timer = timers.scope("grid_motion");
 
         sys_update_ring_particles(&mut world.particles, world.ticks);
-        let dirty_set = sys_update_thrusters(
-            &mut world.thrusters,
-            &world.grids,
-            &world.parts,
-            &world.computers,
-        );
-
+        let dirty_set = sys_update_thrusters(world);
         world.grid_acceleration_updates += dirty_set.len() as u64;
         sys_update_grid_acceleration_c(dirty_set, &mut world.grids, &world.thrusters, &world.parts);
-        sys_update_computers(&mut world.computers, &world.parts, &world.grids);
+        sys_update_computers(world);
+        sys_propagate_planets(&mut world.planets);
         sys_propagate_grid_rigid_bodies(&mut world.grids);
+        VehicleGrid::propagate_gravity(world);
+        VehicleGrid::handle_collisions(world);
+        sys_report_acceleration_to_cpus(world);
+    }
+
+    {
+        let _timer = timers.scope("players");
+
+        Player::update_all(world);
     }
 
     {
         let _timer = timers.scope("update_trackers");
 
-        sys_update_trackers(&mut world.tracking, &world.grids, world.ticks);
+        Tracker::update_all(world);
     }
 
     {
@@ -950,7 +969,13 @@ pub fn update_world(world: &mut World) -> DebugTimers {
         sys_mine_tiles(world);
     }
 
-    timers
+    {
+        let _timer = timers.scope("radio_transmissions");
+
+        sys_update_transmissions(world, &mut events);
+    }
+
+    WorldUpdate { timers, events }
 }
 
 pub fn get_slot_mut_c<'a>(
@@ -1177,7 +1202,7 @@ pub fn inventory_at_c(
 pub fn get_grid_by_name(grids: &Components<VehicleGrid>, name: &str) -> Option<Ent> {
     grids
         .iter()
-        .find_map(|(id, grid)| (grid.name == name).then(|| *id))
+        .find_map(|(id, grid)| (grid.name == name).then_some(*id))
 }
 
 /// Spawns a new grid according to a named blueprint.
@@ -1218,8 +1243,8 @@ pub fn spawn_grid_from_blueprint(
             pipe.end,
             &mut world.spawner,
             &mut world.grids,
-            &mut world.parts,
-            &mut world.inventories,
+            &world.parts,
+            &world.inventories,
             &mut world.pipes,
         ) {
             error!("Failed to insert pipe: {:?}", e);
@@ -1242,6 +1267,12 @@ pub fn spawn_grid_with_random_name(
     spawn_grid_with_bp_id(world, &bp_id, &name)
 }
 
+pub fn set_controlling_player(world: &mut World, grid_id: Ent, username: String) -> Option<()> {
+    let grid = world.grids.try_get_mut(grid_id).ok()?;
+    grid.controlled_by = username.into();
+    Some(())
+}
+
 pub fn can_insert_part_c(
     grid_id: Ent,
     pl: GridRegion,
@@ -1258,7 +1289,7 @@ pub fn get_closest_grid(
     dist_limit: impl Into<Option<f64>>,
 ) -> Option<(Ent, DVec2)> {
     let mut best: Option<(Ent, DVec2, f64)> = None;
-    let dist_limit = dist_limit.into().unwrap_or(std::f64::INFINITY);
+    let dist_limit = dist_limit.into().unwrap_or(f64::INFINITY);
     for (e, grid) in grids.iter() {
         let in_frame = express_in_frame(grid.centroid_isometry(), test_pos);
         let dist = in_frame.length_squared();
@@ -1323,7 +1354,8 @@ pub fn get_sum_linear_forces(
     for part_id in &grid.thrusters {
         let thruster = thrusters.try_get(*part_id)?;
         let part = parts.try_get(*part_id)?;
-        let thrust = rotate(Vec2::X, part.region.rot().to_angle() as f32) * thruster.thrust;
+        let thrust =
+            rotate(Vec2::X, part.region.rot().to_angle() as f32) * thruster.current_thrust();
         sum += thrust;
     }
     Ok(sum)
@@ -1351,18 +1383,16 @@ pub fn merge_grids(
         part.region.shift(offset);
     }
 
-    parent.computers.extend(child.computers.into_iter());
-    parent.thrusters.extend(child.thrusters.into_iter());
-    parent.lights.extend(child.lights.into_iter());
-    parent.pipes.extend(child.pipes.into_iter());
+    parent.computers.extend(child.computers);
+    parent.thrusters.extend(child.thrusters);
+    parent.lights.extend(child.lights);
+    parent.pipes.extend(child.pipes);
 
     update_grid_physical_props(parent, &mut world.parts)?;
 
     for cpu_id in &parent.computers {
         let computer = world.computers.try_get_mut(*cpu_id)?;
-        computer.command_queue.clear();
-        let instr = TimedInstruction::perp(Instruction::Drift);
-        computer.command_queue.push(instr);
+        computer.set_drift();
     }
 
     Ok(())
@@ -1389,6 +1419,62 @@ pub fn set_machine_state(world: &mut World, machine_id: Ent, state: bool) -> Bar
     let machine = world.machines.try_get_mut(machine_id)?;
     machine.enabled = state;
     Ok(())
+}
+
+fn sys_update_transmissions(world: &mut World, events: &mut Sender<SimulationEvent>) {
+    let mut new_transmissions = Sender::new();
+
+    world.transmissions.retain(|_tr_id, tr| {
+        let Some((inner, outer)) = tr.update(NOMINAL_DT) else {
+            return false;
+        };
+
+        for (grid_id, grid) in world.grids.iter_mut() {
+            if tr.source() == Some(*grid_id) {
+                continue;
+            }
+
+            let p = grid.particle_location.tr();
+            let d = tr.origin().distance(p);
+            if inner <= d && d < outer
+                && !tr.is_response() {
+                    let rt = ReceivedTransmission {
+                        original: tr.clone(),
+                        received_location: p,
+                        received_by: *grid_id,
+                    };
+
+                    let event = SimulationEvent::Transmission(rt);
+                    events.send(event);
+
+                    let new_tr = RadioTransmission::new(p)
+                        .with_range(10000.0)
+                        .with_source(*grid_id)
+                        .with_contents(TransmissionContents::Response);
+                    new_transmissions.send(new_tr);
+                }
+        }
+
+        true
+    });
+
+    // TODO(nondeterminism)
+    // for (grid_id, grid) in world.grids.iter() {
+    //     if chance(0.0001) {
+    //         let msg = format!("Hello world, my name is {}", grid.name);
+    //         let pos = grid.particle_location.tr();
+    //         let tr = RadioTransmission::new(pos)
+    //             .with_range(30000.0)
+    //             .with_source(*grid_id)
+    //             .with_message(msg);
+    //         new_transmissions.send(tr);
+    //     }
+    // }
+
+    for tr in new_transmissions.take() {
+        let id = world.spawner.spawn();
+        world.transmissions.spawn(id, tr);
+    }
 }
 
 #[cfg(test)]
@@ -1545,13 +1631,13 @@ mod tests {
         }
 
         let r = save_world(save_path, &world, false);
-        assert_eq!(r, Ok(()));
+        assert!(r.is_ok());
 
         let r = save_world(save_path, &world, false);
-        assert_eq!(r, Err(BaryError::SaveAlreadyExists));
+        assert!(r.is_err());
 
         let r = save_world(save_path, &world, true);
-        assert_eq!(r, Ok(()));
+        assert!(r.is_ok());
 
         let world = load_world(save_path).expect("Expected successful load");
 

@@ -1,7 +1,11 @@
 use bary_core::prelude::*;
 use bary_parts::*;
+use early_returns::some_or_continue;
+use log::warn;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+
+use crate::{NOMINAL_DT, RadioTransmission, World};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VehicleGrid {
@@ -24,9 +28,10 @@ pub struct VehicleGrid {
 
     // TODO this is not tested in any way.
     pub occupancy: BTreeMap<(i32, i32), PartOccupancy>,
+    pub orbital_parent: Option<Ent>,
 
-    /// whether this vehicle is anchored to an asteroid
-    pub is_anchored: bool,
+    pub transmission_inbox: VecDeque<RadioTransmission>,
+    pub controlled_by: Option<String>,
 }
 
 impl VehicleGrid {
@@ -36,17 +41,23 @@ impl VehicleGrid {
 
     pub fn can_insert_part(&self, pl: GridRegion, layer: PartLayer) -> bool {
         for cell in pl.cells() {
-            if let Some(occ) = self.get_parts_at(cell) {
-                if occ.at_layer(layer).is_some() {
+            if let Some(occ) = self.get_parts_at(cell)
+                && occ.at_layer(layer).is_some() {
                     return false;
                 }
-            }
         }
         true
     }
 
     pub fn origin(&self) -> Isometry2d {
         self.particle_location.offset(-self.center_of_mass)
+    }
+
+    pub fn receive_transmission(&mut self, rt: RadioTransmission) {
+        self.transmission_inbox.push_back(rt);
+        if self.transmission_inbox.len() > 20 {
+            self.transmission_inbox.pop_front();
+        }
     }
 
     pub fn with_name(name: impl Into<String>, bp_id: Option<BlueprintId>) -> Self {
@@ -65,7 +76,9 @@ impl VehicleGrid {
             pipes: BTreeSet::new(),
             vehicle_bounds: (IVec2::ZERO, IVec2::ZERO),
             occupancy: BTreeMap::new(),
-            is_anchored: false,
+            orbital_parent: None,
+            transmission_inbox: VecDeque::new(),
+            controlled_by: None,
         }
     }
 
@@ -201,4 +214,84 @@ impl VehicleGrid {
 
         ret
     }
+
+    pub(crate) fn propagate_gravity(world: &mut World) {
+        for grid in world.grids.values_mut() {
+            let planet_id = some_or_continue!(grid.orbital_parent);
+            let planet = some_or_continue!(world.planets.get(planet_id));
+            let v = grid.particle_location.translation - planet.pos.translation;
+            let accel = planet.gravity(v);
+            grid.velocity.translation += accel * NOMINAL_DT;
+        }
+    }
+
+    pub(crate) fn handle_collisions(world: &mut World) {
+        let mut collisions = Vec::new();
+        // TODO(optimization) need a spatial data structure
+        // for grids!
+        for (a_id, first) in world.grids.iter() {
+            for (b_id, second) in world.grids.iter() {
+                if b_id <= a_id {
+                    continue;
+                }
+
+                let collision_distance =
+                    first.bounding_radius() as f64 + second.bounding_radius() as f64;
+
+                let p = first.centroid_isometry().tr();
+                let q = second.centroid_isometry().tr();
+                let r = q - p;
+
+                let u = first.velocity.tr();
+                let v = second.velocity.tr();
+                let w = v - u;
+
+                let moving_towards = w.dot(r) < 0.0;
+
+                let close_enough = r.length_squared() < collision_distance.powi(2);
+
+                if close_enough && moving_towards {
+                    let info = CollisionInfo {
+                        primary: *a_id,
+                        secondary: *b_id,
+                        primary_mass: first.parts_mass(),
+                        secondary_mass: second.parts_mass(),
+                        primary_pos: p,
+                        secondary_pos: q,
+                        delta_pos: r,
+                        primary_vel: u,
+                        secondary_vel: v,
+                        delta_vel: w,
+                    };
+
+                    collisions.push(info);
+                }
+            }
+        }
+
+        for col in collisions {
+            let grid = world.grids.try_get_mut(col.primary).unwrap();
+            grid.velocity.translation += col.delta_vel;
+            let grid = world.grids.try_get_mut(col.secondary).unwrap();
+            grid.velocity.translation -= col.delta_vel;
+            warn!("Collision: {col:?}");
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CollisionInfo {
+    pub primary: Ent,
+    pub secondary: Ent,
+
+    pub primary_mass: Mass,
+    pub secondary_mass: Mass,
+
+    pub primary_pos: DVec2,
+    pub secondary_pos: DVec2,
+    pub delta_pos: DVec2,
+
+    pub primary_vel: DVec2,
+    pub secondary_vel: DVec2,
+    pub delta_vel: DVec2,
 }

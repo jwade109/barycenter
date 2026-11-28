@@ -1,4 +1,3 @@
-use hound;
 use kira::sound::PlaybackState;
 use kira::sound::static_sound::StaticSoundData;
 use kira::track::TrackBuilder;
@@ -231,7 +230,7 @@ fn main() {
     let n_samples = (SAMPLE_RATE as f32 * (song.end_time() + 1.0)) as i64;
 
     for n in 0..n_samples {
-        let sample = song.get(n as i64);
+        let sample = song.get(n);
 
         writer.write_sample(sample).unwrap();
         writer.write_sample(sample).unwrap();

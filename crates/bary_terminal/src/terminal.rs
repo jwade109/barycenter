@@ -217,8 +217,7 @@ impl<T: std::fmt::Debug> Terminal<T> {
 
         if let Some(h) = self
             .history_index
-            .map(|i| self.command_history.get(i))
-            .flatten()
+            .and_then(|i| self.command_history.get(i))
         {
             self.contents = h.clone();
         } else {
@@ -264,11 +263,10 @@ impl<T: std::fmt::Debug> Terminal<T> {
                     rdev::Key::UpArrow => self.on_arrow_up(),
                     rdev::Key::DownArrow => self.on_arrow_down(),
                     _ => {
-                        if let Some(n) = &event.name {
-                            if n.is_ascii() {
+                        if let Some(n) = &event.name
+                            && n.is_ascii() {
                                 self.append(n);
                             }
-                        }
                     }
                 }
             }
@@ -538,11 +536,17 @@ impl<T: std::fmt::Debug> Terminal<T> {
             // lines.push(cmd.entrypoint.clone());
             current_line += &format!("{}   ", cmd.entrypoint);
             if current_line.len() > 80 {
-                lines.push(current_line.drain(..).collect());
+                lines.push(std::mem::take(&mut current_line));
             }
         }
         for line in lines {
             self.log_info(line);
         }
+    }
+}
+
+impl<T: std::fmt::Debug> Default for Terminal<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }

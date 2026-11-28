@@ -4,4 +4,9 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.90"
+rust-version = "1.95"
+
+[workspace.dependencies]
+bary_core = { path = "crates/bary_core" }
+bary_server = { path = "crates/bary_server" }
+serde = { version = "1.0.229", features = ["derive"] }

@@ -3,7 +3,6 @@ use bary_core::prelude::*;
 use bary_parts::*;
 use log::*;
 
-#[must_use]
 pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
     debug!("Applying delta {:?} at tick {}", delta, world.ticks);
     match delta {
@@ -20,13 +19,31 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             Ok(())
         }
         WorldDelta::Ping(pos) => {
-            let particle = PingParticle::new(pos, world.ticks);
-            world.particles.push(Particle::Ping(particle));
+            // let particle = PingParticle::new(pos, world.ticks);
+            // world.particles.push(Particle::Ping(particle));
+            let tr = RadioTransmission::new(pos).with_range(100000.0);
+            let id = world.spawner.spawn();
+            world.transmissions.spawn(id, tr);
             Ok(())
         }
         WorldDelta::SpawnShipAt(name, bp_id, iso) => {
             let grid_id = spawn_grid_with_bp_id(world, &bp_id, &name)?;
             set_grid_pose(world, grid_id, iso)?;
+            Ok(())
+        }
+        WorldDelta::SpawnPartInNewGrid(name) => {
+            let proto_id =
+                get_proto_by_name(&world.prototypes, &name).ok_or(BaryError::BadPartName)?;
+            let proto = world.prototypes.try_get(proto_id)?;
+            let layer = proto.layer;
+            let region = GridRegion::new(PartCoord::ZERO, Rotation::East, proto.dims);
+            let grid_id = spawn_empty_grid(world, format!("part-{name}"));
+            let instance = &PartInstance {
+                name,
+                layer,
+                region,
+            };
+            insert_part(grid_id, world, instance, true)?;
             Ok(())
         }
         WorldDelta::FastForwardTo(tick) => {
@@ -43,22 +60,25 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             Ok(())
         }
         WorldDelta::SetWaypoint { grid_id, waypoint } => {
-            _ = set_primary_computer_waypoint(grid_id, waypoint, world);
-            _ = set_primary_computer_state(grid_id, true, world);
+            if waypoint.rotation.is_nan() {
+                return Err(BaryError::NaN);
+            }
+            set_primary_computer_waypoint(grid_id, waypoint, world)?;
+            set_primary_computer_state(grid_id, true, world)?;
             Ok(())
         }
         WorldDelta::SetWaypointByName { name, waypoint } => {
             if let Some(grid_id) = get_grid_by_name(&world.grids, &name) {
-                _ = set_primary_computer_waypoint(grid_id, waypoint, world);
-                _ = set_primary_computer_state(grid_id, true, world);
-                _ = toggle_tracking(world, grid_id);
+                set_primary_computer_waypoint(grid_id, waypoint, world)?;
+                set_primary_computer_state(grid_id, true, world)?;
+                toggle_tracking(world, grid_id)?;
+                Ok(())
             } else {
-                warn!("Failed to find grid with name {name}");
+                Err(BaryError::NoGridNamed(name))
             }
-            Ok(())
         }
         WorldDelta::DespawnGrid(grid_id) => {
-            _ = despawn_grid(world, grid_id);
+            despawn_grid(world, grid_id)?;
             Ok(())
         }
         WorldDelta::InsertPart {
@@ -127,6 +147,16 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             spawn_random_asteroid(world, iso, radius, seed);
             Ok(())
         }
+        WorldDelta::SpawnPlanet {
+            name,
+            iso,
+            vel,
+            mass,
+            radius,
+        } => {
+            spawn_planet(world, name, iso, vel, mass, radius, None);
+            Ok(())
+        }
         WorldDelta::RemoveTerrainTile { asteroid, tile } => {
             remove_terrain_tile(world, asteroid, tile)?;
             Ok(())
@@ -147,32 +177,21 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             grid_set_waypoint_to_asteroid_center(world, grid_id, ast_id)?;
             Ok(())
         }
-        WorldDelta::SetAnchored(grid_id, anchored) => {
-            set_grid_anchored(world, grid_id, anchored)?;
-            Ok(())
-        }
-        WorldDelta::PlayerPilotingEnterGrid { player_id, grid_id } => {
-            set_player_piloting_grid(world, player_id, grid_id)?;
-            Ok(())
-        }
-        WorldDelta::PlayerPilotingExitGrid(player_id) => {
-            player_exit_grid(world, player_id)?;
-            Ok(())
-        }
         WorldDelta::SpawnPlayer(username, iso) => {
-            _ = spawn_player(world, username, iso);
+            Player::spawn(world, username, iso, Isometry2d::ZERO);
             Ok(())
         }
-        WorldDelta::SetPlayerPosition(id, iso) => {
-            _ = set_player_position(world, id, iso);
+        WorldDelta::SetPlayerControls(id, controls) => {
+            Player::set_controls(world, id, controls)?;
             Ok(())
         }
-        WorldDelta::SetPlayerCursorPosition(id, pos) => {
-            _ = set_player_cursor_position(world, id, pos);
+        WorldDelta::DespawnPlayer(id) => {
+            Player::despawn(world, id)?;
             Ok(())
         }
         WorldDelta::MergeGrids(parent, child, offset, rotation) => {
-            merge_grids(world, parent, child, offset, rotation)
+            merge_grids(world, parent, child, offset, rotation)?;
+            Ok(())
         }
         WorldDelta::RenameGrid(grid_id, name) => {
             rename_grid(world, grid_id, name)?;
@@ -186,14 +205,34 @@ pub fn apply_delta(world: &mut World, delta: WorldDelta) -> BaryResult<()> {
             set_machine_state(world, machine_id, state)?;
             Ok(())
         }
-        WorldDelta::SetThrusterState(thruster_id, state) => {
-            let grid_id = set_thruster_state(thruster_id, world, state)?;
+        WorldDelta::SetThrusterThrottle(thruster_id, throttle) => {
+            let grid_id = set_thruster_state(thruster_id, world, throttle)?;
             update_single_grid_acceleration(
                 grid_id,
                 &mut world.grids,
                 &world.thrusters,
                 &world.parts,
             )?;
+            Ok(())
+        }
+        WorldDelta::SetComputerState(cpu_id, state) => {
+            set_cpu_state(&mut world.computers, cpu_id, state)?;
+            Ok(())
+        }
+        WorldDelta::SetGridInstruction(grid_id, ti) => {
+            set_grid_instruction(world, grid_id, ti)?;
+            Ok(())
+        }
+        WorldDelta::SetGridAttitudePD(grid_id, kp, kd) => {
+            set_grid_attitude_pd(world, grid_id, kp, kd)?;
+            Ok(())
+        }
+        WorldDelta::ConnectPlayer(id) => {
+            Player::connect(world, id)?;
+            Ok(())
+        }
+        WorldDelta::DisconnectPlayer(id) => {
+            Player::disconnect(world, id)?;
             Ok(())
         }
     }

@@ -1,7 +1,7 @@
-use crate::math::wrap_pi_npi;
+use crate::math::{Rotation, wrap_pi_npi};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 pub struct Angle(f32);
 
 impl Angle {
@@ -43,6 +43,24 @@ impl std::ops::Sub for Angle {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
         Self::radians(self.0 - rhs.0)
+    }
+}
+
+impl From<f32> for Angle {
+    fn from(value: f32) -> Self {
+        Angle::radians(value)
+    }
+}
+
+impl From<f64> for Angle {
+    fn from(value: f64) -> Self {
+        Angle::radians(value)
+    }
+}
+
+impl From<Rotation> for Angle {
+    fn from(value: Rotation) -> Self {
+        value.to_angle().into()
     }
 }
 

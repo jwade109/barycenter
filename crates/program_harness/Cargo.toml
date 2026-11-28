@@ -1,0 +1,10 @@
+[package]
+name = "program_harness"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+
+[dependencies]
+ctrlc = "3.5.2"
+log = "0.4.31"
+simple_logger = "5.2.0"

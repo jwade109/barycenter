@@ -7,8 +7,14 @@ local_server:
 mp_client:
 	cargo run --release -- -a 127.0.0.1:5000 --username mattmarti
 
-single_player:
-	cargo run --release -- --run-server --username kim_mcbudget -s saves/scenario_a
+server:
+	cargo run --release --bin server -- saves/
 
-generate_worlds:
-	cargo run --release --bin generate_worlds
+debugger:
+	cargo run --release --bin bary_param_editor
+
+game:
+	cargo run --release --bin client_app -- --use-mp-backend --username kim_mcbudget
+
+run:
+	cargo run --release --bin program_harness

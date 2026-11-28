@@ -1,9 +1,35 @@
 #![allow(dead_code)]
 #![allow(unused)]
 
+use std::hash::DefaultHasher;
+use std::hash::Hash;
+use std::hash::Hasher;
+
 use crate::svg::write_svg;
 use bary_core::prelude::*;
 use log::*;
+
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct IdSalt(u64);
+
+impl<T: Hash> From<T> for IdSalt {
+    fn from(value: T) -> Self {
+        Self(calculate_hash(&value))
+    }
+}
+
+impl std::ops::Add for IdSalt {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 ^ rhs.0)
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum LayoutDir {
@@ -16,19 +42,22 @@ pub enum Size {
     Grow,
     Fit,
     Fixed(f32),
+    Atleast(f32),
 }
 
 impl Size {
     fn as_fixed(&self) -> Option<f32> {
         match self {
             Size::Fixed(s) => Some(*s),
+            Size::Atleast(s) => Some(*s),
             _ => None,
         }
     }
 
-    fn is_grow(&self) -> bool {
+    fn wants_to_grow(&self) -> bool {
         match self {
             Size::Grow => true,
+            Size::Atleast(_) => true,
             _ => false,
         }
     }
@@ -48,15 +77,15 @@ impl Size {
     }
 }
 
-impl Into<Size> for f32 {
-    fn into(self) -> Size {
-        Size::Fixed(self)
+impl From<f32> for Size {
+    fn from(val: f32) -> Self {
+        Size::Fixed(val)
     }
 }
 
-impl Into<Size> for u32 {
-    fn into(self) -> Size {
-        Size::Fixed(self as f32)
+impl From<u32> for Size {
+    fn from(val: u32) -> Self {
+        Size::Fixed(val as f32)
     }
 }
 
@@ -76,11 +105,12 @@ pub struct NodeStyle {
     enabled_color: [f32; 4],
     disabled_color: [f32; 4],
     text_justify: TextJustify,
+    font_size: f32,
 }
 
-pub trait UiMsg: std::fmt::Debug + Clone + PartialEq + Eq {}
+pub trait UiMsg: std::fmt::Debug + Clone {}
 
-impl<T: std::fmt::Debug + Clone + PartialEq + Eq> UiMsg for T {}
+impl<T: std::fmt::Debug + Clone> UiMsg for T {}
 
 #[derive(Debug, Clone)]
 pub enum NodeType<T: UiMsg> {
@@ -107,10 +137,16 @@ pub struct Node<T: UiMsg> {
     enabled: bool,
     sprite: Option<String>,
     style: NodeStyle,
+    path: IdSalt,
+    id_salt: IdSalt,
 }
 
 impl<T: UiMsg> Node<T> {
-    pub fn new(width: impl Into<Size>, height: impl Into<Size>) -> Self {
+    pub fn new(
+        width: impl Into<Size>,
+        height: impl Into<Size>,
+        id_salt: impl Into<IdSalt>,
+    ) -> Self {
         let w = width.into();
         let h = height.into();
         Node {
@@ -131,24 +167,37 @@ impl<T: UiMsg> Node<T> {
                 enabled_color: [0.6, 0.3, 0.0, 0.8],
                 disabled_color: [0.2, 0.2, 0.2, 0.8],
                 text_justify: TextJustify::Center,
+                font_size: 12.0,
             },
+            path: IdSalt(0),
+            id_salt: id_salt.into(),
         }
     }
 
     pub fn text(width: impl Into<Size>, height: impl Into<Size>, text: impl Into<String>) -> Self {
-        let mut node = Self::new(width, height);
-        node.node_type = NodeType::Text(text.into());
+        let text = text.into();
+        let mut node = Self::new(width, height, &text);
+        node.node_type = NodeType::Text(text);
         node
     }
 
-    pub fn handle(width: impl Into<Size>, height: impl Into<Size>, onclick: impl Into<T>) -> Self {
-        let mut node = Self::new(width, height);
+    pub fn handle(
+        width: impl Into<Size>,
+        height: impl Into<Size>,
+        id_salt: impl Into<IdSalt>,
+        onclick: impl Into<T>,
+    ) -> Self {
+        let mut node = Self::new(width, height, id_salt);
         node.node_type = NodeType::DragHandle(onclick.into());
         node
     }
 
-    pub fn structural(width: impl Into<Size>, height: impl Into<Size>) -> Self {
-        Self::new(width, height)
+    pub fn structural(
+        width: impl Into<Size>,
+        height: impl Into<Size>,
+        id_salt: impl Into<IdSalt>,
+    ) -> Self {
+        Self::new(width, height, id_salt)
     }
 
     pub fn image(
@@ -156,27 +205,36 @@ impl<T: UiMsg> Node<T> {
         width: impl Into<Size>,
         height: impl Into<Size>,
     ) -> Self {
-        let mut s = Self::new(width, height);
-        s.node_type = NodeType::Image(sprite_name.into());
+        let name = sprite_name.into();
+        let mut s = Self::new(width, height, &name);
+        s.node_type = NodeType::Image(name);
         s
     }
 
-    pub fn root(width: impl Into<Size>, height: impl Into<Size>) -> Self {
-        let mut node = Self::new(width, height);
+    pub fn root(
+        width: impl Into<Size>,
+        height: impl Into<Size>,
+        id_salt: impl Into<IdSalt>,
+    ) -> Self {
+        let mut node = Self::new(width, height, id_salt);
         node.node_type = NodeType::Column(vec![]);
         node
     }
 
-    pub fn grow() -> Self {
-        Node::new(Size::Grow, Size::Grow)
+    pub fn grow(id_salt: impl Into<IdSalt>) -> Self {
+        Node::new(Size::Grow, Size::Grow, id_salt)
     }
 
-    pub fn fit() -> Self {
-        Node::new(Size::Fit, Size::Fit)
+    pub fn fit(id_salt: impl Into<IdSalt>) -> Self {
+        Node::new(Size::Fit, Size::Fit, id_salt)
     }
 
-    pub fn row(height: impl Into<Size>, children: Vec<Node<T>>) -> Self {
-        let mut node = Node::new(Size::Grow, height).right();
+    pub fn row(
+        height: impl Into<Size>,
+        id_salt: impl Into<IdSalt>,
+        children: Vec<Node<T>>,
+    ) -> Self {
+        let mut node = Node::new(Size::Grow, height, id_salt).right();
         node.node_type = NodeType::Row(children);
         node
     }
@@ -186,20 +244,30 @@ impl<T: UiMsg> Node<T> {
         onclick: impl Into<T>,
         width: impl Into<Size>,
         height: impl Into<Size>,
+        id_salt: impl Into<IdSalt>,
     ) -> Self {
-        let mut node = Node::<T>::new(width, height);
+        let mut node = Node::<T>::new(width, height, id_salt);
         node.node_type = NodeType::Button(s.into(), onclick.into());
         node
     }
 
-    pub fn column(width: impl Into<Size>, children: Vec<Node<T>>) -> Self {
-        let mut node = Node::new(width, Size::Fit).down();
+    pub fn column(
+        width: impl Into<Size>,
+        id_salt: impl Into<IdSalt>,
+        children: Vec<Node<T>>,
+    ) -> Self {
+        let mut node = Node::new(width, Size::Fit, id_salt).down();
         node.node_type = NodeType::Column(children);
         node
     }
 
-    pub fn progress_bar(width: impl Into<Size>, height: impl Into<Size>, val: f32) -> Self {
-        let mut s = Node::new(width, height);
+    pub fn progress_bar(
+        width: impl Into<Size>,
+        height: impl Into<Size>,
+        val: f32,
+        id_salt: impl Into<IdSalt>,
+    ) -> Self {
+        let mut s = Node::new(width, height, id_salt);
         s.node_type = NodeType::ProgressBar(val);
         s
     }
@@ -223,7 +291,7 @@ impl<T: UiMsg> Node<T> {
     }
 
     pub fn sprite(&self) -> Option<&str> {
-        self.sprite.as_ref().map(|s| s.as_str())
+        self.sprite.as_deref()
     }
 
     pub fn with_justify(mut self, s: TextJustify) -> Self {
@@ -244,21 +312,21 @@ impl<T: UiMsg> Node<T> {
         func: impl Fn(u32) -> Option<Node<T>>,
     ) -> Self {
         let mut i = 0;
-        let mut root = Node::new(width, height)
+        let mut root = Node::new(width, height, "grid_root")
             .invisible()
             .with_padding(0.0)
             .with_child_gap(spacing)
             .down();
 
         for r in 0..rows {
-            let mut node = Node::grow()
+            let mut node = Node::grow("grid_row")
                 .with_padding(0.0)
                 .with_child_gap(spacing)
                 .invisible();
             for c in 0..cols {
                 let n = match func(i) {
                     Some(n) => n,
-                    None => Node::grow().enabled(false).invisible(),
+                    None => Node::grow("grid_col").enabled(false).invisible(),
                 };
                 i += 1;
                 node.add_child(n);
@@ -267,6 +335,10 @@ impl<T: UiMsg> Node<T> {
         }
 
         root
+    }
+
+    pub fn path(&self) -> &IdSalt {
+        &self.path
     }
 
     pub fn on_click(&self) -> Option<&T> {
@@ -459,6 +531,15 @@ impl<T: UiMsg> Node<T> {
             .collect::<Vec<_>>();
         self_iter.chain(child_iters)
     }
+
+    pub fn with_font_size(mut self, font_size: f32) -> Self {
+        self.style.font_size = font_size;
+        self
+    }
+
+    pub fn font_size(&self) -> f32 {
+        self.style.font_size
+    }
 }
 
 fn sum_fixed_dims<'a, T: 'a + UiMsg>(
@@ -485,17 +566,11 @@ fn sum_fixed_dims<'a, T: 'a + UiMsg>(
     }
 
     if sx > 0.0 {
-        match bary_ui {
-            LayoutDir::LeftToRight => sx -= childgap,
-            _ => (),
-        }
+        if let LayoutDir::LeftToRight = bary_ui { sx -= childgap }
     }
 
     if sy > 0.0 {
-        match bary_ui {
-            LayoutDir::TopToBottom => sy -= childgap,
-            _ => (),
-        }
+        if let LayoutDir::TopToBottom = bary_ui { sy -= childgap }
     }
 
     sx += padding * 2.0;
@@ -506,9 +581,9 @@ fn sum_fixed_dims<'a, T: 'a + UiMsg>(
 
 #[test]
 fn simple_col_layout() {
-    let a = Node::button("Hello", "wow", 300, 60);
-    let b = Node::button("Hello", "wow", 300, 60);
-    let c = Node::button("Hello", "wow", 300, 60);
+    let a = Node::button("Hello", "wow", 300, 60, "");
+    let b = Node::button("Hello", "wow", 300, 60, "");
+    let c = Node::button("Hello", "wow", 300, 60, "");
 
     // let nested_col = Node::column(
     //     Size::Fit,
@@ -525,7 +600,7 @@ fn simple_col_layout() {
 
     assert_eq!(dims, Vec2::new(300.0, 180.0));
 
-    let root = Node::<String>::column(Size::Fit, children);
+    let root = Node::<String>::column(Size::Fit, "", children);
 }
 
 fn populate_positions<'a, T: 'a + UiMsg>(mut root: &mut Node<T>, origin: impl Into<Option<Vec2>>) {
@@ -551,12 +626,14 @@ fn populate_positions<'a, T: 'a + UiMsg>(mut root: &mut Node<T>, origin: impl In
     });
 }
 
-fn assign_layers<T: UiMsg>(root: &mut Node<T>, layer: u32) {
+fn assign_layers_and_paths<T: UiMsg>(root: &mut Node<T>, path: IdSalt, layer: u32) {
     root.layer = Some(layer);
+    root.path = path;
 
     if let Some(c) = root.children_mut() {
         for c in c {
-            assign_layers(c, layer + 1);
+            let child_path = path + c.id_salt;
+            assign_layers_and_paths(c, child_path, layer + 1);
         }
     }
 }
@@ -602,8 +679,8 @@ pub fn populate_grow_sizes<T: UiMsg>(root: &mut Node<T>) {
     if let Some(children) = root.children() {
         for c in children {
             let dim = match root.style.bary_ui {
-                LayoutDir::LeftToRight => c.desired_width.is_grow(),
-                LayoutDir::TopToBottom => c.desired_height.is_grow(),
+                LayoutDir::LeftToRight => c.desired_width.wants_to_grow(),
+                LayoutDir::TopToBottom => c.desired_height.wants_to_grow(),
             } as u32;
             n_to_grow += dim;
         }
@@ -639,10 +716,10 @@ pub fn populate_grow_sizes<T: UiMsg>(root: &mut Node<T>) {
 
     root.children_mut().iter_mut().for_each(|mut c| {
         c.iter_mut().for_each(|c| {
-            if c.desired_width.is_grow() {
+            if c.desired_width.wants_to_grow() {
                 c.calculated_width = Some(w);
             }
-            if c.desired_height.is_grow() {
+            if c.desired_height.wants_to_grow() {
                 c.calculated_height = Some(h);
             }
             populate_grow_sizes(c)
@@ -665,7 +742,8 @@ impl<T: UiMsg> Tree<T> {
         populate_fit_sizes(&mut node);
         populate_grow_sizes(&mut node);
         populate_positions(&mut node, origin);
-        assign_layers(&mut node, 0);
+        let index = self.roots.len() as u64;
+        assign_layers_and_paths(&mut node, IdSalt(index), 0);
         self.roots.push(node);
     }
 
@@ -693,9 +771,15 @@ impl<T: UiMsg> Tree<T> {
                 continue;
             }
             candidates.sort_by_key(|n| n.layer());
-            return candidates.last().map(|v| *v);
+            return candidates.last().copied();
         }
         None
+    }
+}
+
+impl<T: UiMsg> Default for Tree<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -715,9 +799,9 @@ fn write_node<'a, T: UiMsg>(
         NodeType::Row(nodes) => "Row",
         NodeType::Column(nodes) => "Column",
     };
-    write!(
+    writeln!(
         f,
-        "{}[{:?} pos={:?} dims={}]\n",
+        "{}[{:?} pos={:?} dims={}]",
         spacer,
         repr,
         node.calculated_position,
@@ -751,8 +835,8 @@ pub fn write_layout_to_svg<T: UiMsg>(filepath: &str, tree: &Tree<T>) -> Result<(
     let aabbs: Vec<(AABB, [f32; 4])> = tree
         .layouts()
         .iter()
-        .flat_map(|r| r.iter().map(|n| n).collect::<Vec<_>>())
-        .filter_map(|n| n.is_visible().then(|| (n.aabb(), n.color())))
+        .flat_map(|r| r.iter().collect::<Vec<_>>())
+        .filter(|&n| n.is_visible()).map(|n| (n.aabb(), n.color()))
         .collect();
 
     write_svg(filepath, &aabbs)
@@ -771,9 +855,9 @@ mod tests {
 
     #[test]
     fn fixed_dims() {
-        let a = Node::new(300.0, 700.0);
-        let b = Node::new(200.0, 400.0);
-        let c = Node::new(550.0, 300.0);
+        let a = Node::new(300.0, 700.0, "");
+        let b = Node::new(200.0, 400.0, "");
+        let c = Node::new(550.0, 300.0, "");
 
         let nodes = [&a, &b, &c];
 
@@ -795,7 +879,7 @@ mod tests {
         assert_eq!(t2b.x, 574.0);
         assert_eq!(t2b.y, 1439.0);
 
-        let mut root = Node::<String>::root(Size::Fit, Size::Fit)
+        let mut root = Node::<String>::root(Size::Fit, Size::Fit, "")
             .with_child(a)
             .with_child(b)
             .with_child(c);
@@ -803,7 +887,7 @@ mod tests {
         populate_fit_sizes(&mut root);
         populate_grow_sizes(&mut root);
         populate_positions(&mut root, None);
-        assign_layers(&mut root, 0);
+        assign_layers_and_paths(&mut root, IdSalt(0), 0);
 
         let aabbs = root
             .iter()

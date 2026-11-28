@@ -1,0 +1,60 @@
+bindings:
+  Leave:
+    primary: Escape
+    secondary: []
+    trigger: OnClick
+
+  GoUp:
+    primary: KeyW
+    secondary: []
+    trigger: IsPressed
+
+  GoDown:
+    primary: KeyS
+    secondary: []
+    trigger: IsPressed
+
+  GoLeft:
+    primary: KeyA
+    secondary: []
+    trigger: IsPressed
+
+  GoRight:
+    primary: KeyD
+    secondary: []
+    trigger: IsPressed
+
+  OhLord:
+    primary: KeyW
+    secondary: []
+    trigger: OnRelease
+
+  SaveGame:
+    primary: KeyS
+    secondary: [ControlLeft]
+    trigger: OnClick
+
+  Something:
+    primary: KeyR
+    secondary: [ControlLeft, ShiftLeft]
+    trigger: OnClick
+
+  Another:
+    primary: KeyL
+    secondary: [ControlLeft, ShiftLeft]
+    trigger: OnClick
+
+  YetAnother:
+    primary: KeyL
+    secondary: [ControlLeft, ShiftLeft]
+    trigger: OnRelease
+
+  DetailedHudUp:
+    primary: Tab
+    secondary: []
+    trigger: OnClick
+
+  DetailedHudDown:
+    primary: Tab
+    secondary: []
+    trigger: OnRelease

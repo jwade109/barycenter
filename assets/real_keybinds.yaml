@@ -1,0 +1,149 @@
+global::exit_app:
+  primary: KeyC
+  secondary: [ControlLeft]
+  trigger: OnClick
+
+global::toggle_show_debug_text:
+  primary: KeyD
+  secondary: [ControlLeft, ShiftLeft]
+  trigger: OnClick
+
+global::toggle_show_keybinds:
+  primary: KeyK
+  secondary: [ControlLeft, ShiftLeft]
+  trigger: OnClick
+
+global::toggle_camera_lock:
+  primary: KeyL
+  secondary: [ControlLeft, ShiftLeft]
+  trigger: OnClick
+
+global::save_world:
+  primary: KeyS
+  secondary: [ControlLeft, ShiftLeft]
+  trigger: OnClick
+
+global::download_world:
+  primary: KeyR
+  secondary: [ControlLeft, ShiftLeft]
+  trigger: OnClick
+
+global::reload_shaders:
+  primary: KeyG
+  secondary: [ControlLeft, ShiftLeft]
+  trigger: OnClick
+
+global::toggle_alt_mode:
+  primary: Alt
+  secondary: []
+  trigger: OnClick
+
+freecamera::go_forward:
+  primary: KeyW
+  secondary: []
+  trigger: IsPressed
+
+freecamera::go_backward:
+  primary: KeyS
+  secondary: []
+  trigger: IsPressed
+
+freecamera::go_left:
+  primary: KeyA
+  secondary: []
+  trigger: IsPressed
+
+freecamera::go_right:
+  primary: KeyD
+  secondary: []
+  trigger: IsPressed
+
+piloting::go_forward:
+  primary: KeyW
+  secondary: []
+  trigger: IsPressed
+
+piloting::go_backward:
+  primary: KeyS
+  secondary: []
+  trigger: IsPressed
+
+piloting::go_left:
+  primary: KeyA
+  secondary: []
+  trigger: IsPressed
+
+piloting::go_right:
+  primary: KeyD
+  secondary: []
+  trigger: IsPressed
+
+freecamera::rotate_cam_ccw:
+  primary: KeyQ
+  secondary: []
+  trigger: IsPressed
+
+freecamera::rotate_cam_cw:
+  primary: KeyE
+  secondary: []
+  trigger: IsPressed
+
+freecamera::toggle_follow:
+  primary: KeyF
+  secondary: []
+  trigger: OnClick
+
+freecamera::spawn_radio_transmission:
+  primary: KeyB
+  secondary: []
+  trigger: OnClick
+
+freecamera::toggle_grid_tracking:
+  primary: KeyT
+  secondary: []
+  trigger: OnClick
+
+freecamera::explode_at_mouseover:
+  primary: KeyC
+  secondary: []
+  trigger: OnClick
+
+freecamera::toggle_vehicle_zoom:
+  primary: KeyV
+  secondary: []
+  trigger: OnClick
+
+player_controller::left:
+  primary: KeyA
+  secondary: []
+  trigger: IsPressed
+
+player_controller::right:
+  primary: KeyD
+  secondary: []
+  trigger: IsPressed
+
+player_controller::down:
+  primary: KeyS
+  secondary: []
+  trigger: IsPressed
+
+player_controller::up:
+  primary: KeyW
+  secondary: []
+  trigger: IsPressed
+
+player_controller::rotate_ccw:
+  primary: KeyQ
+  secondary: []
+  trigger: IsPressed
+
+player_controller::rotate_cw:
+  primary: KeyE
+  secondary: []
+  trigger: IsPressed
+
+player_controller::relative_braking:
+  primary: Space
+  secondary: []
+  trigger: IsPressed

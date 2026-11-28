@@ -11,5 +11,6 @@ mod rigid_body;
 mod table_ident;
 mod wall_timer;
 mod color;
+mod params;
 
 pub mod prelude;

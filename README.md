@@ -38,8 +38,8 @@ to discover the hidden jelly-filled center of the galaxy.
 3. Server loads the save and notifies clients
    of success with [MessageKind::HasNewSave], or failure with [MessageKind::ServerError]
 4. Probably nobody will be connected at this point
-5. On connection, server sends the client [MessageKind::WhoGoesThere].
+5. On connection, server sends the client [MessageKind::PleaseSendUsername].
 5. Client responds with a [MessageKind::Introduction] containing their username
 6. If the server accepts their connection, responds with [MessageKind::Welcome] or
    with [MessageKind::ServerError] on error
-7. When client gets [MessageKind::Welcome], will send server [MessageKind::BeginAsyncWorldDownload]
+7. When client gets [MessageKind::Welcome], will send server [MessageKind::BeginWorldDownload]

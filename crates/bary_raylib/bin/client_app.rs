@@ -1,231 +1,147 @@
 use bary_core::prelude::*;
-use bary_factory::*;
-use bary_input::InputState;
+use bary_input::{InputHandler, InputState};
 use bary_ipc::*;
+use bary_orbital::VehicleControl;
 use bary_raylib::*;
 use bary_server::*;
-use bary_sim::Application;
 use bary_sim::*;
 use bary_terminal::Terminal;
 use bary_ui::*;
 use clap::Parser;
-use early_returns::*;
 use log::*;
 use raylib::prelude::*;
-use std::thread::JoinHandle;
-use std::time::Duration;
+use rdev::{Button, Key};
+use std::{path::PathBuf, time::Duration};
 
-enum AppState {
-    Loading(u32, u32, String),
-    MainMenu,
-    ListSaves,
-    InWorld,
-    Kicked,
-    Settings,
-}
+mod backend;
+mod mp_backend;
+mod sp_backend;
 
-pub struct ClientApp {
-    state: AppState,
+use backend::*;
+use mp_backend::*;
+use sp_backend::*;
 
-    username: String,
-
-    client: ClientSpecificInfo,
-    world: World,
-
-    #[allow(unused)]
-    debug: DebugInfo,
-
-    _input_thread: JoinHandle<()>,
-    input_queue: MessageQueue<rdev::Event>,
-
+pub struct GameApp {
+    input_handler: InputHandler,
+    frontend: FrontEnd,
+    backend: Box<dyn Backend>,
     terminal: Terminal<TermCmd>,
-
-    handle: RaylibHandle,
-    thread: RaylibThread,
-    assets: Assets,
-    node: ClientNode,
     ui_state: UiInteractionState,
-
-    update_timer: WallTimer,
-    server_ping_timer: WallTimer,
-    server_telemetry_timer: WallTimer,
-
     should_exit: bool,
-
-    show_debug_text: bool,
-
-    sounds: SoundEffects,
-
-    menu_origin: Vec2,
-    part_info_origin: Vec2,
-    server_handshake_complete: bool,
-
-    async_world_download: Option<AsyncWorldDownload>,
 }
 
-impl ClientApp {
-    fn new(args: Args, log_level: log::LevelFilter) -> Result<Self, Box<dyn std::error::Error>> {
-        let input_queue = new_message_queue();
-        let thread_copy = input_queue.clone();
-        let _input_thread = std::thread::spawn(|| {
-            if let Err(error) = rdev::listen(move |e| thread_copy.push(e)) {
-                println!("Error: {:?}", error)
-            }
-        });
+#[derive(Debug, Clone, Copy)]
+struct PilotingKeybinds {
+    left: Key,
+    right: Key,
+    forward: Key,
+    backward: Key,
+    mode: Button,
+}
+
+fn keyboard_control_law(input: &InputState, keybinds: PilotingKeybinds) -> VehicleControl {
+    let mut ctrl = VehicleControl::NULLOPT;
+
+    let docking_mode = input.is_key_pressed(keybinds.mode);
+
+    if docking_mode {
+        ctrl.plus_x.throttle = input.is_key_pressed(keybinds.forward) as u8 as f32;
+        ctrl.plus_y.throttle = input.is_key_pressed(keybinds.right) as u8 as f32;
+        ctrl.neg_x.throttle = input.is_key_pressed(keybinds.backward) as u8 as f32;
+        ctrl.neg_y.throttle = input.is_key_pressed(keybinds.left) as u8 as f32;
+    } else {
+        ctrl.plus_x.throttle = input.is_key_pressed(keybinds.forward) as u8 as f32;
+        ctrl.neg_x.throttle = input.is_key_pressed(keybinds.backward) as u8 as f32;
+
+        ctrl.attitude = if input.is_key_pressed(keybinds.left) {
+            10.0
+        } else if input.is_key_pressed(keybinds.right) {
+            -10.0
+        } else {
+            0.0
+        };
+    }
+
+    ctrl.plus_x.use_rcs = docking_mode;
+    ctrl.plus_y.use_rcs = docking_mode;
+    ctrl.neg_x.use_rcs = docking_mode;
+    ctrl.neg_y.use_rcs = docking_mode;
+
+    ctrl
+}
+
+fn make_terminal() -> Terminal<TermCmd> {
+    let mut terminal = Terminal::new();
+
+    terminal.register_commands(all_commands());
+    terminal.register_commands(client_request_blob_commands());
+    terminal.register_commands(world_delta_commands());
+    terminal.register_commands(terminal_commands());
+
+    terminal
+}
+
+impl GameApp {
+    fn new(
+        args: Args,
+        log_level: log::LevelFilter,
+    ) -> Result<(Self, Raylib), Box<dyn std::error::Error>> {
+        let input_handler = InputHandler::new();
 
         let world = World::empty();
 
-        let mut terminal = Terminal::new();
-
-        terminal.register_commands(all_commands());
-        terminal.register_commands(client_request_blob_commands());
-        terminal.register_commands(world_delta_commands());
-        terminal.register_commands(terminal_commands());
-
-        simple_logger::SimpleLogger::new()
+        _ = simple_logger::SimpleLogger::new()
             .with_level(log_level)
             .env()
-            .init()
-            .unwrap();
+            .init();
 
-        let (mut handle, thread) = raylib::init()
-            .size(1080, 700)
-            .title("Barycenter")
-            .log_level(TraceLogLevel::LOG_WARNING)
-            .msaa_4x()
-            .resizable()
-            .build();
+        let mut raylib = Raylib::init();
 
-        handle.set_target_fps(1000);
-        handle.maximize_window();
-        handle.set_exit_key(None);
-        handle.hide_cursor();
+        let assets = Assets::load(&mut raylib);
 
-        let mut assets = Assets::default();
-        load_assets(&mut assets, &mut handle, &thread);
-
-        let node = ClientNode::with_str_addr(&args.server_addr)?;
-
-        let update_timer = WallTimer::with_dur(Duration::from_millis(20));
-        let server_ping_timer = WallTimer::with_dur(Duration::from_millis(1000));
-        let server_telemetry_timer = WallTimer::with_dur(Duration::from_millis(100));
         let ui_state = UiInteractionState::default();
 
-        Ok(ClientApp {
-            state: AppState::Loading(0, 1000, "Hello there!".to_string()),
-            username: args.username,
-            world,
-            client: ClientSpecificInfo::new(),
-            debug: DebugInfo::default(),
-            _input_thread,
-            input_queue,
-            terminal,
-            handle,
-            thread,
-            assets,
-            node,
-            ui_state,
-            update_timer,
-            server_ping_timer,
-            server_telemetry_timer,
-            should_exit: false,
-            show_debug_text: false,
-            sounds: SoundEffects::new(),
-            menu_origin: Vec2::new(300.0, 200.0),
-            part_info_origin: Vec2::new(400.0, 350.0),
-            server_handshake_complete: false,
-            async_world_download: None,
-        })
-    }
+        let username = args.username.clone();
 
-    fn request_server_delta(&mut self, delta: WorldDelta) {
-        self.node.send(MessageKind::RequestDelta(delta));
-    }
-
-    fn send_telemetry_to_server(&mut self) {
-        let tlm = ClientTelemetry {
-            ticks: self.world.ticks,
+        let backend: Box<dyn Backend> = if args.use_mp_backend {
+            let node = ClientNode::with_str_addr(&args.server_addr)?;
+            Box::new(MultiplayerBackend::new(world, node, args.username))
+        } else {
+            Box::new(SinglePlayerBackend::new(world))
         };
-        self.node.send(MessageKind::ClientTelemetry(tlm));
 
-        // let id = self
-        //     .world
-        //     .players
-        //     .iter()
-        //     .find_map(|(id, player)| (player.name == self.username).then(|| *id));
+        let app = GameApp {
+            backend,
+            frontend: FrontEnd::new(username, assets),
+            input_handler,
+            terminal: make_terminal(),
+            ui_state,
+            should_exit: false,
+        };
 
-        // if let Some(id) = id {
-        //     self.client.player_id = Some(id);
-        //     let delta = WorldDelta::SetPlayerPosition(id, self.client.camera.isometry);
-        //     self.request_server_delta(delta);
-
-        //     let world_pos = if let Some(screen_pos) = self.client.mouse_screen_position {
-        //         Some(screen_to_world(
-        //             &self.client.camera,
-        //             screen_pos,
-        //             self.client.screen_dims,
-        //         ))
-        //     } else {
-        //         None
-        //     };
-
-        //     let delta = WorldDelta::SetPlayerCursorPosition(id, world_pos);
-        //     self.request_server_delta(delta);
-        // } else {
-        //     warn!("Client with username {} isn't in the world", self.username);
-        //     let delta = WorldDelta::SpawnPlayer(self.username.clone(), Isometry2d::ZERO);
-        //     self.request_server_delta(delta);
-        // }
-    }
-
-    fn update_loading(&mut self) {
-        if let AppState::Loading(steps, total, status) = &mut self.state {
-            if chance(0.8) && *steps < *total {
-                *steps += randint(4, 12) as u32;
-                *status = get_random_name();
-            }
-
-            if *steps >= *total {
-                self.state = AppState::MainMenu;
-            }
-        }
+        Ok((app, raylib))
     }
 
     fn update_in_world(&mut self) {
-        let deltas = pre_simulation_update(&self.world, &mut self.client);
+        let deltas = pre_simulation_update(self.backend.world(), &mut self.frontend);
 
-        for msg in self.node.update() {
-            self.on_rcv_server_msg(msg);
+        for event in self.backend.update() {
+            self.on_rcv_backend_event(event);
         }
 
+        self.frontend.player_id = self.backend.allocated_player_id();
+
         let post_deltas = post_simulation_update(
-            &self.world,
-            &mut self.client,
-            &mut self.sounds,
+            self.backend.world(),
+            &mut self.frontend,
             self.terminal.is_focused(),
         );
 
-        for delta in deltas.into_iter().chain(post_deltas) {
-            self.node.send(MessageKind::RequestDelta(delta));
+        for delta in deltas.take().into_iter().chain(post_deltas.take()) {
+            self.backend.request_delta(delta);
         }
 
-        // HANDLE INPUTS FROM RDEV LISTENER THREAD
-
-        if self.server_ping_timer.tick() {
-            if self.server_handshake_complete {
-                self.node.send(MessageKind::Ping)
-            }
-        }
-
-        if self.server_telemetry_timer.tick() {
-            if self.server_handshake_complete {
-                self.send_telemetry_to_server();
-            }
-        }
-
-        // HANDLE RDEV EVENTS (DEPRECATED - USE INPUTSTATE)
-
-        let cmds = self.terminal.handle_input(&self.client.input);
+        let cmds = self.terminal.handle_input(&self.frontend.input);
 
         for cmd in cmds {
             self.on_terminal_cmd(cmd);
@@ -233,175 +149,193 @@ impl ClientApp {
 
         let on_gui = self.ui_state.is_on_gui();
         if !self.terminal.is_active() {
-            process_event(&mut self.world, &mut self.client, &mut self.sounds, on_gui);
+            process_event(self.backend.world(), &mut self.frontend, on_gui);
 
-            if let Some(editor) = self.client.viewport.editor_mut() {
-                let zoom = self.client.camera.zoom;
-                if let Some(delta) = editor.handle_keys(&self.client.input, &self.world, zoom) {
-                    self.node.send(MessageKind::RequestDelta(delta));
+            if let Some(editor) = self.frontend.scene_graph.editor_mut()
+                && let Some(delta) = editor.handle_keys(&self.frontend.input, self.backend.world())
+                {
+                    self.backend.request_delta(delta);
                 }
+        }
+    }
+
+    fn update(&mut self, raylib: &Raylib) {
+        // GET SOME BASIC INPUT INFORMATION FROM RAYLIB
+
+        self.frontend.keybinds.clear_active();
+        self.frontend.keybinds.set_active("global");
+
+        match &self.frontend.scene_graph {
+            SceneGraph::MainMenu => {
+                self.frontend.keybinds.set_active("menu");
+            }
+            SceneGraph::ListSaves => {
+                self.frontend.keybinds.set_active("menu");
+            }
+            SceneGraph::Kicked => {
+                self.frontend.keybinds.set_active("menu");
+            }
+            SceneGraph::Settings => {
+                self.frontend.keybinds.set_active("menu");
+            }
+            SceneGraph::Editor(..) => {
+                self.frontend.keybinds.set_active("editor");
+            }
+            SceneGraph::Free(..) => {
+                self.frontend.keybinds.set_active("freecamera");
+            }
+            SceneGraph::LockedToPlayer(..) => {
+                self.frontend.keybinds.set_active("player_controller");
+            }
+        }
+
+        self.frontend.mouse_screen_position = raylib
+            .handle()
+            .is_cursor_on_screen()
+            .then(|| raylib_to_glam(raylib.handle().get_mouse_position()));
+
+        self.frontend.screen_dims = Vec2::new(
+            raylib.handle().get_screen_width() as f32,
+            raylib.handle().get_screen_height() as f32,
+        );
+
+        self.frontend.input = self
+            .input_handler
+            .update(raylib.handle().is_window_focused());
+
+        self.update_in_world();
+
+        self.frontend.update();
+
+        if self.frontend.input_timer.tick() {
+            let mut ctrl = PlayerControls::default();
+
+            if self.frontend.is_satisfied("player_controller::left") {
+                ctrl.x = JoystickPosition::Negative;
+            }
+            if self.frontend.is_satisfied("player_controller::right") {
+                ctrl.x = JoystickPosition::Positive;
+            }
+            if self.frontend.is_satisfied("player_controller::down") {
+                ctrl.y = JoystickPosition::Negative;
+            }
+            if self.frontend.is_satisfied("player_controller::up") {
+                ctrl.y = JoystickPosition::Positive;
+            }
+            if self.frontend.is_satisfied("player_controller::rotate_ccw") {
+                ctrl.a = JoystickPosition::Positive;
+            }
+            if self.frontend.is_satisfied("player_controller::rotate_cw") {
+                ctrl.a = JoystickPosition::Negative;
+            }
+            if self
+                .frontend
+                .is_satisfied("player_controller::relative_braking")
+            {
+                ctrl.is_relative_braking = true;
+            }
+
+            if let Some(id) = self.backend.allocated_player_id() {
+                let delta = WorldDelta::SetPlayerControls(id, ctrl);
+                self.backend.request_delta(delta);
             }
         }
     }
 
-    fn update(&mut self) {
-        // GET SOME BASIC INPUT INFORMATION FROM RAYLIB
-
-        self.client.mouse_screen_position = self
-            .handle
-            .is_cursor_on_screen()
-            .then(|| raylib_to_glam(self.handle.get_mouse_position()));
-
-        self.client.screen_dims = Vec2::new(
-            self.handle.get_screen_width() as f32,
-            self.handle.get_screen_height() as f32,
-        );
-
-        // HANDLE MESSAGES FROM NETWORK NODE
-
-        while let Some(e) = self.input_queue.pop() {
-            let focused = self.handle.is_window_focused();
-            self.client.input.process_rdev_event(&e, focused);
-        }
-
-        match &self.state {
-            AppState::Loading(_, _, _) => self.update_loading(),
-            _ => self.update_in_world(),
+    pub fn on_rcv_backend_event(&mut self, event: BackendEvent) {
+        match event {
+            BackendEvent::FinishedWorldDownload(name) => {
+                let message = format!("Finished world download \"{name}\"");
+                self.frontend.spawn_animation(message, true);
+                self.frontend.go_to_world();
+            }
+            BackendEvent::Server(response) => {
+                self.on_rcv_server_msg(response);
+            }
         }
     }
 
-    pub fn on_rcv_server_msg(&mut self, msg: Message) {
+    pub fn on_rcv_server_msg(&mut self, msg: ServerResponse) {
         let s = format!("{:?}", msg);
         self.terminal.log_debug(s);
 
         debug!("{msg:?}");
 
-        match msg.kind {
-            MessageKind::ChatMessage(id, text) => {
+        match msg {
+            ServerResponse::ChatMessage(id, text) => {
                 let s = format!("[{id}]: {text}");
-                self.client.chat.log(s);
+                self.frontend.chat.log(s);
+                self.frontend.spawn_animation(text, false);
             }
-            MessageKind::Driver {
-                ticks,
-                deltas,
-                players,
-            } => {
-                self.on_driver_packet(ticks, deltas);
-                self.world.players = players;
-            }
-            MessageKind::BlobResponse(blob) => {
-                self.on_rcv_blob(blob);
-            }
-            MessageKind::MultiBlobResponse(ent, ticks, blobs) => {
-                let delta = ticks as i64 - self.world.ticks as i64;
-                self.terminal.log_warn(format!(
-                    "Delta ticks: {} AKA {:0.3}",
-                    delta,
-                    timedelta_from_delta_ticks(delta).as_seconds_f64()
-                ));
-                self.world.spawner.set_next(ent);
-                self.world.ticks = ticks;
-                for blob in blobs {
-                    self.on_rcv_blob(blob);
-                }
-            }
-            MessageKind::FinishWorldDownload => {
-                self.state = AppState::InWorld;
-            }
-            MessageKind::SyncFrame(frame) => {
+            ServerResponse::SyncFrame(frame) => {
                 debug!("Got frame: {:?}", frame);
-                let our_frame = sync_frame_from_world(&self.world);
+                let our_frame = sync_frame_from_world(self.backend.world());
                 debug!("Our frame: {:?}", our_frame);
             }
-            MessageKind::HaveNewSave => {
-                self.on_rcv_have_new_save();
+            ServerResponse::PlayerConnected(username) => {
+                self.frontend
+                    .chat
+                    .log(format!("{username} just connected."));
             }
-            MessageKind::Kicked => {
-                self.on_rcv_kicked();
-            }
-            MessageKind::WhoGoesThere => {
-                self.on_rcv_who_goes_there();
-            }
-            MessageKind::TakeYourHatOff => {
-                self.on_rcv_take_your_hat_off();
-            }
-            MessageKind::PlayerConnected(username) => {
-                self.client.chat.log(format!("{username} just connected."));
-            }
-            MessageKind::PlayerDisconnected(username) => {
-                self.client
+            ServerResponse::PlayerDisconnected(username) => {
+                self.frontend
                     .chat
                     .log(format!("{username} just disconnected."));
             }
-            MessageKind::Ack => (),
-            MessageKind::Pong => (),
-            MessageKind::ServerStatistics(_) => (),
-            _ => error!("Unsupported message from server: {:?}", msg.kind),
-        }
-    }
-
-    fn on_rcv_take_your_hat_off(&mut self) {
-        self.server_handshake_complete = true;
-    }
-
-    fn on_rcv_who_goes_there(&mut self) {
-        self.node.send(MessageKind::Introduction {
-            username: self.username.clone(),
-        });
-    }
-
-    fn on_rcv_kicked(&mut self) {
-        self.node.disconnect();
-        self.state = AppState::Kicked;
-        self.world = World::empty();
-    }
-
-    fn on_rcv_have_new_save(&mut self) {
-        self.node.send(MessageKind::BeginAsyncWorldDownload);
-        self.async_world_download = Some(AsyncWorldDownload::new());
-    }
-
-    fn log_world_delta(&mut self, delta: &WorldDelta) {
-        match delta {
-            WorldDelta::SetPlayerPosition(_, _) => return,
-            WorldDelta::SetPlayerCursorPosition(_, _) => return,
-            _ => {
-                self.client.chat.log(format!("{:?}", delta));
+            ServerResponse::Simulation(sim) => {
+                self.on_sim_event(sim);
             }
+            ServerResponse::Driver { deltas, .. } => {
+                for delta in deltas {
+                    if !matches!(delta, WorldDelta::SetPlayerControls(..)) {
+                        let s = format!("{:?}", delta);
+                        self.frontend.spawn_animation(s, true);
+                    }
+                }
+            }
+            ServerResponse::ClientConnected(id, addr) => {
+                let msg = format!("Client connected: {id}, {addr}");
+                self.frontend.spawn_animation(msg, true);
+            }
+            ServerResponse::ClientDisconnected(id, addr) => {
+                let msg = format!("Client disconnected: {id}, {addr}");
+                self.frontend.spawn_animation(msg, true);
+            }
+            ServerResponse::NewSimSpeed(speed) => {
+                let msg = if speed == 0 {
+                    "Sim paused".to_string()
+                } else {
+                    format!("New sim speed: {speed}")
+                };
+                self.frontend.spawn_animation(msg, true);
+            }
+            ServerResponse::Telemetry(_) => {
+                // PASS
+            }
+            ServerResponse::ClientTelemetry(..) => {
+                // info!("Got TLM from client {id}: {tlm:?}");
+            }
+            ServerResponse::Nack(message) => {
+                error!("Got NACK from server: {message}");
+                let s = format!("Nack from server:\n{message}");
+                self.frontend.spawn_animation(s, true);
+            }
+            _ => error!("Unsupported message from server: {:?}", msg),
         }
     }
 
-    fn on_driver_packet(&mut self, ticks: u64, deltas: Vec<WorldDelta>) {
-        while self.world.ticks + 1 < ticks {
-            update_world(&mut self.world);
-        }
-
-        for delta in deltas {
-            self.log_world_delta(&delta);
-            if let Err(e) = apply_delta(&mut self.world, delta.clone()) {
-                error!("Failed to apply delta {:?}: {:?}", delta, e);
+    fn on_sim_event(&mut self, sim: SimulationEvent) {
+        let id = self.frontend.spawner.spawn();
+        info!("Got sim event: {sim:?}");
+        match sim {
+            SimulationEvent::Transmission(rt) => {
+                let msg = format!("TR: {} {:?}", rt.received_by, rt.original.contents());
+                self.frontend.transmissions.spawn(id, rt);
+                self.frontend.spawn_animation(msg, true)
             }
-        }
-
-        if self.world.ticks < ticks {
-            update_world(&mut self.world);
-        }
-    }
-
-    fn on_rcv_blob(&mut self, blob: Blob) {
-        if let Some(dl) = &mut self.async_world_download {
-            dl.add_blob(blob);
-
-            if dl.is_complete() {
-                let dl = self
-                    .async_world_download
-                    .take()
-                    .expect("Expected this to be Some(_)");
-
-                self.world = dl.world();
+            SimulationEvent::Piloting(id, username) => {
+                info!("{username} is piloting {id}");
             }
-        } else {
-            error!("No download underway!");
         }
     }
 
@@ -410,32 +344,14 @@ impl ClientApp {
         self.should_exit = true;
     }
 
-    fn save(&mut self) {
-        save_world_and_alert_chat(&self.world, &mut self.client);
-    }
-
-    fn open_editor(&mut self) {
-        enter_ship_editor(&self.world, &mut self.client, &mut self.sounds)
-    }
-
-    fn leave_editor(&mut self) {
-        if self.client.leave_editor() {
-            self.sounds.push(SoundEffect::LeaveEditor);
-        }
-    }
-
-    fn set_sim_speed(&mut self, speed: u32) {
-        self.node.send(MessageKind::SetSimSpeed(speed));
-    }
-
     fn docking_rotate(&mut self) {
-        if let Some(free) = self.client.viewport.free_mut() {
+        if let Some(free) = self.frontend.scene_graph.free_mut() {
             free.rotation = free.rotation.next();
         }
     }
 
     fn docking_shift(&mut self, delta: Vec2, is_x: bool) {
-        if let Some(free) = self.client.viewport.free_mut() {
+        if let Some(free) = self.frontend.scene_graph.free_mut() {
             if is_x {
                 let delta = delta.with_y(0.0) / 4.0;
                 let off = PartCoord(vround(delta));
@@ -449,143 +365,121 @@ impl ClientApp {
     }
 
     fn docking_activate(&mut self) {
-        if let Some(docking) = self.client.docking_interface() {
+        if let Some(free) = self.frontend.scene_graph.free()
+            && let Some(docking) = free.docking_interface()
+        {
             let delta = WorldDelta::MergeGrids(
                 docking.parent.grid_id,
                 docking.child.grid_id,
                 docking.offset,
                 docking.rotation,
             );
-            self.node.send(MessageKind::RequestDelta(delta));
+            self.backend.request_delta(delta);
         }
     }
 
     fn load_save_file(&mut self, path: String) {
-        self.node.send(MessageKind::LoadSave(path));
+        info!("Commanding server to load save file");
+        self.backend.load_save(path);
     }
 
-    pub fn on_drag(&mut self, id: UiMessage, delta: Vec2) {
-        match id {
-            UiMessage::DockingShiftX => {
+    pub fn on_drag(&mut self, id: UiRef, delta: Vec2) {
+        debug!("Drag event: {:?}", id);
+        match id.onclick {
+            Some(UiMessage::DockingShiftX) => {
                 self.docking_shift(delta, true);
             }
-            UiMessage::DockingShiftY => {
+            Some(UiMessage::DockingShiftY) => {
                 self.docking_shift(delta, false);
             }
-            UiMessage::DockingHandle => {
-                self.menu_origin += delta;
+            Some(UiMessage::Drag(handle)) => {
+                self.ui_state.shift_offset(handle, delta);
             }
-            UiMessage::MainMenuHandle => {
-                self.menu_origin += delta;
+            Some(e) => warn!("Unhandled drag event: {e:?}"),
+            None => (),
+        }
+    }
+
+    pub fn on_click(&mut self, ui: UiRef) {
+        info!("Click event: {:?}", ui);
+        self.frontend.sounds.push(SoundEffect::ButtonDown);
+
+        let Some(onclick) = ui.onclick else {
+            return;
+        };
+
+        match onclick {
+            UiMessage::Navigate(nav) => {
+                self.frontend.scene_graph.handle_navigation(nav);
             }
-            UiMessage::SaveSelectHandle => {
-                self.menu_origin += delta;
+            UiMessage::Exit => self.exit(),
+            UiMessage::AltMode => self.frontend.toggle_alt_mode(),
+            UiMessage::DebugText => self.frontend.toggle_debug_text(),
+            UiMessage::SimSpeed(sp) => self.backend.set_sim_speed(sp),
+            UiMessage::DockingRotate => self.docking_rotate(),
+            UiMessage::DockingActivate => self.docking_activate(),
+            UiMessage::LoadSaveFile(path) => self.load_save_file(path),
+            UiMessage::LoadSave => {
+                self.frontend.scene_graph = SceneGraph::ListSaves;
             }
-            UiMessage::PartInfoHandle => {
-                self.part_info_origin += delta;
+            UiMessage::JoinMultiplayer => {
+                self.backend.request_world_download();
             }
-            _ => (),
+            UiMessage::WriteSaveToDisk => {
+                save_world_and_alert_chat(self.backend.world(), &mut self.frontend);
+            }
+            UiMessage::Delta(delta) => {
+                self.backend.request_delta(delta);
+            }
+            UiMessage::Editor(cmd) => {
+                if let SceneGraph::Editor(state) = &mut self.frontend.scene_graph {
+                    state.handle_command(cmd)
+                }
+            }
+            UiMessage::AckTransmission(id) => {
+                _ = self.frontend.transmissions.despawn(id);
+            }
+            UiMessage::ClearTransmissions => {
+                self.frontend.transmissions.clear();
+            }
+            e => warn!("Unhandled click event: {e:?}"),
         }
     }
 
     pub fn on_ui_event(&mut self, c: UiEvent) {
-        debug!("{:?}", c);
-
         match c.kind {
             UiEventKind::Drag(delta) => {
-                self.on_drag(c.msg, delta);
+                self.on_drag(c.reference, delta);
             }
             UiEventKind::Release => {
-                self.sounds.push(SoundEffect::ButtonUp);
+                self.frontend.sounds.push(SoundEffect::ButtonUp);
             }
-            UiEventKind::Click => {
-                self.sounds.push(SoundEffect::ButtonDown);
-                match c.msg {
-                    UiMessage::Exit => self.exit(),
-                    UiMessage::SaveFile => self.save(),
-                    UiMessage::OpenEditor => self.open_editor(),
-                    UiMessage::LeaveEditor => self.leave_editor(),
-                    UiMessage::AltMode => self.client.alt_mode ^= true,
-                    UiMessage::DebugText => self.show_debug_text ^= true,
-                    UiMessage::SimSpeed(sp) => self.set_sim_speed(sp),
-                    UiMessage::DockingRotate => self.docking_rotate(),
-                    UiMessage::DockingActivate => self.docking_activate(),
-                    UiMessage::LoadSaveFile(path) => self.load_save_file(path),
-                    UiMessage::GoToMainMenu => {
-                        self.state = AppState::MainMenu;
-                    }
-                    UiMessage::SetMachineState(machine_id, state) => {
-                        let delta = WorldDelta::SetMachineState(machine_id, state);
-                        self.request_server_delta(delta);
-                    }
-                    UiMessage::SetThrusterState(thruster_id, state) => {
-                        let delta = WorldDelta::SetThrusterState(thruster_id, state);
-                        self.request_server_delta(delta);
-                    }
-                    UiMessage::LoadSave => {
-                        self.state = AppState::ListSaves;
-                    }
-                    UiMessage::JoinMultiplayer => {
-                        self.request_world_download();
-                    }
-                    UiMessage::Settings => {
-                        self.state = AppState::Settings;
-                    }
-                    _ => (),
-                }
-            }
+            UiEventKind::Click => self.on_click(c.reference),
         }
-    }
-
-    fn request_world_download(&mut self) {
-        self.node.send(MessageKind::BeginAsyncWorldDownload);
-        self.async_world_download = Some(AsyncWorldDownload::new());
     }
 
     pub fn on_terminal_cmd(&mut self, cmd: TermCmd) {
         self.terminal.log_info(format!("{cmd:?}"));
 
         match cmd {
-            TermCmd::Say(s) => {
-                self.node.send(MessageKind::ClientSays(s));
-            }
-            TermCmd::Ping => {
-                self.node.send(MessageKind::Ping);
-            }
             TermCmd::Clear => {
                 self.terminal.clear();
             }
             TermCmd::SetSimSpeed(speed) => {
-                self.set_sim_speed(speed);
-            }
-            TermCmd::FindGridByName(name) => {
-                self.node.send(MessageKind::FindGridByName(name));
+                self.backend.set_sim_speed(speed);
             }
             TermCmd::Exit => {
                 self.exit();
             }
-            TermCmd::PrintEntityInfo(table) => {
-                self.node.send(MessageKind::PrintEntityInfo(table));
-            }
-            TermCmd::ServerConnect => {
-                self.node.reconnect();
-            }
-            TermCmd::ServerDisconnect => {
-                self.node.disconnect();
-            }
-            TermCmd::RequestServerStatistics => {
-                self.node.send(MessageKind::RequestServerStatistics);
-            }
-            TermCmd::ClientReqBlob(table) => {
-                self.node.send(MessageKind::ClientBlobRequest(table));
-            }
             TermCmd::ClientReqAllBlobs => {
-                self.terminal
-                    .log_warn(format!("Requesting all blobs at tick {}", self.world.ticks));
-                self.request_world_download();
+                self.terminal.log_warn(format!(
+                    "Requesting all blobs at tick {}",
+                    self.backend.world().ticks
+                ));
+                self.backend.request_world_download();
             }
             TermCmd::World(delta) => {
-                self.node.send(MessageKind::RequestDelta(delta));
+                self.backend.request_delta(delta);
             }
             TermCmd::Help => {
                 self.terminal.print_help_command();
@@ -598,424 +492,112 @@ impl ClientApp {
     }
 }
 
-fn handle_sounds<'a>(
-    sounds: &SoundEffects,
-    audio: &'a RaylibAudio,
-    active_sounds: &mut Vec<Sound<'a>>,
-) {
-    for sound in sounds {
-        let path = sound.to_path();
-        let sound = match audio.new_sound(path) {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Failed to load sound: {}", e);
-                continue;
-            }
-        };
-
-        sound.set_volume(0.4);
-        sound.play();
-
-        active_sounds.push(sound);
-    }
-
-    active_sounds.retain(|s| s.is_playing());
-}
-
 /// Run the test client app
 #[derive(Parser, Debug, Default, Clone)]
 #[command(version, about, long_about = None)]
 struct Args {
-    #[arg(long)]
+    #[arg(long, default_value = "no_username")]
     username: String,
-    #[arg(short)]
-    save_file: Option<String>,
     #[arg(short = 'a', default_value = "127.0.0.1:5000")]
     server_addr: String,
     #[arg(short = 'p', default_value = "5000")]
     server_port: u16,
     #[arg(long)]
     run_server: bool,
+    #[arg(long)]
+    use_mp_backend: bool,
+    #[arg(short = 's', long, default_value = "saves/")]
+    save_files_dir: PathBuf,
 }
 
-#[allow(unused)]
-fn generate_assets_ui(assets: &Assets, input: &InputState, width: f32, height: f32) -> Tree<()> {
-    let mut root = Node::new(width, Size::Fit);
-
-    for (ctx, mapping) in assets.keybinds.iter() {
-        let mut col = Node::new(Size::Grow, height / 2.0)
-            .down()
-            .with_padding(4.0)
-            .with_child_gap(1.0);
-
-        let s = format!("{:?}", ctx);
-        let header = Node::text(Size::Grow, 40, s);
-
-        col.add_child(header);
-
-        let actions = ActionSet::new(input, mapping);
-
-        for (key, action) in mapping.iter() {
-            let color = if actions.just_triggered(*action) {
-                Color::TEAL
-            } else if actions.is_active(*action) {
-                Color::new(60, 60, 110, 255)
-            } else {
-                Color::new(20, 20, 20, 255)
-            };
-
-            let color = [
-                color.r as f32 / 255.0,
-                color.g as f32 / 255.0,
-                color.b as f32 / 255.0,
-                color.a as f32 / 255.0,
-            ];
-
-            let line = format!("{:?}: {:?}", key, action);
-            let row = Node::text(Size::Grow, 30, line).with_color(color);
-            col.add_child(row);
-        }
-
-        root.add_child(col);
-
-        // x += width + padding;
-    }
-
-    Tree::new().with_layout(root, None)
-}
-
-pub struct UiBuilder<'a> {
-    font: &'a Font,
-    font_size: f32,
-}
-
-impl<'a> UiBuilder<'a> {
-    fn new(font: &'a Font) -> Self {
-        Self {
-            font,
-            font_size: UI_FONT_SIZE as f32,
-        }
-    }
-
-    fn draghandle<T: UiMsg>(&self, msg: impl Into<T>) -> Node<T> {
-        Node::<T>::handle(Size::Grow, 20, msg)
-    }
-
-    fn sep<T: UiMsg>(&self) -> Node<T> {
-        Node::structural(Size::Grow, 2)
-    }
-
-    fn text<T: UiMsg>(&self, s: impl Into<String>) -> Node<T> {
-        let s = s.into();
-        let dims = self.font.measure_text(&s, self.font_size, 0.0);
-        let w = dims.x;
-        let h = dims.y;
-        Node::text(w, h, s)
-    }
-
-    fn button<T: UiMsg>(&self, msg: impl Into<T>, s: impl Into<String>) -> Node<T> {
-        let s = s.into();
-        let dims = self.font.measure_text(&s, self.font_size, 0.0);
-        let w = dims.x + 36.0;
-        let h = dims.y + 18.0;
-        Node::button(s, msg, w, h)
-    }
-
-    fn sprite<T: UiMsg>(&self, s: impl Into<String>, texture: &Texture2D) -> Node<T> {
-        let h = 70;
-        let actual_w = texture.width;
-        let actual_h = texture.height;
-        let scale = actual_h as f32 / h as f32;
-        let w = actual_w as f32 / scale;
-        Node::image(s, w as u32, h)
-    }
-
-    fn progress_bar<T: UiMsg>(&self, val: f32) -> Node<T> {
-        Node::progress_bar(Size::Grow, 11, val)
-    }
-}
-
-fn make_docking_ui(
-    builder: &UiBuilder,
-    docking: &DockingInterface,
-    world: &World,
-) -> Option<Node<UiMessage>> {
-    let parent = world.grids.try_get(docking.parent.grid_id).ok()?;
-    let child = world.grids.try_get(docking.child.grid_id).ok()?;
-
-    let sep = parent
-        .particle_location
-        .translation
-        .distance(child.particle_location.translation);
-
-    let sep = distance_str(sep as f64);
-
-    let docking_ui = Node::column(
-        Size::Fit,
-        vec![
-            builder.draghandle(UiMessage::DockingHandle),
-            builder.text("Docking Control Panel"),
-            builder.text("Multiline string\nAnother line\nAnd another!"),
-            builder.text(format!("{} <- {}", parent.name, child.name)),
-            builder.text(format!("Separation: {}", sep)),
-            builder.button(UiMessage::DockingShiftX, "Offset X"),
-            builder.button(UiMessage::DockingShiftY, "Offset Y"),
-            builder.button(UiMessage::DockingRotate, "Rotate"),
-            builder.button(UiMessage::DockingActivate, "Dock"),
-        ],
+fn make_gui(raylib: &Raylib, app: &mut GameApp, timers: &DebugTimers) -> Tree<UiMessage> {
+    let mut ui = UiBuilder::new(
+        app.frontend.assets.ui_font(),
+        app.frontend.input.clone(),
+        std::mem::take(&mut app.ui_state),
     );
 
-    Some(docking_ui)
-}
-
-fn make_main_menu(ui: &UiBuilder) -> Node<UiMessage> {
-    Node::column(
-        Size::Fit,
-        vec![
-            ui.draghandle(UiMessage::MainMenuHandle),
-            ui.button(UiMessage::LoadSave, "Load Single Player"),
-            ui.button(UiMessage::JoinMultiplayer, "Join Server"),
-            // ui.button(UiMessage::JoinMultiplayer, "Join Multiplayer"),
-            // ui.button(UiMessage::HostMultiplayer, "Host Multiplayer"),
-            ui.button(UiMessage::Settings, "Settings"),
-            ui.button(UiMessage::Exit, "Exit to Desktop"),
-        ],
-    )
-}
-
-fn loading_layout(ui: &UiBuilder, steps: u32, total: u32, status: &str) -> Node<UiMessage> {
-    let progress = steps as f32 / total as f32;
-    let pstr = format!("{}/{}", steps, total);
-    Node::column(
-        500,
-        vec![
-            ui.text("Loading..."),
-            ui.progress_bar(progress),
-            ui.text(pstr),
-            ui.text(status),
-        ],
-    )
-}
-
-fn make_savefiles_menu(ui: &UiBuilder, saves: &[String]) -> Node<UiMessage> {
-    let mut buttons = vec![ui.draghandle(UiMessage::SaveSelectHandle)];
-
-    for s in saves {
-        let b = ui.button(UiMessage::LoadSaveFile(s.clone()), s.clone());
-        buttons.push(b);
-    }
-
-    buttons.push(ui.button(UiMessage::GoToMainMenu, "Return to Main Menu"));
-
-    Node::column(Size::Fit, buttons)
-}
-
-fn make_world_ui(ui: &UiBuilder, app: &ClientApp, tree: &mut Tree<UiMessage>) {
-    let mut root: Node<UiMessage> = Node::root(Size::Fit, Size::Fit).with_children(
-        [
-            ui.button(UiMessage::GoToMainMenu, "Return to Main Menu"),
-            ui.button(UiMessage::SaveFile, "Save Game"),
-            ui.button(UiMessage::AltMode, "Toggle Alt Mode"),
-            ui.button(UiMessage::DebugText, "Toggle Debug Text"),
-            ui.button(UiMessage::SimSpeed(0), "Toggle Pause"),
-            ui.button(UiMessage::SimSpeed(1), "Sim 1x"),
-            ui.button(UiMessage::SimSpeed(10), "Sim 10x"),
-            ui.button(UiMessage::SimSpeed(100), "Sim 100x"),
-            ui.button(UiMessage::SimSpeed(1000), "Sim 1000x"),
-        ]
-        .into_iter(),
-    );
-
-    if app.client.selected_grid_loc().is_some() && app.client.viewport.editor().is_none() {
-        let b = ui.button(UiMessage::OpenEditor, "Open Ship Editor");
-        root.add_child(b);
-    }
-
-    if app.client.viewport.editor().is_some() {
-        root.add_child(ui.button(UiMessage::LeaveEditor, "Leave Ship Editor"));
-    }
-
-    tree.add_layout(root, None);
-
-    if let Some(docking) = app.client.docking_interface() {
-        if let Some(ui) = make_docking_ui(ui, &docking, &app.world) {
-            tree.add_layout(ui, app.menu_origin)
+    match &mut app.frontend.scene_graph {
+        SceneGraph::MainMenu => {
+            main_menu_ui(&mut ui);
         }
-    }
-}
-
-fn slot_info_str(idx: usize, slot: &InvSlot) -> String {
-    if let Some(contents) = slot.contents() {
-        format!(
-            "{}. {:?} ({}) ({:0.1}%) {}",
-            idx + 1,
-            contents.0,
-            contents.1,
-            100.0 * slot.fill_percentage(),
-            slot.mass(),
-        )
-    } else {
-        format!("{}. Empty - can store [{:?}]", idx + 1, slot.filter())
-    }
-}
-
-fn computer_info_str(cpu: &Computer) -> String {
-    let mut lines = vec![
-        format!("On: {}", cpu.on),
-        format!("\nStatus: {:?}", cpu.status),
-        format!("\nTicks: {}", cpu.ticks_this_cycle),
-        format!("\nFired: {}", cpu.fired_this_tick),
-        format!("\nIters: {}", cpu.iters),
-    ];
-
-    for cmd in &cpu.command_queue {
-        let line = format!("\n  - {}", cmd);
-        lines.push(line);
-    }
-
-    lines.into_iter().collect()
-}
-
-fn make_part_info_gui(ui: &UiBuilder, app: &ClientApp, tree: &mut Tree<UiMessage>) {
-    let gridloc = some_or_return!(app.client.selected_grid_loc());
-    let grid = ok_or_return!(app.world.grids.try_get(gridloc.grid_id));
-    let occ = some_or_return!(grid.get_parts_at(gridloc.coord));
-
-    let mut children = Vec::new();
-
-    let s = format!(
-        "At {}-{}: {:?}",
-        gridloc.grid_id,
-        gridloc.coord,
-        occ.to_array()
-    );
-
-    children.push(ui.draghandle(UiMessage::PartInfoHandle));
-    children.push(ui.text(s));
-
-    for (layer, part_id) in occ.iter() {
-        children.push(ui.sep());
-
-        let part = ok_or_continue!(app.world.parts.try_get(part_id));
-        let part_local = part.region.to_local(gridloc.coord);
-        let proto = ok_or_continue!(app.world.prototypes.try_get(part.prototype));
-
-        children.push(ui.text(proto.name.clone()));
-
-        if let Some(texture) = app.assets.part_textures.get(&proto.name) {
-            children.push(ui.sprite(proto.name.clone(), texture));
+        SceneGraph::Free(free) => {
+            make_free_flying_ui(&mut ui, free, app.backend.world(), &app.frontend.assets);
+            make_part_info_gui(&mut ui, app.backend.world(), &app.frontend);
+            // TODO
+            app.frontend.transmissions.clear();
+            make_transmission_ui(&mut ui, &app.frontend.transmissions);
         }
-
-        if let Ok(cpu) = app.world.computers.try_get(part_id) {
-            children.push(ui.button(
-                UiMessage::SetComputerOnOff(part_id, !cpu.on),
-                if cpu.on { "Turn Off" } else { "Turn On" },
-            ));
-            children.push(ui.button(UiMessage::SetComputerDrift(part_id), "Set to Drift"));
-            let info = computer_info_str(cpu);
-            children.push(ui.text(info));
+        SceneGraph::LockedToPlayer(locked) => {
+            ui.window_at("locked_info", Vec2::splat(20.0), |ui| {
+                ui.text(format!("Camera locked to player\n{:#?}", locked));
+            });
         }
-        if let Ok(thruster) = app.world.thrusters.try_get(part_id) {
-            let s = format!("{:#?}", thruster);
-            children.push(ui.button(
-                UiMessage::SetThrusterState(part_id, !thruster.is_on),
-                if thruster.is_on {
-                    "Turn Off"
-                } else {
-                    "Turn On"
-                },
-            ));
-            children.push(ui.text(s));
+        SceneGraph::Editor(editor) => {
+            make_editor_ui(&mut ui, editor, app.backend.world());
         }
-        if let Ok(light) = app.world.lights.try_get(part_id) {
-            let s = format!("{:#?}", light);
-            children.push(ui.text(s));
+        SceneGraph::ListSaves => {
+            list_saves_scene_ui(&mut ui);
         }
-        if let Ok(mac) = app.world.machines.try_get(part_id) {
-            children.push(ui.progress_bar(mac.progress()));
-            children.push(ui.button(
-                UiMessage::SetMachineState(part_id, !mac.enabled),
-                if mac.enabled { "Turn Off" } else { "Turn On" },
-            ));
+        SceneGraph::Kicked => {
+            kicked_scene_ui(&mut ui);
         }
-        if let Ok(inv) = app.world.inventories.try_get(part_id) {
-            for (idx, slot) in inv.slots().enumerate() {
-                let line = slot_info_str(idx, slot);
-                children.push(ui.text(line));
-                children.push(ui.progress_bar(slot.fill_percentage()));
-            }
-        }
-
-        if app.client.alt_mode {
-            let mut s = format!("Part ID: {}", part_id);
-            s += &format!("\nPart local coord: {}", part_local);
-
-            s += &format!(
-                "\nRegion: {:?} {} {:?}",
-                layer,
-                part.region.bottom_left(),
-                part.region.rot()
-            );
-
-            s += &format!(
-                "\nPrototype: {} {} {:?}",
-                proto.name,
-                proto.mass,
-                proto.classification()
-            );
-            children.push(ui.text(s));
+        SceneGraph::Settings => {
+            settings_scene_ui(&mut ui);
         }
     }
 
-    let node = Node::column(600, children);
-    tree.add_layout(node, app.part_info_origin);
-}
-
-fn make_gui(font: &Font, app: &ClientApp) -> Tree<UiMessage> {
-    let builder = UiBuilder::new(font);
-
-    let mut tree = Tree::new();
-
-    match &app.state {
-        AppState::Loading(steps, total, status) => {
-            tree.add_layout(
-                loading_layout(&builder, *steps, *total, status),
-                app.menu_origin,
-            );
-        }
-        AppState::MainMenu => {
-            tree.add_layout(make_main_menu(&builder), app.menu_origin);
-        }
-        AppState::InWorld => {
-            make_world_ui(&builder, app, &mut tree);
-            make_part_info_gui(&builder, &app, &mut tree);
-        }
-        AppState::ListSaves => {
-            let mut saves = list_saves_in_dir("saves/");
-            saves.sort();
-            let saves: Vec<_> = saves
-                .into_iter()
-                .map(|s| s.to_string_lossy().to_string())
-                .collect();
-            tree.add_layout(make_savefiles_menu(&builder, &saves), app.menu_origin);
-        }
-        AppState::Kicked => {
-            tree.add_layout(
-                Node::text(600, 100, "You've been kicked."),
-                Vec2::splat(200.0),
-            );
-        }
-        AppState::Settings => {
-            tree.add_layout(Node::text(600, 100, "The settings."), Vec2::splat(200.0));
-        }
+    if app.frontend.show_debug_text {
+        make_debug_ui(&mut ui, app, timers, raylib.handle().get_fps());
     }
 
-    if let Some(dl) = &app.async_world_download {
-        let node = loading_layout(&builder, dl.steps(), dl.total(), dl.status());
-        tree.add_layout(node, Vec2::new(400.0, 200.0));
+    if app.frontend.show_keybinds {
+        make_keybinds_ui(&mut ui, app);
     }
+
+    let (tree, state) = ui.take();
+
+    app.ui_state = state;
 
     tree
+}
+
+fn make_keybinds_ui(ui: &mut UiBuilder, app: &GameApp) {
+    ui.window_at("keybinds", Vec2::splat(20.0), |ui| {
+        for gid in app.frontend.keybinds.active_groups() {
+            ui.text(gid);
+        }
+
+        ui.sep();
+
+        for (id, kb) in app.frontend.keybinds.iter() {
+            let is_on_ig_gr = app.frontend.is_satisfied_ignoring_groups(id);
+            let is_on = app.frontend.is_satisfied(id);
+            let prefix = if is_on { "##" } else { "  " };
+            let color = if is_on {
+                Color::TEAL
+            } else if is_on_ig_gr {
+                Color::ORANGE
+            } else {
+                Color::WHITE
+            };
+            let s = format!("{prefix} {:50} {}", id, kb);
+            ui.colored_text(s, color);
+        }
+    });
+}
+
+fn make_debug_ui(ui: &mut UiBuilder, app: &GameApp, timers: &DebugTimers, fps: u32) {
+    debug_ui(
+        ui,
+        app.backend.world(),
+        &app.frontend,
+        timers,
+        app.backend.network(),
+        app.backend.username(),
+        app.frontend.player_id,
+        fps,
+    )
 }
 
 fn server_thread(args: Args) {
@@ -1023,7 +605,11 @@ fn server_thread(args: Args) {
         return;
     }
 
-    let server = match HeadlessServerApp::new(args.save_file, args.server_port, 10) {
+    _ = simple_logger::init_with_level(Level::Info);
+
+    info!("Starting server in background thread");
+
+    let mut server = match BaryServer::new(args.save_files_dir, args.server_port) {
         Ok(server) => server,
         Err(e) => {
             error!("Failed to start server: {e:?}");
@@ -1031,7 +617,47 @@ fn server_thread(args: Args) {
         }
     };
 
-    server.spin_forever();
+    loop {
+        server.update();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+fn draw_animations(d: &mut RaylibDrawHandle, animations: &Components<AppearingText>) {
+    for anim in animations.values() {
+        anim.draw(d);
+    }
+}
+
+fn draw(d: &mut RaylibDrawHandle, app: &mut GameApp, ui: Tree<UiMessage>) {
+    d.clear_background(Color::BLACK);
+
+    if let Some(blob) = &app.frontend.assets.blob {
+        d.draw_texture_ex(
+            blob,
+            Vector2::new(100.0, 100.0),
+            0.0,
+            0.5,
+            Color::WHITE.alpha(0.3),
+        );
+    }
+
+    if app.frontend.scene_graph.should_draw_world() {
+        draw_world(app.backend.world(), &mut app.frontend, d);
+    }
+
+    draw_ui(d, &app.ui_state, &ui, &app.frontend.assets);
+
+    draw_animations(d, &app.frontend.animations);
+
+    draw_mouse_screen_position(d, app.frontend.mouse_screen_position);
+
+    draw_terminal(
+        d,
+        &app.terminal,
+        &app.frontend.assets,
+        Color::BLACK.alpha(0.8),
+    );
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -1039,100 +665,71 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server_args = args.clone();
 
-    let _join = std::thread::spawn(move || server_thread(server_args));
+    _ = std::thread::Builder::new()
+        .name("server_background_thread".into())
+        .spawn(|| server_thread(server_args))?;
 
     info!("{:?}", args);
 
-    let mut main_app = ClientApp::new(args, log::LevelFilter::Info)?;
+    let sounds = SoundHandler::new();
 
-    let audio = raylib::audio::RaylibAudio::init_audio_device()?;
-    let mut active_sounds = Vec::new();
+    let (mut app, mut raylib) = GameApp::new(args, log::LevelFilter::Info)?;
 
-    while !main_app.handle.window_should_close() && !main_app.should_exit {
-        if !main_app.update_timer.tick() {
-            continue;
-        }
+    while !raylib.handle().window_should_close() && !app.should_exit {
+        std::thread::sleep(Duration::from_millis(10));
 
-        main_app.update();
+        app.update(&raylib);
 
         // AND DRAW IT ALL
 
-        let font = main_app.assets.ui_font();
-
-        let ui = make_gui(font, &main_app);
-
-        if main_app
-            .client
-            .input
-            .just_pressed_debounced(rdev::Key::KeyP)
-        {
-            println!("{}", ui);
-            println!("{:?}", main_app.ui_state);
-        }
-
-        let scrp = main_app.client.mouse_screen_position;
-
-        if let Some(c) = main_app.ui_state.update(&ui, scrp, &main_app.client.input) {
-            main_app.on_ui_event(c);
-        }
-
         let timers = DebugTimers::default();
 
-        main_app
-            .handle
-            .draw(&main_app.thread, |mut d: RaylibDrawHandle<'_>| {
-                d.clear_background(Color::BLACK);
+        let ui = make_gui(&raylib, &mut app, &timers);
 
-                if matches!(main_app.state, AppState::InWorld) {
-                    draw_world(&main_app.world, &main_app.client, &main_app.assets, &mut d);
-                }
-
-                draw_gui(&mut d, &main_app.ui_state, &ui, &main_app.assets);
-
-                lame_old_imgui_entrypoint(
-                    &mut d,
-                    &mut main_app.client,
-                    &main_app.world,
-                    &mut main_app.sounds,
-                );
-
-                draw_mouse_screen_position(&mut d, main_app.client.mouse_screen_position);
-
-                if main_app.show_debug_text {
-                    draw_debug_info(
-                        &main_app.world,
-                        &main_app.client,
-                        &main_app.assets,
-                        &timers,
-                        &main_app.node,
-                        &main_app.update_timer,
-                        &main_app.server_ping_timer,
-                        &main_app.server_telemetry_timer,
-                        &main_app.username,
-                        main_app.client.player_id,
-                        &mut d,
-                    );
-                }
-
-                draw_terminal(
-                    &mut d,
-                    &main_app.terminal,
-                    &main_app.assets,
-                    Color::BLACK.alpha(0.8),
-                );
-            });
-
-        handle_sounds(&main_app.sounds, &audio, &mut active_sounds);
-
-        main_app.sounds.clear();
-
-        if main_app.client.input.just_pressed(rdev::Key::KeyC)
-            && main_app.client.input.is_key_pressed(rdev::Key::ControlLeft)
+        if let Some(c) =
+            app.ui_state
+                .update(&ui, app.frontend.mouse_screen_position, &app.frontend.input)
         {
+            app.on_ui_event(c);
+        }
+
+        raylib.draw(|mut d: RaylibDrawHandle<'_>| {
+            draw(&mut d, &mut app, ui.clone());
+        });
+
+        sounds.play_sounds(std::mem::take(&mut app.frontend.sounds));
+
+        if app.frontend.is_satisfied("global::exit_app") {
             break;
         }
 
-        main_app.client.input.on_frame_boundary();
+        if app.frontend.is_satisfied("global::toggle_show_debug_text") {
+            app.frontend.toggle_debug_text();
+        }
+
+        if app.frontend.is_satisfied("global::toggle_show_keybinds") {
+            app.frontend.toggle_show_keybinds();
+        }
+
+        if app.frontend.is_satisfied("global::toggle_alt_mode") {
+            app.frontend.toggle_alt_mode();
+        }
+
+        if app.frontend.is_satisfied("global::save_world") {
+            save_world_and_alert_chat(app.backend.world(), &mut app.frontend);
+        }
+
+        if app.frontend.is_satisfied("global::download_world") {
+            app.backend.request_world_download();
+        }
+
+        if app.frontend.is_satisfied("global::toggle_camera_lock") {
+            app.frontend.toggle_camera_lock(app.backend.world());
+        }
+
+        if app.frontend.is_satisfied("global::reload_shaders") {
+            app.frontend.assets = Assets::load(&mut raylib);
+        }
     }
 
     info!("Done.");

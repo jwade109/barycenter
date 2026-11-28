@@ -1,13 +1,16 @@
+use std::collections::BTreeMap;
+
+use crate::{EditorCommand, Scene};
 use bary_core::prelude::*;
 use bary_input::InputState;
-use bary_ui::Tree;
+use bary_sim::WorldDelta;
+use bary_ui::{IdSalt, Tree};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum UiMessage {
+    Drag(IdSalt),
+    Navigate(Scene),
     Exit,
-    SaveFile,
-    OpenEditor,
-    LeaveEditor,
     AltMode,
     DebugText,
     SimSpeed(u32),
@@ -18,26 +21,59 @@ pub enum UiMessage {
     LoadSave,
     JoinMultiplayer,
     HostMultiplayer,
-    Settings,
+    WriteSaveToDisk,
     LoadSaveFile(String),
-    GoToMainMenu,
-    DockingHandle,
-    MainMenuHandle,
-    SaveSelectHandle,
-    PartInfoHandle,
-    SetMachineState(Ent, bool),
-    SetThrusterState(Ent, bool),
-    SetComputerOnOff(Ent, bool),
-    SetComputerDrift(Ent),
     Salt(usize),
+    Editor(EditorCommand),
+    Delta(WorldDelta),
+    AckTransmission(Ent),
+    ClearTransmissions,
+}
+
+impl From<Scene> for UiMessage {
+    fn from(value: Scene) -> Self {
+        Self::Navigate(value)
+    }
+}
+
+impl From<WorldDelta> for UiMessage {
+    fn from(value: WorldDelta) -> Self {
+        Self::Delta(value)
+    }
+}
+
+impl From<EditorCommand> for UiMessage {
+    fn from(value: EditorCommand) -> Self {
+        Self::Editor(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UiRef {
+    pub path: IdSalt,
+    pub offset: Vec2,
+    pub onclick: Option<UiMessage>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct UiInteractionState {
     is_on_gui: bool,
     screen_pos: Option<Vec2>,
-    hot: Option<(UiMessage, Vec2)>,
-    active: Option<(UiMessage, Vec2)>,
+    hot: Option<UiRef>,
+    active: Option<UiRef>,
+    offsets: BTreeMap<IdSalt, Vec2>,
+}
+
+impl UiInteractionState {
+    pub fn window_pos(&mut self, salt: impl Into<IdSalt>, offset: Vec2) -> Vec2 {
+        *self.offsets.entry(salt.into()).or_insert(offset)
+    }
+
+    pub fn shift_offset(&mut self, salt: impl Into<IdSalt>, delta: Vec2) {
+        if let Some(pos) = self.offsets.get_mut(&salt.into()) {
+            *pos += delta;
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -49,32 +85,28 @@ pub enum UiEventKind {
 
 #[derive(Debug, Clone)]
 pub struct UiEvent {
-    pub msg: UiMessage,
-    pub pos: Vec2,
+    pub reference: UiRef,
     pub kind: UiEventKind,
 }
 
 impl UiEvent {
-    fn click(msg: UiMessage, pos: Vec2) -> Self {
+    fn click(rf: UiRef) -> Self {
         Self {
-            msg,
-            pos,
+            reference: rf,
             kind: UiEventKind::Click,
         }
     }
 
-    fn release(msg: UiMessage, pos: Vec2) -> Self {
+    fn release(rf: UiRef) -> Self {
         Self {
-            msg,
-            pos,
+            reference: rf,
             kind: UiEventKind::Click,
         }
     }
 
-    fn drag(msg: UiMessage, pos: Vec2, delta: Vec2) -> Self {
+    fn drag(rf: UiRef, delta: Vec2) -> Self {
         Self {
-            msg,
-            pos,
+            reference: rf,
             kind: UiEventKind::Drag(delta),
         }
     }
@@ -85,12 +117,20 @@ impl UiInteractionState {
         self.is_on_gui
     }
 
-    pub fn active(&self) -> Option<&UiMessage> {
-        self.active.as_ref().map(|e| &e.0)
+    pub fn active(&self) -> Option<&UiRef> {
+        self.active.as_ref()
     }
 
-    pub fn hot(&self) -> Option<&UiMessage> {
-        self.hot.as_ref().map(|e| &e.0)
+    pub fn hot(&self) -> Option<&UiRef> {
+        self.hot.as_ref()
+    }
+
+    pub fn active_path(&self) -> Option<&IdSalt> {
+        self.active.as_ref().map(|a| &a.path)
+    }
+
+    pub fn hot_path(&self) -> Option<&IdSalt> {
+        self.hot.as_ref().map(|a| &a.path)
     }
 
     pub fn update(
@@ -111,14 +151,16 @@ impl UiInteractionState {
 
                 self.is_on_gui |= contains;
 
-                let Some(onclick) = node.on_click() else {
-                    continue;
-                };
+                let path = node.path();
 
                 let relative = p - aabb.lower();
 
                 if contains {
-                    self.hot = Some((onclick.clone(), relative));
+                    self.hot = Some(UiRef {
+                        path: *path,
+                        offset: relative,
+                        onclick: node.on_click().cloned(),
+                    });
 
                     if input.just_pressed(rdev::Button::Left) {
                         self.active = self.hot.clone();
@@ -129,16 +171,13 @@ impl UiInteractionState {
 
         let mut ret = None;
 
-        if input.is_key_pressed(rdev::Button::Left) {
-            if let Some((last, (cur, active))) =
+        if input.is_key_pressed(rdev::Button::Left)
+            && let Some((last, (cur, active))) =
                 last_pos.zip(self.screen_pos.zip(self.active.as_ref()))
-            {
-                if last != cur {
+                && last != cur {
                     let delta = cur - last;
-                    ret = Some(UiEvent::drag(active.0.clone(), active.1, delta));
+                    ret = Some(UiEvent::drag(active.clone(), delta));
                 }
-            }
-        }
 
         // if input.just_pressed(rdev::Button::Left) {
         //     if let Some(active) = self.active {
@@ -147,11 +186,10 @@ impl UiInteractionState {
         // }
 
         if input.just_released(rdev::Button::Left) {
-            if let Some((active, hot)) = self.active.as_ref().zip(self.hot.as_ref()) {
-                if active.0 == hot.0 {
-                    ret = Some(UiEvent::release(active.0.clone(), active.1));
+            if let Some((active, hot)) = self.active.as_ref().zip(self.hot.as_ref())
+                && active.path == hot.path {
+                    ret = Some(UiEvent::release(active.clone()));
                 }
-            }
             self.active = None;
         }
 

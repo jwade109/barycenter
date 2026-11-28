@@ -71,7 +71,7 @@ impl PlanetarySystem {
                 }
 
                 for (orbit, pl) in subsystems {
-                    if let Some(pv) = orbit.pv(stamp).ok() {
+                    if let Ok(pv) = orbit.pv(stamp) {
                         let ret = pl.lookup_inner(lup_id, stamp, wrt + pv, Some(*id));
                         if let Some((body, pv, parent, sys)) = ret {
                             return Some((body, pv, parent, sys));

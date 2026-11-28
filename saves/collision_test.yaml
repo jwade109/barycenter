@@ -1,0 +1,33 @@
+- !LoadBlueprint ["remora", 0]
+- !LoadBlueprint ["pollux", 2]
+- !LoadBlueprint ["bellerophon", 0]
+
+- !SpawnShip [["remora", 0], "", { translation: [-50, 0], rotation: 0.0 }]
+- !SetVelocity { translation: [5, 2], rotation: 0.0 }
+
+- !SpawnShip [["remora", 0], "", { translation: [50, 0], rotation: 0.0 }]
+- !SetVelocity { translation: [-5, 2], rotation: 0.0 }
+
+- !SpawnShip [["remora", 0], "", { translation: [0, -20], rotation: 0.0 }]
+
+- !SpawnShip [["pollux", 2], "", { translation: [50, -20], rotation: 0.0 }]
+- !SetVelocity { translation: [-7, 0], rotation: 0.0 }
+
+# two ships placed inside each other with zero relative velocity
+
+- !SpawnShip [["remora", 0], "", { translation: [30, 20], rotation: 0.3 }]
+- !SpawnShip [["remora", 0], "", { translation: [32, 21], rotation: 0.4 }]
+
+# two ships with velocities of opposite sign
+
+- !SpawnShip [["remora", 0], "", { translation: [-30, 50], rotation: 0.0 }]
+- !SpawnShip [["remora", 0], "", { translation: [30, 50], rotation: 0.0 }]
+
+- !SpawnPart "container"
+
+# - !SpawnShip [["bellerophon", 0], "Bermuda", { translation: [-50.0, 10.0], rotation: 0.0 }]
+# - !SetAttitudePD [3.0, 5.0]
+# - !SetVelocity { translation: [12.0, 3.0], rotation: 0.0 }
+
+# - !SpawnShip [["pollux", 2], "Petuna", { translation: [20.0, 0.0], rotation: 0.0 }]
+# - !SetVelocity { translation: [12.0, 3.0], rotation: 0.0 }

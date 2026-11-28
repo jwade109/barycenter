@@ -1,8 +1,9 @@
 pub use rdev::Button;
 pub use rdev::Key;
 use std::collections::HashSet;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum KB {
     Key(Key),
     Button(Button),

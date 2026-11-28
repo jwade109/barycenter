@@ -65,7 +65,7 @@ impl Machine {
             }
         }
 
-        return true;
+        true
     }
 
     pub fn store_outputs_if_possible(&self, inv: &mut Inventory) -> bool {
@@ -81,7 +81,7 @@ impl Machine {
             let Some(slot) = inv.get_slot(*slot_index) else {
                 return false;
             };
-            if let Err(_) = slot.can_store(item, count) {
+            if slot.can_store(item, count).is_err() {
                 return false;
             }
         }
@@ -98,6 +98,6 @@ impl Machine {
             }
         }
 
-        return true;
+        true
     }
 }

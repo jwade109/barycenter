@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bary_core = { path = "../bary_core" }
+bary_core.workspace = true
 bary_parts = { path = "../bary_parts" }
 bary_orbital = { path = "../bary_orbital" }
 bary_factory = { path = "../bary_factory" }
@@ -19,14 +19,11 @@ image = "0.25.10"
 anyhow = "1.0.102"
 serde_yaml = "0.9.34"
 simple_logger = "5.2.0"
+postcard = { version = "1.2.0", features = ["alloc"] }
 
 [[bin]]
 name = "ship2png"
 path = "bin/ship2png.rs"
-
-[[bin]]
-name = "traj"
-path = "bin/traj.rs"
 
 [[bin]]
 name = "generate_worlds"

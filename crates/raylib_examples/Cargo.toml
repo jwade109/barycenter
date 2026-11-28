@@ -1,0 +1,8 @@
+[package]
+name = "raylib_examples"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+
+[dependencies]
+raylib = "5.5.1"

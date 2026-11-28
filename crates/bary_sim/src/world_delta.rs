@@ -4,13 +4,14 @@ use bary_orbital::TerrainMaterial;
 use bary_parts::BlueprintId;
 use serde::{Deserialize, Serialize};
 
-use crate::GlobalTileIndex;
+use crate::{GlobalTileIndex, PlayerControls, TimedInstruction};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum WorldDelta {
     ClearAll,
     Ping(DVec2),
     SpawnShipAt(String, BlueprintId, Isometry2d),
+    SpawnPartInNewGrid(String),
     FastForwardTo(u64),
     SetWaypoint {
         grid_id: Ent,
@@ -52,6 +53,13 @@ pub enum WorldDelta {
         radius: f32,
         seed: u32,
     },
+    SpawnPlanet {
+        name: String,
+        iso: Isometry2d,
+        vel: Isometry2d,
+        radius: f64,
+        mass: f64,
+    },
     Explode(GridLocation),
     ToggleTracking(Ent),
     RemoveTerrainTile {
@@ -71,18 +79,18 @@ pub enum WorldDelta {
         grid_id: Ent,
         ast_id: Ent,
     },
-    SetAnchored(Ent, bool),
-    SpawnPlayer(String, Isometry2d),
-    PlayerPilotingEnterGrid {
-        player_id: Ent,
-        grid_id: Ent,
-    },
-    PlayerPilotingExitGrid(Ent),
-    SetPlayerPosition(Ent, Isometry2d),
-    SetPlayerCursorPosition(Ent, Option<Vec2>),
     MergeGrids(Ent, Ent, PartCoord, Rotation),
     RenameGrid(Ent, String),
     SetGridBlueprint(Ent, Option<BlueprintId>),
     SetMachineState(Ent, bool),
-    SetThrusterState(Ent, bool),
+    SetThrusterThrottle(Ent, f32),
+    SetComputerState(Ent, bool),
+    SetGridInstruction(Ent, TimedInstruction),
+    SetGridAttitudePD(Ent, f64, f64),
+    // player commands
+    SpawnPlayer(String, Isometry2d),
+    SetPlayerControls(Ent, PlayerControls),
+    DespawnPlayer(Ent),
+    ConnectPlayer(Ent),
+    DisconnectPlayer(Ent),
 }

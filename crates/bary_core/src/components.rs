@@ -47,7 +47,6 @@ impl<E> Default for Components<E> {
 
 impl<E> Components<E> {
     pub fn spawn(&mut self, id: Ent, e: E) {
-        assert!(!self.values.contains_key(&id));
         self.values.insert(id, e);
     }
 

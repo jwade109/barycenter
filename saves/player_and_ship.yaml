@@ -1,0 +1,20 @@
+- !LoadBlueprint ["remora", 0]
+
+- !SpawnPlanet
+    name: Lado
+    pos:
+      translation: [0, 0]
+      rotation: 0
+    vel:
+      translation: [0, 0]
+      rotation: 0
+    radius: 10000
+    mass: 300000000000000000
+
+- !SpawnShip [["remora", 0], "Remy", { translation: [12000, 5], rotation: 0.0 }]
+- !SetVelocity { translation: [0, 45], rotation: 0.02 }
+
+- !SpawnPlayer
+    username: "kim_mcbudget"
+    pos: { translation: [12000, 0], rotation: 0.3 }
+    vel: { translation: [0, 45], rotation: 0.3 }

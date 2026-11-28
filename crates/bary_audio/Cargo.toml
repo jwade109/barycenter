@@ -9,4 +9,4 @@ hound = "3.5.1"
 kira = "0.12.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_yaml = "0.9.34"
-bary_core = { path = "../bary_core" }
+bary_core.workspace = true

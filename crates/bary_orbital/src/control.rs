@@ -41,26 +41,23 @@ impl OrbitalController {
             return Ok(());
         }
 
-        if let Some((c, d)) = self.current.zip(self.destination) {
-            if c.1.is_similar(&d.1) {
+        if let Some((c, d)) = self.current.zip(self.destination)
+            && c.1.is_similar(&d.1) {
                 self.destination = None;
                 self.plan = None;
                 return Ok(());
             }
-        }
 
         let nominal = self
             .plan
             .as_ref()
-            .map(|m| m.segment_at(stamp))
-            .flatten()
+            .and_then(|m| m.segment_at(stamp))
             .map(|s| s.orbit);
 
-        if let Some(nominal) = nominal {
-            if orbit.1.is_similar(&nominal) {
+        if let Some(nominal) = nominal
+            && orbit.1.is_similar(&nominal) {
                 return Ok(());
             }
-        }
 
         if self.current.is_some() && self.destination.is_some() {
             self.reroute(stamp)

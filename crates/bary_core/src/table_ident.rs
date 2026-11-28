@@ -18,11 +18,16 @@ pub enum TableIdent {
     Lights,
     Excavators,
     Players,
+    Planets,
 }
 
 impl TableIdent {
     pub fn all() -> impl Iterator<Item = Self> {
         all::<Self>()
+    }
+
+    pub fn prev(&self) -> Option<Self> {
+        previous::<Self>(self)
     }
 
     pub fn next(&self) -> Option<Self> {

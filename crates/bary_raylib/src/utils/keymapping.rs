@@ -114,17 +114,17 @@ impl ActionSet {
     }
 
     pub fn is_active(&self, key: InputAction) -> bool {
-        let key = key.into();
+        let key = key;
         self.currently_pressed.contains(&key)
     }
 
     pub fn just_triggered(&self, key: InputAction) -> bool {
-        let key = key.into();
+        let key = key;
         self.just_pressed_debounced.contains(&key)
     }
 
     pub fn just_released(&self, key: InputAction) -> bool {
-        let key = key.into();
+        let key = key;
         self.just_released.contains(&key)
     }
 

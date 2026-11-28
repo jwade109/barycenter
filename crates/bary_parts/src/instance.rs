@@ -95,27 +95,27 @@ impl PartInstance {
         self.set_origin(new_origin);
     }
 
-    pub fn machine_data<'a>(proto: &'a PartPrototype) -> Option<&'a MachinePrototype> {
+    pub fn machine_data(proto: &PartPrototype) -> Option<&MachinePrototype> {
         proto.machine_data.as_ref()
     }
 
-    pub fn inventory_data<'a>(proto: &'a PartPrototype) -> Option<&'a InventoryPrototype> {
+    pub fn inventory_data(proto: &PartPrototype) -> Option<&InventoryPrototype> {
         proto.inventory_data.as_ref()
     }
 
-    pub fn computer_data<'a>(proto: &'a PartPrototype) -> Option<&'a ComputerPrototype> {
+    pub fn computer_data(proto: &PartPrototype) -> Option<&ComputerPrototype> {
         proto.computer_data.as_ref()
     }
 
-    pub fn docking_port_data<'a>(proto: &'a PartPrototype) -> Option<&'a DockingPortPrototype> {
+    pub fn docking_port_data(proto: &PartPrototype) -> Option<&DockingPortPrototype> {
         proto.docking_port_data.as_ref()
     }
 
-    pub fn excavator_data<'a>(proto: &'a PartPrototype) -> Option<&'a ExcavatorPrototype> {
+    pub fn excavator_data(proto: &PartPrototype) -> Option<&ExcavatorPrototype> {
         proto.excavator_data.as_ref()
     }
 
-    pub fn thruster_data<'a>(proto: &'a PartPrototype) -> Option<&'a ThrusterPrototype> {
+    pub fn thruster_data(proto: &PartPrototype) -> Option<&ThrusterPrototype> {
         proto.thruster_data.as_ref()
     }
 }

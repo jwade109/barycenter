@@ -1,11 +1,9 @@
 use crate::ClientId;
 use crate::*;
-use renet::*;
-use renet_netcode::*;
+use log::{error, info, trace, warn};
+use std::io::Read;
 use std::net::*;
-use std::time::Instant;
-
-const CLIENT_BIND_ADDRESS: &'static str = "0.0.0.0:0";
+use std::time::{Duration, SystemTime};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ClientStatistics {
@@ -23,11 +21,14 @@ pub struct ClientNode {
     id: ClientId,
     errors: usize,
     server_addr: SocketAddr,
-    client: RenetClient,
-    transport: NetcodeClientTransport,
-    last_updated: Instant,
-    rx_count: usize,
-    tx_count: usize,
+    framer: Framer,
+    socket: Option<TcpStream>,
+}
+
+fn get_current_time() -> Duration {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
 }
 
 impl ClientNode {
@@ -36,33 +37,27 @@ impl ClientNode {
     }
 
     fn from_addr(server_addr: SocketAddr) -> Self {
-        let client = RenetClient::new(ConnectionConfig::default());
+        info!("Connecting on {server_addr}");
 
-        let client_id = (get_current_time().as_micros() % 1000000000) as u64;
-
-        let socket = UdpSocket::bind(CLIENT_BIND_ADDRESS).unwrap();
-        let current_time = get_current_time();
-
-        let authentication = ClientAuthentication::Unsecure {
-            server_addr,
-            client_id,
-            user_data: None,
-            protocol_id: 0,
+        let new_socket = loop {
+            let Ok(socket) = TcpStream::connect_timeout(&server_addr, Duration::from_millis(1000))
+            else {
+                warn!("Attempting to connect to {server_addr}...");
+                std::thread::sleep(Duration::from_secs(1));
+                continue;
+            };
+            socket.set_nonblocking(true).unwrap();
+            break socket;
         };
 
-        let transport = NetcodeClientTransport::new(current_time, authentication, socket).unwrap();
-
-        let last_updated = Instant::now();
+        let client_id = (get_current_time().as_micros() % 1000000000) as u64;
 
         Self {
             id: ClientId(client_id),
             errors: 0,
             server_addr,
-            client,
-            transport,
-            last_updated,
-            tx_count: 0,
-            rx_count: 0,
+            socket: Some(new_socket),
+            framer: Framer::new(),
         }
     }
 
@@ -84,110 +79,64 @@ impl ClientNode {
         self.errors
     }
 
-    pub fn rx_count(&self) -> usize {
-        self.rx_count
-    }
-
-    pub fn tx_count(&self) -> usize {
-        self.tx_count
-    }
-
-    pub fn reconnect(&mut self) {
-        if self.is_connected() {
-            return;
-        }
-
-        let client = RenetClient::new(ConnectionConfig::default());
-
-        let socket = UdpSocket::bind(CLIENT_BIND_ADDRESS).unwrap();
-        let current_time = get_current_time();
-
-        let authentication = ClientAuthentication::Unsecure {
-            server_addr: self.server_addr,
-            client_id: self.id.0,
-            user_data: None,
-            protocol_id: 0,
-        };
-
-        let transport = NetcodeClientTransport::new(current_time, authentication, socket).unwrap();
-
-        let last_updated = Instant::now();
-
-        *self = Self {
-            id: self.id,
-            errors: self.errors,
-            server_addr: self.server_addr,
-            client,
-            transport,
-            last_updated,
-            tx_count: self.tx_count,
-            rx_count: self.rx_count,
-        }
-    }
-
     pub fn is_connected(&self) -> bool {
-        self.client.is_connected()
+        self.socket.is_some()
     }
 
     pub fn server_addr(&self) -> SocketAddr {
         self.server_addr
     }
 
-    pub fn stats(&self) -> ClientStatistics {
-        let is_connected = self.client.is_connected();
-        let info = self.client.network_info();
-
-        ClientStatistics {
-            is_connected,
-            rtt: info.rtt,
-            packet_loss: info.packet_loss,
-            bytes_sent_per_second: info.bytes_sent_per_second,
-            bytes_received_per_second: info.bytes_received_per_second,
-            tx_count: self.tx_count,
-            rx_count: self.rx_count,
-        }
-    }
-
     #[must_use]
-    pub fn update(&mut self) -> Vec<Message> {
-        let now = Instant::now();
-        let duration = now - self.last_updated;
-        self.last_updated = now;
-
-        self.client.update(duration);
-
-        if self.transport.update(duration, &mut self.client).is_err() {
-            self.errors += 1;
-            return Vec::new();
-        }
-
+    pub fn update(&mut self) -> Vec<ServerResponse> {
         let mut messages = Vec::new();
 
-        while let Some(bytes) = self.client.receive_message(DefaultChannel::ReliableOrdered) {
-            let msg: Message = bincode::deserialize(&bytes).unwrap();
-            self.rx_count += 1;
-            messages.push(msg);
+        let mut buf = [0; 4096];
+
+        if let Some(socket) = self.socket.as_mut() {
+            loop {
+                match socket.read(&mut buf) {
+                    Ok(0) => {
+                        // disconnect
+                        break;
+                    }
+                    Ok(n) => {
+                        self.framer.push(&buf[..n]);
+                    }
+                    Err(_e) => {
+                        // I don't care
+                        break;
+                    }
+                }
+            }
         }
 
-        if let Err(_) = self.transport.send_packets(&mut self.client) {
-            self.errors += 1;
+        for packet in self.framer.parse() {
+            if let Ok(response) = postcard::from_bytes::<ServerResponse>(packet.payload()) {
+                messages.push(response);
+            } else {
+                warn!("Unable to parse packet as response");
+            }
         }
 
         messages
     }
 
-    pub fn send_message(&mut self, msg: Message) {
-        let bytes = bincode::serialize(&msg).unwrap();
-        self.client
-            .send_message(DefaultChannel::ReliableOrdered, bytes);
-        self.tx_count += 1;
-    }
+    pub fn send(&mut self, msg: impl Into<ServerRequest>) {
+        let msg = msg.into();
+        let Some(stream) = self.socket.as_mut() else {
+            error!("Cannot send: not connected to server");
+            return;
+        };
 
-    pub fn send(&mut self, kind: MessageKind) {
-        self.send_message(Message::new(MessageSource::Client(self.id), kind));
-    }
-
-    pub fn disconnect(&mut self) {
-        self.client.disconnect();
+        let bytes = postcard::to_allocvec(&msg).unwrap();
+        let Some(packet) = self.framer.frame(bytes) else {
+            error!("Packet too big!");
+            return;
+        };
+        trace!("Sending: {packet:?}");
+        if let Err(e) = send_in_chunks(stream, &packet.to_bytes(), MTU_CHUNK_SIZE) {
+            error!("Failed to send: {e}");
+        }
     }
 }

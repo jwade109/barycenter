@@ -1,6 +1,6 @@
 use bary_core::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 use std::hash::Hash;
 
 use crate::{PartInstance, PartPrototype, PipeGeometry};
@@ -34,7 +34,6 @@ pub struct Blueprint {
     next_part_id: PartId,
     parts: BTreeMap<PartId, PartInstance>,
     pipes: BTreeMap<PartId, PipeGeometry>,
-    occupied_map: BTreeMap<(PartCoord, PartLayer), PartId>,
 }
 
 impl Blueprint {
@@ -43,15 +42,14 @@ impl Blueprint {
             next_part_id: PartId(0),
             parts: BTreeMap::new(),
             pipes: BTreeMap::new(),
-            occupied_map: BTreeMap::new(),
         }
     }
 
     pub fn merge(&mut self, other: &Blueprint) {
-        for (_, part) in &other.parts {
+        for part in other.parts.values() {
             self.add_part(part.name.clone(), part.region, part.layer());
         }
-        for (_, pipe) in &other.pipes {
+        for pipe in other.pipes.values() {
             self.add_pipe(*pipe);
         }
     }
@@ -89,10 +87,6 @@ impl Blueprint {
     ) -> PartId {
         let id = self.get_next_part_id();
         let instance = PartInstance::new(name, layer, region);
-        for p in instance.region.cells() {
-            let k = (p, layer);
-            self.occupied_map.insert(k, id);
-        }
         self.parts.insert(id, instance);
         id
     }
@@ -133,11 +127,10 @@ impl Blueprint {
 
         for part_layer in enum_iterator::reverse_all::<PartLayer>() {
             let found = self.parts.iter().find(|(_, instance)| {
-                if let Some(layer) = layer {
-                    if layer != instance.layer() {
+                if let Some(layer) = layer
+                    && layer != instance.layer() {
                         return false;
                     }
-                }
 
                 if instance.layer() != part_layer {
                     return false;
@@ -187,11 +180,7 @@ impl Blueprint {
     }
 
     pub fn remove_part(&mut self, id: PartId) -> bool {
-        if let Some(instance) = self.parts.remove(&id) {
-            let layer = instance.layer();
-            for c in instance.region.cells() {
-                self.occupied_map.remove(&(c, layer));
-            }
+        if self.parts.remove(&id).is_some() {
             return true;
         }
         if self.pipes.remove(&id).is_some() {
@@ -235,16 +224,16 @@ impl Blueprint {
     pub fn get_pipes_at(&self, p: PartCoord) -> Vec<PartId> {
         self.pipes
             .iter()
-            .filter_map(|(id, pipe)| pipe.contains(p).then(|| *id))
+            .filter_map(|(id, pipe)| pipe.contains(p).then_some(*id))
             .collect()
     }
 
     pub fn rotate_ccw(&mut self) {
-        for (_, part) in &mut self.parts {
+        for part in self.parts.values_mut() {
             part.rotate_ccw();
         }
 
-        for (_, pipe) in &mut self.pipes {
+        for pipe in self.pipes.values_mut() {
             pipe.rotate_ccw();
         }
     }
@@ -257,7 +246,7 @@ impl Blueprint {
         let mut lower: Option<IVec2> = None;
         let mut upper: Option<IVec2> = None;
 
-        for (_, part) in &self.parts {
+        for part in self.parts.values() {
             let l = part.region.bottom_left().inner();
             let u = l + part.dims_grid().as_ivec2();
 
@@ -323,8 +312,16 @@ impl Blueprint {
     }
 
     pub fn occupied(&self, p: impl Into<PartCoord>, layer: PartLayer) -> Option<PartId> {
-        let key = (p.into(), layer);
-        self.occupied_map.get(&key).cloned()
+        let p = p.into();
+        self.parts
+            .iter()
+            .find_map(|(id, part)| (part.region.contains(p) && part.layer == layer).then_some(*id))
+    }
+}
+
+impl Default for Blueprint {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
