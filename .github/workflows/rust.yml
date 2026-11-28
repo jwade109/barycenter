@@ -10,10 +10,14 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-latest
     steps:
-    - name: Linux
-      run: cargo build --release
-    - name: Windows
-      run: cargo build --target x86_64-pc-windows-gnu --release
+    - uses: actions/checkout@v4
+    - run: cargo build --release
+
+  build-windows:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - run: cargo build --release --target x86_64-pc-windows-gnu
