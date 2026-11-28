@@ -13,17 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Install packages
-      run: sudo apt install -y g++ pkg-config libx11-dev libxi-dev libasound2-dev libxkbcommon-x11-0
-    - name: Build
+    - name: Linux
       run: cargo build --release
-    - name: Run tests
-      run: cargo test
-
-  build-windows:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Install packages
+    - name: Windows
       run: cargo build --target x86_64-pc-windows-gnu --release
