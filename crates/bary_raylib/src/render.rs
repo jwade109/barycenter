@@ -18,6 +18,7 @@ use bary_sim::*;
 use bary_terminal::*;
 use bary_ui::*;
 use early_returns::*;
+use log::warn;
 use raylib::prelude::*;
 use rdev::Key::ShiftLeft;
 
@@ -472,7 +473,7 @@ pub fn draw_world(world: &World, client: &mut FrontEnd, d: &mut RaylibDrawHandle
 
     draw_chat(d, &client.chat, client.screen_dims, &client.assets);
 
-    // draw_thruster_shader(d, world, client);
+    draw_thruster_shader(d, world, client, (500.0, 600.0, 0.4).into(), camera.zoom);
 
     // draw_imgui(d, gui, assets);
 
@@ -735,14 +736,7 @@ pub fn draw_text_centered_weak(
     let dims = font.measure_text(text, font_size as f32, spacing);
     let text_origin = Vector2::new(pos.x - dims.x / 2.0, pos.y - dims.y / 2.0);
 
-    d.draw_text_ex(
-        font,
-        text,
-        text_origin,
-        font_size as f32,
-        spacing,
-        color,
-    );
+    d.draw_text_ex(font, text, text_origin, font_size as f32, spacing, color);
 }
 
 fn draw_grid_region(
@@ -1638,30 +1632,42 @@ fn draw_grid_lines(
     }
 }
 
-fn draw_thruster_shader(d: &mut RaylibDrawHandle, world: &World, client: &mut FrontEnd) {
-    let lb_loc = client
-        .assets
-        .thruster_shader
-        .get_shader_location("_lower_bound");
+fn set_shader_value<T: ShaderV>(shader: &mut Shader, name: &str, value: T) {
+    let loc = shader.get_shader_location(name);
+    shader.set_shader_value(loc, value);
+}
 
-    let time_loc = client
-        .assets
-        .thruster_shader
-        .get_shader_location("_current_time");
+fn draw_thruster_shader(
+    d: &mut RaylibDrawHandle,
+    world: &World,
+    client: &mut FrontEnd,
+    iso: Isometry2d,
+    zoom: f32,
+) {
+    if !client.assets.thruster_shader.is_shader_valid() {
+        warn!("Invalid thruster shader");
+        return;
+    }
 
-    let res_loc = client
-        .assets
-        .thruster_shader
-        .get_shader_location("_resolution");
+    let shader = &mut client.assets.thruster_shader;
 
-    let current_time = apparent_elapsed_time(world.ticks).as_secs_f32();
-    client
-        .assets
-        .thruster_shader
-        .set_shader_value(time_loc, current_time);
+    let current_time: f32 = apparent_elapsed_time(world.ticks).as_secs_f32();
+    set_shader_value(shader, "_current_time", current_time);
 
-    let res = [d.get_render_width() as f32, d.get_render_height() as f32];
-    client.assets.thruster_shader.set_shader_value(res_loc, res);
+    let resolution = [d.get_render_width() as f32, d.get_render_height() as f32];
+    set_shader_value(shader, "_resolution", resolution);
+
+    let mouse_pos = [
+        d.get_mouse_x() as f32,
+        d.get_render_height() as f32 - d.get_mouse_y() as f32,
+    ];
+    set_shader_value(shader, "_mouse_pos", mouse_pos);
+
+    let p = iso.translation.as_vec2();
+    let r = iso.rotation as f32;
+    set_shader_value(shader, "_isometry", [p.x, p.y, r]);
+
+    set_shader_value(shader, "_scale", zoom);
 
     let mut s = d.begin_shader_mode(&mut client.assets.thruster_shader);
     s.draw_rectangle(
@@ -1941,9 +1947,10 @@ fn draw_asteroid(d: &mut RaylibDrawHandle, rock: &BigRock, world: &World, client
                 for y in min.0.y..=max.0.y {
                     let c = ChunkIndex((x, y).into());
                     if is_chunk_onscreen(camera, rock.iso, c, client)
-                        && let Some(id) = rock.chunks.get(&c) {
-                            chunks_to_draw.push((c, *id));
-                        }
+                        && let Some(id) = rock.chunks.get(&c)
+                    {
+                        chunks_to_draw.push((c, *id));
+                    }
                 }
             }
         }

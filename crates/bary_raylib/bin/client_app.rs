@@ -153,9 +153,9 @@ impl GameApp {
 
             if let Some(editor) = self.frontend.scene_graph.editor_mut()
                 && let Some(delta) = editor.handle_keys(&self.frontend.input, self.backend.world())
-                {
-                    self.backend.request_delta(delta);
-                }
+            {
+                self.backend.request_delta(delta);
+            }
         }
     }
 
@@ -728,7 +728,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         if app.frontend.is_satisfied("global::reload_shaders") {
-            app.frontend.assets = Assets::load(&mut raylib);
+            app.frontend.hot_reload_assets(&mut raylib);
         }
     }
 

@@ -1,5 +1,6 @@
 use crate::{
-    AppearingText, Assets, KeybindsSet, LockedState, SceneGraph, SoundEffects, load_keybinds,
+    AppearingText, Assets, KeybindsSet, LockedState, Raylib, SceneGraph, SoundEffects,
+    load_keybinds,
 };
 use bary_core::prelude::*;
 use bary_input::*;
@@ -187,6 +188,11 @@ impl FrontEnd {
                 self.spawn_animation("Invalid state to toggle lock", true);
             }
         }
+    }
+
+    pub fn hot_reload_assets(&mut self, raylib: &mut Raylib) {
+        self.assets = Assets::load(raylib);
+        self.spawn_animation("Reloaded assets", true);
     }
 
     pub fn try_enter_camera_locked(&mut self) {
