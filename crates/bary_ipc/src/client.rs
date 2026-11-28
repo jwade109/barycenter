@@ -5,8 +5,6 @@ use std::io::Read;
 use std::net::*;
 use std::time::{Duration, SystemTime};
 
-const CLIENT_BIND_ADDRESS: &str = "0.0.0.0:0";
-
 #[derive(Clone, Copy, Debug)]
 pub struct ClientStatistics {
     pub is_connected: bool,
